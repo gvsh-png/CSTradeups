@@ -297,15 +297,21 @@ function mergeBulkSources(
     else if (sp > 0) prices[key] = sp;
   }
 
-  // Pass 2: disagreements — pick source closest to sibling wears,
-  // otherwise SteamApis (Steam / TradeUpSpy aligned)
+  // Pass 2: disagreements — prefer SteamApis unless it's a high spike
+  // vs sibling wears (Steam / TradeUpSpy aligned by default)
   for (const key of deferred) {
     const sa = steamApis?.[key] || 0;
     const sp = skinport?.[key] || 0;
     const base = skinBaseName(key);
     const siblings: number[] = [];
-    for (const [k, p] of Object.entries(prices)) {
+    // Prefer SteamApis sibling wears for spike detection context
+    for (const [k, p] of Object.entries(steamApis || {})) {
       if (k !== key && skinBaseName(k) === base && p > 0) siblings.push(p);
+    }
+    if (!siblings.length) {
+      for (const [k, p] of Object.entries(prices)) {
+        if (k !== key && skinBaseName(k) === base && p > 0) siblings.push(p);
+      }
     }
     const { price, corrected } = resolveSourceConflict(sa, sp, siblings);
     if (price > 0) {
