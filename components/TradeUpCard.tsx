@@ -168,20 +168,12 @@ export default function TradeUpCard({
   };
 
   const handlePng = async () => {
-    if (!cardRef.current) return;
     setPngLoading(true);
     try {
-      const { toPng } = await import("html-to-image");
-      const dataUrl = await toPng(cardRef.current, {
-        backgroundColor: "#1a1f27",
-        pixelRatio: 2,
-        cacheBust: true,
-      });
-      const link = document.createElement("a");
-      link.download = `tradeup-${tradeUp.id}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch {
+      const { exportTradeUpPng } = await import("@/lib/exportPng");
+      await exportTradeUpPng(withInsight());
+    } catch (err) {
+      console.error("PNG export failed:", err);
       alert("Could not generate PNG. Try again.");
     } finally {
       setPngLoading(false);
