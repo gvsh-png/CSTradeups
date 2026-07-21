@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SavedTradeUp } from "@/lib/tradeup/types";
+import { useSimulatedProgress } from "@/hooks/useSimulatedProgress";
 import TradeUpCard from "./TradeUpCard";
 
 interface SavedTradeUpsProps {
@@ -16,6 +17,7 @@ export default function SavedTradeUps({
   onUpdate,
 }: SavedTradeUpsProps) {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const refreshProgress = useSimulatedProgress(!!refreshingId, "refresh");
 
   const handleRefresh = async (item: SavedTradeUp) => {
     setRefreshingId(item.id);
@@ -82,6 +84,9 @@ export default function SavedTradeUps({
           savedAt={item.savedAt}
           onRefresh={() => handleRefresh(item)}
           refreshing={refreshingId === item.id}
+          refreshProgress={
+            refreshingId === item.id ? refreshProgress : undefined
+          }
           onRemove={() => onRemove(item.id)}
           onInsight={(insight) => {
             if (insight === undefined) {

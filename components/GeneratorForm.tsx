@@ -6,6 +6,7 @@ import {
   type Complexity,
 } from "@/lib/constants";
 import type { AppSettings } from "@/lib/settings";
+import { useSimulatedProgress } from "@/hooks/useSimulatedProgress";
 
 interface GeneratorFormProps {
   onGenerate: (params: {
@@ -28,6 +29,7 @@ export default function GeneratorForm({
   settings,
   onOpenSettings,
 }: GeneratorFormProps) {
+  const progress = useSimulatedProgress(loading, "generate");
   const [minPrice, setMinPrice] = useState(5);
   const [maxPrice, setMaxPrice] = useState(200);
   const [targetRoi, setTargetRoi] = useState(5);
@@ -233,29 +235,47 @@ export default function GeneratorForm({
         </div>
       </div>
 
-      <button type="submit" disabled={loading} className="btn-primary">
+      <button
+        type="submit"
+        disabled={loading}
+        className="btn-primary"
+        aria-busy={loading}
+      >
         {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg
-              className="animate-spin w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="3"
+          <span className="flex flex-col items-center justify-center gap-1.5 w-full py-0.5">
+            <span className="flex items-center justify-center gap-2">
+              <svg
+                className="animate-spin w-4 h-4 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span className="tabular-nums">
+                Scanning · {progress.percent}%
+              </span>
+            </span>
+            <span className="text-[10px] font-mono opacity-80 tabular-nums">
+              {progress.remainingLabel}
+            </span>
+            <span className="h-1 w-full max-w-[180px] overflow-hidden rounded-full bg-black/25">
+              <span
+                className="block h-full rounded-full bg-current transition-[width] duration-200 ease-out"
+                style={{ width: `${Math.max(4, progress.percent)}%` }}
               />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-              />
-            </svg>
-            Scanning
+            </span>
           </span>
         ) : (
           "Run scan"
