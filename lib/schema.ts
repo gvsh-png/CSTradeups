@@ -43,7 +43,10 @@ function isExcludedCol(name: string): boolean {
   );
 }
 
-export function buildSkinDatabase(schema: SchemaData): SkinData[] {
+export function buildSkinDatabase(
+  schema: SchemaData,
+  excludedCollectionKeys?: Set<string>
+): SkinData[] {
   const colMap: Record<string, string> = {};
   for (const c of schema.collections || []) {
     colMap[c.key] = c.name;
@@ -70,9 +73,14 @@ export function buildSkinDatabase(schema: SchemaData): SkinData[] {
       )
         continue;
 
-      const validCols = paint.collections.filter(
+      let validCols = paint.collections.filter(
         (c) => !isExcludedCol(colMap[c] || c)
       );
+
+      if (excludedCollectionKeys?.size) {
+        validCols = validCols.filter((c) => !excludedCollectionKeys.has(c));
+      }
+
       if (!validCols.length) continue;
 
       skinDB.push({

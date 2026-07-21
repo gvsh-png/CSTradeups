@@ -59,6 +59,7 @@ export interface GenerateParams {
   targetRoi: number;
   complexity: Complexity;
   feeType: "steam" | "csfloat";
+  excludeUnstableCollections?: boolean;
   limit?: number;
 }
 

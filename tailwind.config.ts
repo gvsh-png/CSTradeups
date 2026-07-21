@@ -8,18 +8,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        void: {
+          DEFAULT: "#030304",
+          elevated: "#08080d",
+        },
         surface: {
-          DEFAULT: "#0f1114",
-          raised: "#161a1f",
-          border: "#252a31",
-          hover: "#1c2128",
+          DEFAULT: "#0c0c12",
+          raised: "#111118",
+          border: "#1c1c28",
+          hover: "#16161f",
         },
         accent: {
-          DEFAULT: "#3d8bfd",
-          muted: "#2a5a9e",
+          DEFAULT: "#00d4aa",
+          dim: "#00a884",
+          muted: "#00d4aa20",
         },
-        profit: "#3ecf8e",
-        loss: "#e5534b",
+        profit: "#00e676",
+        loss: "#ff5252",
         rarity: {
           consumer: "#b0c3d9",
           industrial: "#5e98d9",
@@ -32,7 +37,12 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
-        mono: ["var(--font-geist-mono)", "monospace"],
+        mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+      },
+      borderRadius: {
+        DEFAULT: "6px",
+        lg: "8px",
+        xl: "10px",
       },
     },
   },

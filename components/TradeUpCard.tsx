@@ -21,17 +21,26 @@ function Stat({
   color?: string;
 }) {
   return (
-    <div className="text-center">
-      <p className="text-[10px] sm:text-xs text-[var(--text-muted)] mb-0.5">
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-0.5">
         {label}
       </p>
-      <p
-        className="text-sm sm:text-base font-semibold font-mono"
-        style={color ? { color } : undefined}
-      >
+      <p className="stat-value" style={color ? { color } : undefined}>
         {value}
       </p>
     </div>
+  );
+}
+
+function RarityTag({ rarity }: { rarity: string }) {
+  const color = RARITY_COLORS[rarity] || "#6e6e80";
+  return (
+    <span
+      className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border"
+      style={{ color, borderColor: `${color}40`, backgroundColor: `${color}10` }}
+    >
+      {rarity.replace(" Grade", "").replace("Mil-Spec", "Mil")}
+    </span>
   );
 }
 
@@ -40,7 +49,7 @@ export default function TradeUpCard({ tradeUp, onSave, saved }: TradeUpCardProps
   const [insight, setInsight] = useState<string | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
 
-  const profitColor = tradeUp.expectedProfit >= 0 ? "#3ecf8e" : "#e5534b";
+  const profitColor = tradeUp.expectedProfit >= 0 ? "var(--profit)" : "var(--loss)";
 
   const fetchInsight = async () => {
     if (insight) return;
@@ -53,7 +62,7 @@ export default function TradeUpCard({ tradeUp, onSave, saved }: TradeUpCardProps
       });
       const data = await res.json();
       if (res.ok) setInsight(data.insight);
-      else setInsight("AI insights unavailable. Add OPENROUTER_API_KEY to enable.");
+      else setInsight("AI unavailable — add OPENROUTER_API_KEY.");
     } catch {
       setInsight("Could not load insight.");
     } finally {
@@ -62,43 +71,20 @@ export default function TradeUpCard({ tradeUp, onSave, saved }: TradeUpCardProps
   };
 
   return (
-    <article className="bg-surface-raised border border-surface-border rounded-xl overflow-hidden">
-      {/* Header */}
-      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 flex items-start justify-between gap-3">
+    <article className="panel overflow-hidden">
+      <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-              style={{
-                backgroundColor: `${RARITY_COLORS[tradeUp.inputRarity]}20`,
-                color: RARITY_COLORS[tradeUp.inputRarity],
-              }}
-            >
-              {tradeUp.inputRarity}
-            </span>
-            <svg
-              className="w-3 h-3 text-[var(--text-muted)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-              style={{
-                backgroundColor: `${RARITY_COLORS[tradeUp.outputRarity]}20`,
-                color: RARITY_COLORS[tradeUp.outputRarity],
-              }}
-            >
-              {tradeUp.outputRarity}
-            </span>
+          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+            <RarityTag rarity={tradeUp.inputRarity} />
+            <span className="text-[var(--text-muted)] text-[10px]">→</span>
+            <RarityTag rarity={tradeUp.outputRarity} />
             {tradeUp.type === "mixed" && (
-              <span className="text-[10px] text-[var(--text-muted)]">Mixed</span>
+              <span className="text-[9px] font-mono text-[var(--text-muted)] border border-[var(--border)] px-1 rounded">
+                MIX
+              </span>
             )}
           </div>
-          <p className="text-xs sm:text-sm text-[var(--text-muted)] truncate">
+          <p className="text-[11px] text-[var(--text-muted)] truncate font-mono">
             {tradeUp.description}
           </p>
         </div>
@@ -106,54 +92,34 @@ export default function TradeUpCard({ tradeUp, onSave, saved }: TradeUpCardProps
         <button
           onClick={onSave}
           disabled={saved}
-          className={`shrink-0 p-2 rounded-lg border transition-colors ${
+          className={`shrink-0 p-1.5 rounded border transition-colors duration-150 ${
             saved
-              ? "border-profit/30 text-profit bg-profit/5"
-              : "border-surface-border text-[var(--text-muted)] hover:text-white hover:border-accent"
+              ? "border-[var(--profit)]/30 text-[var(--profit)]"
+              : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-accent/30"
           }`}
-          title={saved ? "Saved" : "Save trade-up"}
+          title={saved ? "Saved" : "Save"}
         >
-          <svg
-            className="w-4 h-4"
-            fill={saved ? "currentColor" : "none"}
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"
-            />
+          <svg className="w-3.5 h-3.5" fill={saved ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
           </svg>
         </button>
       </div>
 
-      {/* Input Items */}
-      <div className="px-4 sm:px-5 pb-3">
-        <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-2">
-          Inputs
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <div className="px-4 pb-3">
+        <p className="label mb-2">Inputs</p>
+        <div className="flex flex-wrap gap-1.5">
           {tradeUp.inputs.map((input, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 bg-surface rounded-lg p-2 border border-surface-border min-w-0 max-w-full"
+              className="flex items-center gap-2 bg-[var(--surface)] rounded border border-[var(--border)] p-1.5 min-w-0 max-w-full"
             >
-              <SkinImage
-                src={input.image}
-                name={input.name}
-                size="sm"
-                rarity={tradeUp.inputRarity}
-              />
+              <SkinImage src={input.image} name={input.name} size="sm" rarity={tradeUp.inputRarity} />
               <div className="min-w-0">
-                <p className="text-xs font-medium truncate max-w-[140px] sm:max-w-[200px]">
-                  {input.count > 1 && (
-                    <span className="text-accent font-mono">{input.count}x </span>
-                  )}
+                <p className="text-[11px] font-medium truncate max-w-[130px] sm:max-w-[180px]">
+                  {input.count > 1 && <span className="text-accent font-mono">{input.count}× </span>}
                   {input.name}
                 </p>
-                <p className="text-[10px] text-[var(--text-muted)]">
+                <p className="text-[10px] text-[var(--text-muted)] font-mono">
                   {input.wear} · ${input.price.toFixed(2)}
                   {tradeUp.complexity !== "simple" && input.maxFloat != null && (
                     <span> · ≤{input.maxFloat.toFixed(4)}</span>
@@ -165,70 +131,46 @@ export default function TradeUpCard({ tradeUp, onSave, saved }: TradeUpCardProps
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <div className="mx-4 sm:mx-5 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-surface rounded-lg border border-surface-border">
+      <div className="mx-4 mb-3 grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-[var(--surface)] rounded border border-[var(--border-subtle)]">
         <Stat
-          label="Chance to Profit"
+          label="Win chance"
           value={`${tradeUp.winPct}%`}
-          color={tradeUp.winPct >= 50 ? "#3ecf8e" : undefined}
+          color={tradeUp.winPct >= 50 ? "var(--profit)" : undefined}
         />
-        <Stat
-          label="Avg Profit"
-          value={`$${tradeUp.expectedProfit.toFixed(2)}`}
-          color={profitColor}
-        />
+        <Stat label="Avg profit" value={`$${tradeUp.expectedProfit.toFixed(2)}`} color={profitColor} />
         <Stat label="ROI" value={`${tradeUp.roi}%`} color={profitColor} />
-        <Stat label="Total Cost" value={`$${tradeUp.totalCost.toFixed(2)}`} />
+        <Stat label="Cost" value={`$${tradeUp.totalCost.toFixed(2)}`} />
       </div>
 
-      {/* Outcomes */}
-      <div className="border-t border-surface-border">
+      <div className="border-t border-[var(--border)]">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="w-full px-4 sm:px-5 py-3 flex items-center justify-between text-xs font-medium text-[var(--text-muted)] hover:text-white transition-colors"
+          className="w-full px-4 py-2.5 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text)] transition-colors duration-150"
         >
-          <span>Possible Outcomes ({tradeUp.outcomes.length})</span>
-          <svg
-            className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          <span>OUTCOMES · {tradeUp.outcomes.length}</span>
+          <span className="text-accent">{expanded ? "−" : "+"}</span>
         </button>
 
         {expanded && (
-          <div className="px-4 sm:px-5 pb-4 space-y-2">
+          <div className="px-4 pb-4 space-y-1.5">
             {tradeUp.outcomes.map((outcome, i) => (
               <div
                 key={i}
-                className="flex items-center gap-3 p-2 rounded-lg bg-surface border border-surface-border"
+                className="flex items-center gap-2.5 p-2 rounded bg-[var(--surface)] border border-[var(--border-subtle)]"
               >
-                <SkinImage
-                  src={outcome.image}
-                  name={outcome.name}
-                  size="sm"
-                  rarity={tradeUp.outputRarity}
-                />
+                <SkinImage src={outcome.image} name={outcome.name} size="sm" rarity={tradeUp.outputRarity} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{outcome.name}</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    {outcome.wear} · Float {outcome.float.toFixed(4)}
+                  <p className="text-[11px] font-medium truncate">{outcome.name}</p>
+                  <p className="text-[10px] text-[var(--text-muted)] font-mono">
+                    {outcome.wear} · {outcome.float.toFixed(4)}
                   </p>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs font-mono">{outcome.prob}%</p>
-                  <p
-                    className="text-[10px] font-mono"
-                    style={{ color: outcome.profit >= 0 ? "#3ecf8e" : "#e5534b" }}
-                  >
+                <div className="text-right shrink-0 font-mono">
+                  <p className="text-[11px]">{outcome.prob}%</p>
+                  <p className="text-[10px]" style={{ color: outcome.profit >= 0 ? "var(--profit)" : "var(--loss)" }}>
                     {outcome.profit >= 0 ? "+" : ""}${outcome.profit.toFixed(2)}
                   </p>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    ${outcome.price.toFixed(2)}
-                  </p>
+                  <p className="text-[10px] text-[var(--text-muted)]">${outcome.price.toFixed(2)}</p>
                 </div>
               </div>
             ))}
@@ -236,16 +178,12 @@ export default function TradeUpCard({ tradeUp, onSave, saved }: TradeUpCardProps
             <button
               onClick={fetchInsight}
               disabled={insightLoading}
-              className="w-full mt-2 py-2 text-xs text-accent hover:text-accent/80 transition-colors disabled:opacity-50"
+              className="w-full mt-1 py-2 text-[11px] font-mono text-accent hover:text-accent-dim transition-colors duration-150 disabled:opacity-40"
             >
-              {insightLoading
-                ? "Loading insight..."
-                : insight
-                  ? "AI Insight"
-                  : "Get AI Insight"}
+              {insightLoading ? "Loading…" : insight ? "AI analysis" : "Get AI analysis"}
             </button>
             {insight && (
-              <p className="text-xs text-[var(--text-muted)] leading-relaxed p-3 bg-surface rounded-lg border border-surface-border">
+              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed p-3 bg-[var(--surface)] rounded border border-[var(--border-subtle)]">
                 {insight}
               </p>
             )}

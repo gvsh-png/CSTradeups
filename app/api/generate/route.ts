@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUnstableCollectionKeySet } from "@/lib/collections";
 import { getBulkPrices } from "@/lib/prices";
 import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
@@ -21,11 +22,16 @@ export async function POST(request: Request) {
       targetRoi: body.targetRoi != null ? Number(body.targetRoi) : 5,
       complexity: (body.complexity as Complexity) || "simple",
       feeType: body.feeType === "steam" ? "steam" : "csfloat",
+      excludeUnstableCollections: body.excludeUnstableCollections !== false,
       limit: Number(body.limit) || 15,
     };
 
     const schema = await fetchSchema();
-    const skinDB = buildSkinDatabase(schema);
+    const excludedKeys = params.excludeUnstableCollections
+      ? getUnstableCollectionKeySet(schema)
+      : undefined;
+
+    const skinDB = buildSkinDatabase(schema, excludedKeys);
     const byCR = groupByCollectionRarity(skinDB);
 
     const { prices: bulk, meta: priceMeta } = await getBulkPrices();
@@ -52,6 +58,9 @@ export async function POST(request: Request) {
         skinportPrices: priceMeta.skinportCount,
         pricesCachedAt: priceMeta.fetchedAt,
         pricesCachedUntil: priceMeta.cachedUntil,
+        excludedCollections: params.excludeUnstableCollections
+          ? excludedKeys?.size ?? 0
+          : 0,
         params,
         generatedAt: new Date().toISOString(),
       },

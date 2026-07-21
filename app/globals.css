@@ -3,12 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0f1114;
-  --surface: #161a1f;
-  --border: #252a31;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
-  --accent: #3d8bfd;
+  --bg: #030304;
+  --bg-elevated: #08080d;
+  --surface: #0c0c12;
+  --surface-raised: #111118;
+  --border: #1c1c28;
+  --border-subtle: #14141c;
+  --text: #ececf1;
+  --text-muted: #6e6e80;
+  --accent: #00d4aa;
+  --accent-dim: #00a884;
+  --violet: #8b7cf6;
+  --profit: #00e676;
+  --loss: #ff5252;
 }
 
 * {
@@ -17,6 +24,7 @@
 
 html {
   overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -26,6 +34,60 @@ body {
   overflow-x: hidden;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 70%);
+}
+
+@layer components {
+  .panel {
+    @apply bg-[var(--surface-raised)] border border-[var(--border)] rounded-lg;
+  }
+
+  .panel-interactive {
+    @apply panel transition-colors duration-150;
+  }
+
+  .input-field {
+    @apply w-full bg-[var(--surface)] border border-[var(--border)] rounded-md px-3 py-2 text-sm
+      text-[var(--text)] placeholder:text-[var(--text-muted)]
+      focus:outline-none transition-colors duration-150;
+  }
+
+  .input-field:focus {
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+
+  .btn-primary {
+    @apply w-full py-2.5 rounded-md text-sm font-medium
+      bg-[var(--accent)] text-[#030304]
+      hover:bg-[var(--accent-dim)] disabled:opacity-40 disabled:cursor-not-allowed
+      transition-colors duration-150;
+  }
+
+  .btn-ghost {
+    @apply py-2 px-3 rounded-md text-xs font-medium border border-[var(--border)]
+      text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]/80
+      transition-colors duration-150;
+  }
+
+  .label {
+    @apply text-[11px] font-medium uppercase tracking-wider text-[var(--text-muted)];
+  }
+
+  .stat-value {
+    @apply text-sm sm:text-base font-semibold font-mono tabular-nums;
+  }
+}
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
@@ -33,34 +95,35 @@ body {
   }
 
   .scrollbar-thin::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 3px;
+    height: 3px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background: var(--border);
-    border-radius: 2px;
+    border-radius: 1px;
   }
 }
 
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 2px;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: 1px;
   outline: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
   background: var(--accent);
   cursor: pointer;
-  border: 2px solid var(--bg);
+  border: none;
+  transform: rotate(45deg);
 }
 
 input[type="number"] {
@@ -71,4 +134,8 @@ input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
 }

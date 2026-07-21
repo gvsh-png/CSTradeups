@@ -12,15 +12,11 @@ interface SkinImageProps {
 
 const sizes = {
   sm: "w-10 h-10",
-  md: "w-14 h-14",
-  lg: "w-20 h-20",
+  md: "w-12 h-12",
+  lg: "w-16 h-16",
 };
 
-const imgSizes = {
-  sm: 40,
-  md: 56,
-  lg: 80,
-};
+const imgSizes = { sm: 40, md: 48, lg: 64 };
 
 export default function SkinImage({
   src,
@@ -28,12 +24,12 @@ export default function SkinImage({
   size = "md",
   rarity,
 }: SkinImageProps) {
-  const borderColor = rarity ? RARITY_COLORS[rarity] || "#252a31" : "#252a31";
+  const borderColor = rarity ? RARITY_COLORS[rarity] || "#1c1c28" : "#1c1c28";
 
   return (
     <div
-      className={`${sizes[size]} relative rounded-md overflow-hidden bg-surface border shrink-0`}
-      style={{ borderColor: `${borderColor}40` }}
+      className={`${sizes[size]} relative rounded overflow-hidden bg-[var(--surface)] border shrink-0`}
+      style={{ borderColor: `${borderColor}50` }}
     >
       {src ? (
         <Image
@@ -45,8 +41,8 @@ export default function SkinImage({
           unoptimized
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] text-[8px] text-center p-1">
-          {name.split(" | ")[0]?.slice(0, 3)}
+        <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] text-[7px] font-mono">
+          {name.split(" | ")[0]?.slice(0, 3).toUpperCase()}
         </div>
       )}
     </div>
