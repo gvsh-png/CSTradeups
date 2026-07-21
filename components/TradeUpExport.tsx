@@ -369,8 +369,7 @@ export default function TradeUpExport({ tradeUp }: { tradeUp: TradeUpResult }) {
                     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                   }}
                 >
-                  {outcome.wear} · {outcome.float.toFixed(4)} · $
-                  {outcome.price.toFixed(2)}
+                  {outcome.wear} · {outcome.float.toFixed(4)}
                 </div>
               </div>
               <div
@@ -386,13 +385,14 @@ export default function TradeUpExport({ tradeUp }: { tradeUp: TradeUpResult }) {
                 </div>
                 <div
                   style={{
-                    fontSize: 11,
+                    fontSize: 12,
+                    fontWeight: 700,
                     color:
                       outcome.profit >= 0 ? COLORS.profit : COLORS.loss,
                     marginTop: 2,
                   }}
                 >
-                  {outcome.profit >= 0 ? "+" : ""}${outcome.profit.toFixed(2)}
+                  ${outcome.price.toFixed(2)}
                 </div>
               </div>
             </div>
