@@ -569,7 +569,7 @@ export function sanitizePrices(
       }
     }
 
-    // 2) Wear-order clamp: a worse wear pricing above a better wear is bad data
+    // 2) Wear-order: worse wear shouldn't price above better wear
     for (let i = 1; i < WEARS.length; i++) {
       const betterKey = marketHashName(skin.name, WEARS[i - 1]);
       const worseKey = marketHashName(skin.name, WEARS[i]);
@@ -580,7 +580,19 @@ export function sanitizePrices(
       }
     }
 
-    // 3) Second pass vs neighbors — spike mid-tier vs both sides
+    // 3) Wear-order floor: better wear shouldn't sit far below a worse wear
+    // (e.g. MW $0.43 while FT is $0.80 — MW is underpriced)
+    for (let i = WEARS.length - 2; i >= 0; i--) {
+      const betterKey = marketHashName(skin.name, WEARS[i]);
+      const worseKey = marketHashName(skin.name, WEARS[i + 1]);
+      const better = sanitized[betterKey] || 0;
+      const worse = sanitized[worseKey] || 0;
+      if (better > 0 && worse > 0 && better < worse * 0.9) {
+        sanitized[betterKey] = r2(worse * 1.08);
+      }
+    }
+
+    // 4) Spike mid-tier vs both neighbors
     for (let i = 1; i < WEARS.length - 1; i++) {
       const prev = sanitized[marketHashName(skin.name, WEARS[i - 1])] || 0;
       const curKey = marketHashName(skin.name, WEARS[i]);
@@ -589,6 +601,7 @@ export function sanitizePrices(
       if (prev > 0 && next > 0 && cur > 0) {
         const neighbor = r2((prev + next) / 2);
         if (cur > neighbor * 2.5) sanitized[curKey] = neighbor;
+        if (cur < neighbor * 0.4) sanitized[curKey] = neighbor;
       }
     }
   }

@@ -15,29 +15,22 @@ function median(nums) {
   return valid[mid];
 }
 
-function mergePriceCandidates(candidates) {
-  const valid = candidates.filter((p) => p > 0).sort((a, b) => a - b);
-  if (!valid.length) return 0;
-  if (valid.length === 1) return valid[0];
-  if (valid.length === 2) {
-    const [lo, hi] = valid;
-    if (hi / lo > 2) return lo;
-    return r2((lo + hi) / 2);
-  }
-  const mid = median(valid);
-  const filtered = valid.filter((p) => p >= mid * 0.45 && p <= mid * 2.2);
-  if (!filtered.length) return mid;
-  return median(filtered);
-}
+function resolveSourceConflict(steamApis, skinport, siblingPrices = []) {
+  const sa = steamApis > 0 ? steamApis : 0;
+  const sp = skinport > 0 ? skinport : 0;
+  if (sa > 0 && sp <= 0) return sa;
+  if (sp > 0 && sa <= 0) return sp;
+  if (sa <= 0 && sp <= 0) return 0;
 
-function mergeTwoSources(sa, sp) {
-  if (sa > 0 && sp > 0) {
-    const hi = Math.max(sa, sp);
-    const lo = Math.min(sa, sp);
-    if (hi / lo > 2) return sp; // prefer Skinport
-    return r2((sa + sp) / 2);
-  }
-  return mergePriceCandidates([sa, sp].filter((p) => p > 0));
+  const hi = Math.max(sa, sp);
+  const lo = Math.min(sa, sp);
+  if (hi / lo <= 2) return r2((sa + sp) / 2);
+
+  const mid = median(siblingPrices.filter((p) => p > 0));
+
+  if (sa === hi && mid > 0 && sa > mid * 2.5) return sp;
+  if (sp === hi && mid > 0 && sp > mid * 2.5) return sa;
+  return sa;
 }
 
 let failed = 0;
@@ -47,19 +40,27 @@ function assert(name, got, expected) {
   if (!ok) failed++;
 }
 
-// Control Panel BS style spike
-assert("merge candidates 6.08 vs 57.51", mergePriceCandidates([6.08, 57.51]), 6.08);
-assert("prefer skinport on disagree", mergeTwoSources(57.51, 6.08), 6.08);
-assert("average when close", mergeTwoSources(6.2, 5.9), 6.05);
-assert("median even", median([6, 57]), 31.5);
-assert("single source", mergePriceCandidates([6.08]), 6.08);
+// Zeno MW: Steam ~$1.02 (TradeUpSpy), Skinport cheap ~$0.43 → keep Steam
+assert(
+  "Zeno MW prefer SteamApis",
+  resolveSourceConflict(1.02, 0.43, [1.36, 0.55, 0.4]),
+  1.02
+);
 
-// Wear-order style clamp simulation
-function clampWorse(better, worse) {
-  if (better > 0 && worse > 0 && worse > better * 1.12) return r2(better * 0.92);
-  return worse;
-}
-assert("BS above FT clamped", clampWorse(8, 57.51), 7.36);
+// Control Panel BS: Steam spike $57 vs siblings ~$8 → Skinport
+assert(
+  "Control Panel BS reject Steam spike",
+  resolveSourceConflict(57.51, 6.08, [12, 9, 7.5, 6.5]),
+  6.08
+);
+
+// No siblings: prefer SteamApis
+assert("no siblings prefer SteamApis", resolveSourceConflict(1.02, 0.43, []), 1.02);
+
+// Close sources: average
+assert("average when close", resolveSourceConflict(6.2, 5.9, []), 6.05);
+
+assert("median even", median([6, 57]), 31.5);
 
 if (failed) {
   console.error(`\n${failed} failed`);

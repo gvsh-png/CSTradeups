@@ -128,8 +128,8 @@ function resolveSkinportPrice(item: SkinportItem): number {
 }
 
 /**
- * Merge multiple price candidates, rejecting outliers.
- * On large 2-way disagreement, prefers the lower (safer for trade-up EV).
+ * Merge anonymous price candidates, rejecting outliers.
+ * Prefer the cluster around the median — never blindly take min/max.
  */
 export function mergePriceCandidates(candidates: number[]): number {
   const valid = candidates.filter((p) => p > 0).sort((a, b) => a - b);
@@ -139,8 +139,8 @@ export function mergePriceCandidates(candidates: number[]): number {
   if (valid.length === 2) {
     const [lo, hi] = valid;
     if (hi / lo > 2) {
-      // e.g. Skinport $6 vs SteamApis $57 — keep the realistic lower print
-      return lo;
+      // Unknown sources — defer to caller; average is misleading on spikes
+      return 0;
     }
     return r2((lo + hi) / 2);
   }
@@ -149,6 +149,47 @@ export function mergePriceCandidates(candidates: number[]): number {
   const filtered = valid.filter((p) => p >= mid * 0.45 && p <= mid * 2.2);
   if (!filtered.length) return mid;
   return median(filtered);
+}
+
+/**
+ * Resolve SteamApis vs Skinport when they disagree.
+ *
+ * Default to SteamApis (Steam / TradeUpSpy aligned).
+ * Only fall back to Skinport when SteamApis is a clear *high* spike
+ * vs the skin's other wears (e.g. Control Panel BS $57 vs ~$6 siblings).
+ */
+export function resolveSourceConflict(
+  steamApis: number,
+  skinport: number,
+  siblingPrices: number[] = []
+): { price: number; corrected: boolean } {
+  const sa = steamApis > 0 ? steamApis : 0;
+  const sp = skinport > 0 ? skinport : 0;
+
+  if (sa > 0 && sp <= 0) return { price: sa, corrected: false };
+  if (sp > 0 && sa <= 0) return { price: sp, corrected: false };
+  if (sa <= 0 && sp <= 0) return { price: 0, corrected: false };
+
+  const hi = Math.max(sa, sp);
+  const lo = Math.min(sa, sp);
+  if (hi / lo <= 2) {
+    return { price: r2((sa + sp) / 2), corrected: false };
+  }
+
+  const mid = median(siblingPrices.filter((p) => p > 0));
+
+  // SteamApis high-spike: trust Skinport (Control Panel BS case)
+  if (sa === hi && mid > 0 && sa > mid * 2.5) {
+    return { price: sp, corrected: true };
+  }
+
+  // Skinport high-spike (rare): trust SteamApis
+  if (sp === hi && mid > 0 && sp > mid * 2.5) {
+    return { price: sa, corrected: true };
+  }
+
+  // Underpriced Skinport vs Steam (Zeno MW $0.43 vs $1.02): keep SteamApis
+  return { price: sa, corrected: true };
 }
 
 async function fetchSteamApisPrices(): Promise<{
@@ -217,6 +258,11 @@ async function fetchSkinportPrices(): Promise<PriceMap | null> {
   }
 }
 
+function skinBaseName(marketHashName: string): string {
+  const idx = marketHashName.lastIndexOf(" (");
+  return idx > 0 ? marketHashName.slice(0, idx) : marketHashName;
+}
+
 function mergeBulkSources(
   steamApis: PriceMap | null,
   skinport: PriceMap | null,
@@ -229,7 +275,9 @@ function mergeBulkSources(
   ]);
 
   let mergeCorrections = 0;
+  const deferred: string[] = [];
 
+  // Pass 1: agree / single-source keys — build wear context
   for (const key of allKeys) {
     const sa = steamApis?.[key] || 0;
     const sp = skinport?.[key] || 0;
@@ -238,18 +286,32 @@ function mergeBulkSources(
       const hi = Math.max(sa, sp);
       const lo = Math.min(sa, sp);
       if (hi / lo > 2) {
-        // Skinport reflects live listings; SteamApis safe_ts can spike on thin volume
-        // Prefer Skinport when present, otherwise the lower print.
-        prices[key] = sp;
-        mergeCorrections++;
+        deferred.push(key);
         continue;
       }
       prices[key] = r2((sa + sp) / 2);
       continue;
     }
 
-    const merged = mergePriceCandidates([sa, sp].filter((p) => p > 0));
-    if (merged > 0) prices[key] = merged;
+    if (sa > 0) prices[key] = sa;
+    else if (sp > 0) prices[key] = sp;
+  }
+
+  // Pass 2: disagreements — pick source closest to sibling wears,
+  // otherwise SteamApis (Steam / TradeUpSpy aligned)
+  for (const key of deferred) {
+    const sa = steamApis?.[key] || 0;
+    const sp = skinport?.[key] || 0;
+    const base = skinBaseName(key);
+    const siblings: number[] = [];
+    for (const [k, p] of Object.entries(prices)) {
+      if (k !== key && skinBaseName(k) === base && p > 0) siblings.push(p);
+    }
+    const { price, corrected } = resolveSourceConflict(sa, sp, siblings);
+    if (price > 0) {
+      prices[key] = price;
+      if (corrected) mergeCorrections++;
+    }
   }
 
   const source: PriceMeta["source"] =
@@ -303,7 +365,7 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v2"],
+  ["tradeup-bulk-prices-v3"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
