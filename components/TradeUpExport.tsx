@@ -29,6 +29,7 @@ function rarityTint(rarity: string) {
 
 function Thumb({ src, alt, rarity }: { src?: string; alt: string; rarity: string }) {
   const tint = rarityTint(rarity);
+  // data: URLs pass through; remote URLs go through same-origin proxy
   const proxied = proxiedImageUrl(src);
   return (
     <div
@@ -50,7 +51,10 @@ function Thumb({ src, alt, rarity }: { src?: string; alt: string; rarity: string
         <img
           src={proxied}
           alt={alt}
-          crossOrigin="anonymous"
+          // data URLs don't need CORS; omit crossOrigin for them
+          {...(proxied.startsWith("data:")
+            ? {}
+            : { crossOrigin: "anonymous" as const })}
           style={{ width: 40, height: 40, objectFit: "contain" }}
         />
       ) : null}

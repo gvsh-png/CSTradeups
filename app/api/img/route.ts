@@ -7,10 +7,22 @@ const ALLOWED_HOSTS = new Set([
   "community.cloudflare.steamstatic.com",
   "community.akamai.steamstatic.com",
   "community.steamstatic.com",
+  "cdn.akamai.steamstatic.com",
+  "cdn.cloudflare.steamstatic.com",
   "steamcdn-a.akamaihd.net",
   "cdn.steamstatic.com",
   "steamcommunity-a.akamaihd.net",
 ]);
+
+function rewriteSteamCdn(url: URL): URL {
+  // Prefer Cloudflare edge when Akamai blocks datacenter IPs
+  if (url.hostname === "community.akamai.steamstatic.com") {
+    const next = new URL(url.toString());
+    next.hostname = "community.cloudflare.steamstatic.com";
+    return next;
+  }
+  return url;
+}
 
 export async function GET(request: Request) {
   try {
@@ -30,18 +42,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Host not allowed" }, { status: 403 });
     }
 
-    const upstream = await fetch(target.toString(), {
-      headers: {
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        "User-Agent": "TradeUpGen/1.0",
-      },
-      next: { revalidate: 86400 },
-    });
+    const candidates = [target, rewriteSteamCdn(target)].filter(
+      (u, i, arr) => arr.findIndex((x) => x.href === u.href) === i
+    );
 
-    if (!upstream.ok) {
+    let upstream: Response | null = null;
+    for (const candidate of candidates) {
+      upstream = await fetch(candidate.toString(), {
+        headers: {
+          Accept: "image/png,image/webp,image/*,*/*;q=0.8",
+          "User-Agent":
+            "Mozilla/5.0 (compatible; TradeUpGen/1.0; +https://github.com/gvsh-png/CSTradeups)",
+          Referer: "https://steamcommunity.com/",
+        },
+        next: { revalidate: 86400 },
+      });
+      if (upstream.ok) break;
+    }
+
+    if (!upstream || !upstream.ok) {
       return NextResponse.json(
-        { error: `Upstream ${upstream.status}` },
-        { status: upstream.status }
+        { error: `Upstream ${upstream?.status ?? 502}` },
+        { status: upstream?.status ?? 502 }
       );
     }
 
