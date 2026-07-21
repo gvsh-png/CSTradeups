@@ -10,12 +10,26 @@ import GeneratorForm from "@/components/GeneratorForm";
 import TradeUpResults from "@/components/TradeUpResults";
 import SavedTradeUps from "@/components/SavedTradeUps";
 import SettingsPanel from "@/components/SettingsPanel";
+import AuthMenu from "@/components/AuthMenu";
+import { AuthProvider, useAuth } from "@/components/AuthProvider";
+import UpgradeModal from "@/components/UpgradeModal";
 import type { Complexity } from "@/lib/constants";
 
 type Tab = "generate" | "saved";
 
 function HomeInner() {
   const searchParams = useSearchParams();
+  const {
+    authConfigured,
+    authRequired,
+    user,
+    refresh,
+    claimSave,
+    releaseSave,
+    syncSavedCount,
+    limits,
+  } = useAuth();
+
   const [activeTab, setActiveTab] = useState<Tab>("generate");
   const [results, setResults] = useState<TradeUpResult[]>([]);
   const [saved, setSaved] = useState<SavedTradeUp[]>([]);
@@ -24,6 +38,13 @@ function HomeInner() {
   const [meta, setMeta] = useState<Record<string, unknown> | null>(null);
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
+
+  const persistSaved = useCallback((items: SavedTradeUp[]) => {
+    setSaved(items);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }, []);
 
   useEffect(() => {
     try {
@@ -33,12 +54,35 @@ function HomeInner() {
       /* ignore */
     }
     if (searchParams.get("tab") === "saved") setActiveTab("saved");
-  }, [searchParams]);
 
-  const persistSaved = useCallback((items: SavedTradeUp[]) => {
-    setSaved(items);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, []);
+    const auth = searchParams.get("auth");
+    const billing = searchParams.get("billing");
+    if (auth === "ok" || billing === "success") void refresh();
+    if (auth === "failed") setError("Steam sign-in failed. Try again.");
+  }, [searchParams, refresh]);
+
+  // Reconcile server savedCount once after login
+  useEffect(() => {
+    if (!authConfigured || !user) return;
+    void syncSavedCount(saved.length).then((result) => {
+      if (!result.ok && result.error) {
+        const max = limits.freeMaxSaved;
+        if (saved.length > max) {
+          persistSaved(saved.slice(0, max));
+          void syncSavedCount(max);
+        }
+        setUpgradeReason(result.error);
+        setUpgradeOpen(true);
+      }
+    });
+    // Only when the signed-in Steam account changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authConfigured, user?.steamId]);
+
+  const openUpgrade = (reason?: string) => {
+    setUpgradeReason(reason ?? null);
+    setUpgradeOpen(true);
+  };
 
   const handleGenerate = async (params: {
     minPrice: number;
@@ -49,6 +93,11 @@ function HomeInner() {
     excludeUnstableCollections: boolean;
     customExcludedCollections: string[];
   }) => {
+    if (authConfigured && authRequired && !user) {
+      openUpgrade("Sign in with Steam to run scans on the free plan.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResults([]);
@@ -61,10 +110,21 @@ function HomeInner() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed");
+      if (!res.ok) {
+        if (data.code === "AUTH_REQUIRED") {
+          openUpgrade(data.error);
+          throw new Error(data.error);
+        }
+        if (data.code === "SCAN_LIMIT") {
+          openUpgrade(data.error);
+          throw new Error(data.error);
+        }
+        throw new Error(data.error || "Generation failed");
+      }
 
       setResults(data.results || []);
       setMeta(data.meta || null);
+      void refresh();
 
       if (!data.results?.length) {
         setError(
@@ -78,8 +138,22 @@ function HomeInner() {
     }
   };
 
-  const handleSave = (tradeUp: TradeUpResult) => {
+  const handleSave = async (tradeUp: TradeUpResult) => {
     if (saved.some((s) => s.id === tradeUp.id)) return;
+
+    if (authConfigured && authRequired && !user) {
+      openUpgrade("Sign in with Steam to save trade-ups.");
+      return;
+    }
+
+    if (authConfigured && user) {
+      const claimed = await claimSave();
+      if (!claimed.ok) {
+        openUpgrade(claimed.error);
+        return;
+      }
+    }
+
     persistSaved([
       { ...tradeUp, savedAt: new Date().toISOString() },
       ...saved,
@@ -97,7 +171,6 @@ function HomeInner() {
         return { ...r, insight };
       })
     );
-    // Also persist onto saved copy if already bookmarked
     const savedMatch = saved.find((s) => s.id === id);
     if (savedMatch) {
       persistSaved(
@@ -113,8 +186,12 @@ function HomeInner() {
     }
   };
 
-  const handleRemove = (id: string) => {
-    persistSaved(saved.filter((s) => s.id !== id));
+  const handleRemove = async (id: string) => {
+    const next = saved.filter((s) => s.id !== id);
+    persistSaved(next);
+    if (authConfigured && user) {
+      await releaseSave();
+    }
   };
 
   const handleUpdate = (item: SavedTradeUp) => {
@@ -129,6 +206,7 @@ function HomeInner() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         savedCount={saved.length}
+        authSlot={<AuthMenu onUpgrade={() => openUpgrade()} />}
       />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-8 relative z-10">
@@ -147,6 +225,15 @@ function HomeInner() {
               {error && (
                 <div className="px-3 py-2.5 rounded-md bg-[var(--loss)]/10 border border-[var(--loss)]/20 text-[var(--loss)] text-[11px] leading-relaxed">
                   {error}
+                  {(error.includes("Steam") || error.includes("Upgrade") || error.includes("week")) && (
+                    <button
+                      type="button"
+                      className="ml-2 underline text-accent"
+                      onClick={() => openUpgrade(error)}
+                    >
+                      Details
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -193,14 +280,22 @@ function HomeInner() {
         onClose={() => setSettingsOpen(false)}
         onChange={setSettings}
       />
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        reason={upgradeReason}
+      />
     </div>
   );
 }
 
 export default function Home() {
   return (
-    <Suspense fallback={<div className="min-h-dvh bg-[var(--bg)]" />}>
-      <HomeInner />
-    </Suspense>
+    <AuthProvider>
+      <Suspense fallback={<div className="min-h-dvh bg-[var(--bg)]" />}>
+        <HomeInner />
+      </Suspense>
+    </AuthProvider>
   );
 }

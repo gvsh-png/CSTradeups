@@ -6,12 +6,14 @@ interface HeaderProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   savedCount: number;
+  authSlot?: React.ReactNode;
 }
 
 export default function Header({
   activeTab,
   onTabChange,
   savedCount,
+  authSlot,
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-md">
@@ -35,27 +37,30 @@ export default function Header({
             </h1>
           </div>
 
-          <nav className="flex shrink-0 gap-0.5 p-0.5 rounded-md border border-[var(--border)] bg-[var(--surface)]">
-            {(["generate", "saved"] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => onTabChange(tab)}
-                className={`px-3 sm:px-4 py-1.5 rounded text-xs font-medium transition-colors duration-150 ${
-                  activeTab === tab
-                    ? "bg-[var(--surface-raised)] text-[var(--text)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                {tab === "generate" ? "Scan" : "Saved"}
-                {tab === "saved" && savedCount > 0 && (
-                  <span className="ml-1.5 text-[10px] font-mono text-accent">
-                    {savedCount > 9 ? "9+" : savedCount}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2 shrink-0">
+            <nav className="flex shrink-0 gap-0.5 p-0.5 rounded-md border border-[var(--border)] bg-[var(--surface)]">
+              {(["generate", "saved"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => onTabChange(tab)}
+                  className={`px-3 sm:px-4 py-1.5 rounded text-xs font-medium transition-colors duration-150 ${
+                    activeTab === tab
+                      ? "bg-[var(--surface-raised)] text-[var(--text)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text)]"
+                  }`}
+                >
+                  {tab === "generate" ? "Scan" : "Saved"}
+                  {tab === "saved" && savedCount > 0 && (
+                    <span className="ml-1.5 text-[10px] font-mono text-accent">
+                      {savedCount > 9 ? "9+" : savedCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+            {authSlot}
+          </div>
         </div>
       </div>
     </header>

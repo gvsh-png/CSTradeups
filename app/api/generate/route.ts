@@ -5,6 +5,8 @@ import {
   loadDiscoveries,
   NEW_COLLECTION_MAX_AGE_DAYS,
 } from "@/lib/collections";
+import { authConfigured, authRequired } from "@/lib/auth/config";
+import { getSession } from "@/lib/auth/session";
 import { getBulkPrices } from "@/lib/prices";
 import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
@@ -12,6 +14,7 @@ import {
   repriceTradeUp,
   sanitizePrices,
 } from "@/lib/tradeup/generator";
+import { consumeScan } from "@/lib/usage/store";
 import type { Complexity } from "@/lib/constants";
 import type { GenerateParams } from "@/lib/tradeup/types";
 
@@ -20,6 +23,36 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
+    let quotaMeta: Record<string, unknown> | null = null;
+
+    if (authConfigured()) {
+      const session = await getSession();
+      if (!session) {
+        if (authRequired()) {
+          return NextResponse.json(
+            {
+              error: "Sign in with Steam to run scans.",
+              code: "AUTH_REQUIRED",
+            },
+            { status: 401 }
+          );
+        }
+      } else {
+        const consumed = await consumeScan(session.steamId);
+        if (!consumed.ok) {
+          return NextResponse.json(
+            {
+              error: consumed.reason,
+              code: "SCAN_LIMIT",
+              quota: consumed.quota,
+            },
+            { status: 403 }
+          );
+        }
+        quotaMeta = consumed.quota as unknown as Record<string, unknown>;
+      }
+    }
+
     const body = await request.json();
 
     const customExcluded: string[] = Array.isArray(body.customExcludedCollections)
@@ -66,8 +99,6 @@ export async function POST(request: Request) {
       params
     );
 
-    // Final reprice with the same map refresh uses — keeps scan results
-    // accurate without needing a manual refresh after save.
     const results = rawResults.map((t) => repriceTradeUp(t, prices));
 
     return NextResponse.json({
@@ -87,6 +118,7 @@ export async function POST(request: Request) {
           : 0,
         params,
         generatedAt: new Date().toISOString(),
+        quota: quotaMeta,
       },
     });
   } catch (error) {

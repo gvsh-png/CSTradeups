@@ -9,7 +9,7 @@ import MarketLinks from "./MarketLinks";
 
 interface TradeUpCardProps {
   tradeUp: TradeUpResult;
-  onSave?: (tradeUp: TradeUpResult) => void;
+  onSave?: (tradeUp: TradeUpResult) => void | Promise<void>;
   onInsight?: (insight: string | undefined) => void;
   saved?: boolean;
   onRefresh?: () => void;

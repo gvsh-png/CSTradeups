@@ -8,7 +8,7 @@ import TradeUpCard from "./TradeUpCard";
 interface TradeUpResultsProps {
   results: TradeUpResult[];
   loading: boolean;
-  onSave: (tradeUp: TradeUpResult) => void;
+  onSave: (tradeUp: TradeUpResult) => void | Promise<void>;
   onInsight: (id: string, insight: string | undefined) => void;
   isSaved: (id: string) => boolean;
 }
