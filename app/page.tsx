@@ -89,7 +89,7 @@ function HomeInner() {
   const handleGenerate = async (params: {
     minPrice: number;
     maxPrice: number;
-    minWinChance: number;
+    risk: number;
     complexity: Complexity;
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;

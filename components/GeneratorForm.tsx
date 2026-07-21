@@ -17,7 +17,7 @@ interface GeneratorFormProps {
   onGenerate: (params: {
     minPrice: number;
     maxPrice: number;
-    minWinChance: number;
+    risk: number;
     complexity: Complexity;
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
@@ -116,8 +116,7 @@ export default function GeneratorForm({
     onGenerate({
       minPrice: toUsd(min),
       maxPrice: toUsd(Math.min(max, MAX_PRICE_DISPLAY)),
-      // Risk 0 = safest (≥100% win), Risk 100 = wildest (≥0% win)
-      minWinChance: Math.max(0, Math.min(100, 100 - risk)),
+      risk,
       complexity,
       feeType,
       excludeUnstableCollections: excludeUnstable,
@@ -199,7 +198,8 @@ export default function GeneratorForm({
             <span>Riskier</span>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] leading-snug">
-            Higher risk includes contracts that win less often (lottery-style)
+            Targets ~{100 - risk}% win chance — higher risk shows lottery-style
+            contracts, not only sure things
           </p>
         </div>
 

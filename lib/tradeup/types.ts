@@ -58,8 +58,15 @@ export interface TradeUpResult {
 export interface GenerateParams {
   minPrice: number;
   maxPrice: number;
+  /**
+   * Risk tolerance 0–100 (safer → riskier).
+   * Mapped to a win-chance band around (100 − risk).
+   */
+  risk: number;
   /** Minimum probability (%) that a random outcome is profitable after fees */
   minWinChance: number;
+  /** Maximum win chance % — excludes “sure thing” contracts when risk is high */
+  maxWinChance: number;
   complexity: Complexity;
   feeType: "steam" | "csfloat";
   excludeUnstableCollections?: boolean;

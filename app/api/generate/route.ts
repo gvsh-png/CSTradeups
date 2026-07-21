@@ -17,6 +17,7 @@ import {
 import { consumeScan } from "@/lib/usage/store";
 import type { Complexity } from "@/lib/constants";
 import type { GenerateParams } from "@/lib/tradeup/types";
+import { clampRisk, winChanceBandFromRisk } from "@/lib/tradeup/risk";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -59,18 +60,21 @@ export async function POST(request: Request) {
       ? body.customExcludedCollections
       : [];
 
-    const rawWin =
-      body.minWinChance != null
-        ? Number(body.minWinChance)
-        : body.targetRoi != null
-          ? Number(body.targetRoi) // legacy clients sent ROI; treat as win %
-          : 40;
-    const minWinChance = Math.max(0, Math.min(100, Number.isFinite(rawWin) ? rawWin : 40));
+    const risk = clampRisk(
+      body.risk != null
+        ? Number(body.risk)
+        : body.minWinChance != null
+          ? 100 - Number(body.minWinChance)
+          : 60
+    );
+    const band = winChanceBandFromRisk(risk);
 
     const params: GenerateParams = {
       minPrice: Number(body.minPrice) ?? 1,
       maxPrice: Number(body.maxPrice) ?? 500,
-      minWinChance,
+      risk,
+      minWinChance: band.minWinChance,
+      maxWinChance: band.maxWinChance,
       complexity: (body.complexity as Complexity) || "simple",
       feeType: body.feeType === "steam" ? "steam" : "csfloat",
       excludeUnstableCollections: body.excludeUnstableCollections !== false,

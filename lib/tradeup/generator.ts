@@ -20,6 +20,7 @@ import {
   r2,
   r4,
 } from "./float";
+import { riskRankScore, winChanceBandFromRisk } from "./risk";
 import type {
   GenerateParams,
   PriceMap,
@@ -243,7 +244,7 @@ function toTradeUpResult(
   if (totalCost < params.minPrice || totalCost > params.maxPrice) return null;
 
   const { winPct, avgWin, avgLoss } = calcWinLoss(outcomes, totalCost, fee);
-  if (winPct < params.minWinChance) return null;
+  if (winPct < params.minWinChance || winPct > params.maxWinChance) return null;
 
   const finalInputs = applyComplexity(
     inputs,
@@ -323,14 +324,18 @@ function bestCandidateForSkin(
 /**
  * Pick up to `limit` trade-ups that prefer unique input skins (and weapons),
  * so the result list doesn't repeat the same items over and over.
+ * Ranking prefers contracts near the risk target win chance, then profit.
  */
 function selectDiverseResults(
   candidates: TradeUpResult[],
-  limit: number
+  limit: number,
+  targetWinChance: number
 ): TradeUpResult[] {
-  const sorted = [...candidates].sort(
-    (a, b) => b.expectedProfit - a.expectedProfit
-  );
+  const sorted = [...candidates].sort((a, b) => {
+    const sb = riskRankScore(b.winPct, b.expectedProfit, targetWinChance);
+    const sa = riskRankScore(a.winPct, a.expectedProfit, targetWinChance);
+    return sb - sa;
+  });
   const selected: TradeUpResult[] = [];
   const usedIds = new Set<string>();
   const usedSkins = new Set<string>();
@@ -577,7 +582,8 @@ export async function generateTradeUps(
     }
   }
 
-  return selectDiverseResults(candidates, limit);
+  const { target } = winChanceBandFromRisk(params.risk);
+  return selectDiverseResults(candidates, limit, target);
 }
 
 /**
