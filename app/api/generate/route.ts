@@ -59,10 +59,18 @@ export async function POST(request: Request) {
       ? body.customExcludedCollections
       : [];
 
+    const rawWin =
+      body.minWinChance != null
+        ? Number(body.minWinChance)
+        : body.targetRoi != null
+          ? Number(body.targetRoi) // legacy clients sent ROI; treat as win %
+          : 40;
+    const minWinChance = Math.max(0, Math.min(100, Number.isFinite(rawWin) ? rawWin : 40));
+
     const params: GenerateParams = {
       minPrice: Number(body.minPrice) ?? 1,
       maxPrice: Number(body.maxPrice) ?? 500,
-      targetRoi: body.targetRoi != null ? Number(body.targetRoi) : 5,
+      minWinChance,
       complexity: (body.complexity as Complexity) || "simple",
       feeType: body.feeType === "steam" ? "steam" : "csfloat",
       excludeUnstableCollections: body.excludeUnstableCollections !== false,

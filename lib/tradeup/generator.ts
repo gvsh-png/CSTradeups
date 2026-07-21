@@ -240,10 +240,10 @@ function toTradeUpResult(
   const profit = r2(ev - totalCost);
   const roi = totalCost > 0 ? r2((profit / totalCost) * 100) : 0;
 
-  if (roi < params.targetRoi) return null;
   if (totalCost < params.minPrice || totalCost > params.maxPrice) return null;
 
   const { winPct, avgWin, avgLoss } = calcWinLoss(outcomes, totalCost, fee);
+  if (winPct < params.minWinChance) return null;
 
   const finalInputs = applyComplexity(
     inputs,

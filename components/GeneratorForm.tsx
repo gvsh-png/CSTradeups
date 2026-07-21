@@ -17,7 +17,7 @@ interface GeneratorFormProps {
   onGenerate: (params: {
     minPrice: number;
     maxPrice: number;
-    targetRoi: number;
+    minWinChance: number;
     complexity: Complexity;
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
@@ -84,7 +84,7 @@ export default function GeneratorForm({
   const { toUsd, code } = useCurrency();
   const [minPrice, setMinPrice] = useState(5);
   const [maxPrice, setMaxPrice] = useState(200);
-  const [targetRoi, setTargetRoi] = useState(5);
+  const [minWinChance, setMinWinChance] = useState(40);
   const [complexity, setComplexity] = useState<Complexity>("simple");
   const [feeType, setFeeType] = useState<"steam" | "csfloat">("csfloat");
   const [excludeUnstable, setExcludeUnstable] = useState(true);
@@ -116,7 +116,7 @@ export default function GeneratorForm({
     onGenerate({
       minPrice: toUsd(min),
       maxPrice: toUsd(Math.min(max, MAX_PRICE_DISPLAY)),
-      targetRoi,
+      minWinChance,
       complexity,
       feeType,
       excludeUnstableCollections: excludeUnstable,
@@ -177,21 +177,25 @@ export default function GeneratorForm({
         </div>
 
         <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="label">Target ROI</span>
+          <div className="flex justify-between items-baseline gap-2">
+            <span className="label">Min win chance</span>
             <span className="text-sm font-mono text-accent tabular-nums">
-              {targetRoi}%
+              {minWinChance}%
             </span>
           </div>
           <input
             type="range"
             min={0}
-            max={50}
-            step={1}
-            value={targetRoi}
-            onChange={(e) => setTargetRoi(Number(e.target.value))}
+            max={100}
+            step={5}
+            value={minWinChance}
+            onChange={(e) => setMinWinChance(Number(e.target.value))}
             className="w-full"
+            aria-label="Minimum chance of profit"
           />
+          <p className="text-[11px] text-[var(--text-muted)] leading-snug">
+            Only show contracts where you profit at least this often
+          </p>
         </div>
 
         <fieldset className="space-y-2">

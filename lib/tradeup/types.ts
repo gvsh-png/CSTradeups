@@ -58,7 +58,8 @@ export interface TradeUpResult {
 export interface GenerateParams {
   minPrice: number;
   maxPrice: number;
-  targetRoi: number;
+  /** Minimum probability (%) that a random outcome is profitable after fees */
+  minWinChance: number;
   complexity: Complexity;
   feeType: "steam" | "csfloat";
   excludeUnstableCollections?: boolean;

@@ -455,7 +455,7 @@ export default function TradeUpCard({
             value={money(tradeUp.expectedProfit, { signed: true })}
             color={profitColor}
           />
-          <Stat label="ROI" value={`${tradeUp.roi}%`} color={profitColor} />
+          <Stat label="Return" value={`${tradeUp.roi}%`} color={profitColor} />
           <Stat label="Cost" value={money(tradeUp.totalCost)} />
         </div>
       </div>

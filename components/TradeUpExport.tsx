@@ -217,7 +217,7 @@ export default function TradeUpExport({
           color={profitColor}
         />
         <Stat
-          label="ROI"
+          label="Return"
           value={`${tradeUp.roi}%`}
           color={profitColor}
         />
