@@ -4,7 +4,7 @@ import {
   STEAM_FEE,
   type Complexity,
 } from "../constants";
-import { getPrice, mergePriceCandidates } from "../prices";
+import { getPrice, median } from "../prices";
 import { getSkinImage } from "../schema";
 import {
   clampFloat,
@@ -525,6 +525,7 @@ export async function generateTradeUps(
   return selectDiverseResults(candidates, limit);
 }
 
+/** Best → worst wear. Worse condition should almost never cost more. */
 const WEARS = [
   "Factory New",
   "Minimal Wear",
@@ -534,8 +535,8 @@ const WEARS = [
 ] as const;
 
 /**
- * Cross-wear sanity check: reject prices that are extreme outliers
- * compared to other wears of the same skin.
+ * Cross-wear sanity check: reject outlier prints and enforce rough
+ * wear ordering (BS shouldn't price above FT, etc.).
  */
 export function sanitizePrices(
   prices: PriceMap,
@@ -551,19 +552,43 @@ export function sanitizePrices(
     }
     if (wearPrices.length < 2) continue;
 
-    const sorted = [...wearPrices].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+    const mid = median(wearPrices);
+    if (mid <= 0) continue;
+
+    // 1) Absolute outliers vs skin median (tighter than before)
+    const inliers = wearPrices.filter((w) => w >= mid * 0.3 && w <= mid * 3);
+    const fallback = inliers.length ? median(inliers) : mid;
 
     for (const wear of WEARS) {
       const key = marketHashName(skin.name, wear);
       const p = sanitized[key];
       if (!p || p <= 0) continue;
 
-      if (p < median * 0.15 || p > median * 8) {
-        const corrected = mergePriceCandidates(
-          wearPrices.filter((w) => w >= median * 0.15 && w <= median * 8)
-        );
-        if (corrected > 0) sanitized[key] = corrected;
+      if (p > mid * 3 || p < mid * 0.3) {
+        if (fallback > 0) sanitized[key] = fallback;
+      }
+    }
+
+    // 2) Wear-order clamp: a worse wear pricing above a better wear is bad data
+    for (let i = 1; i < WEARS.length; i++) {
+      const betterKey = marketHashName(skin.name, WEARS[i - 1]);
+      const worseKey = marketHashName(skin.name, WEARS[i]);
+      const better = sanitized[betterKey] || 0;
+      const worse = sanitized[worseKey] || 0;
+      if (better > 0 && worse > 0 && worse > better * 1.12) {
+        sanitized[worseKey] = r2(better * 0.92);
+      }
+    }
+
+    // 3) Second pass vs neighbors — spike mid-tier vs both sides
+    for (let i = 1; i < WEARS.length - 1; i++) {
+      const prev = sanitized[marketHashName(skin.name, WEARS[i - 1])] || 0;
+      const curKey = marketHashName(skin.name, WEARS[i]);
+      const cur = sanitized[curKey] || 0;
+      const next = sanitized[marketHashName(skin.name, WEARS[i + 1])] || 0;
+      if (prev > 0 && next > 0 && cur > 0) {
+        const neighbor = r2((prev + next) / 2);
+        if (cur > neighbor * 2.5) sanitized[curKey] = neighbor;
       }
     }
   }

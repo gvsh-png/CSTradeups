@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { parsePrice, r2 } from "./tradeup/float";
+import { r2 } from "./tradeup/float";
 import type { PriceMap } from "./tradeup/types";
 
 /** Shared price cache TTL — one bulk scan per day for all users */
@@ -48,6 +48,17 @@ export interface BulkPriceResult {
   meta: PriceMeta;
 }
 
+/** True arithmetic median (averages the two middle values when even). */
+export function median(nums: number[]): number {
+  const valid = nums.filter((n) => n > 0).sort((a, b) => a - b);
+  if (!valid.length) return 0;
+  const mid = Math.floor(valid.length / 2);
+  if (valid.length % 2 === 0) {
+    return r2((valid[mid - 1] + valid[mid]) / 2);
+  }
+  return valid[mid];
+}
+
 /**
  * Pick the best price from SteamApis data, rejecting outlier sales.
  * Uses recent average sale prices, NOT lowest listings.
@@ -62,27 +73,32 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
   const ts = p.safe_ts || {};
   const last7 = ts.last_7d || 0;
   const last30 = ts.last_30d || 0;
-  const last90 = ts.last_90d || p.safe || 0;
+  const last90 = ts.last_90d || 0;
   const latest = p.latest || 0;
   const safe = p.safe || 0;
+  const sold7 = p.sold?.last_7d || 0;
+  const sold30 = p.sold?.last_30d || 0;
 
   let priceUSD = 0;
   let corrected = false;
 
-  if (last7 > 0 && last30 > 0) {
+  // Thin / unstable markets: trust longer windows over a spiked 7d print
+  if (p.unstable || (sold7 > 0 && sold30 > 0 && sold7 < 3 && sold30 >= 10)) {
+    priceUSD = last30 || last90 || safe || last7 || latest;
+    corrected = Boolean(last7 && priceUSD !== last7);
+  } else if (last7 > 0 && last30 > 0) {
     const ratio = last7 / last30;
-    if (ratio >= 0.5 && ratio <= 2.0) {
+    if (ratio >= 0.55 && ratio <= 1.8) {
       priceUSD = last7;
     } else {
+      // Prefer the more stable 30d when 7d spiked or collapsed
       priceUSD = last30;
       corrected = true;
     }
   } else if (last7 > 0) {
-    if (last90 > 0 && (last7 / last90 < 0.3 || last7 / last90 > 3.0)) {
-      priceUSD = last90;
-      corrected = true;
-    } else if (last30 > 0 && (last7 / last30 < 0.3 || last7 / last30 > 3.0)) {
-      priceUSD = last30;
+    const anchor = last90 || safe || last30;
+    if (anchor > 0 && (last7 / anchor < 0.4 || last7 / anchor > 2.5)) {
+      priceUSD = anchor;
       corrected = true;
     } else {
       priceUSD = last7;
@@ -113,21 +129,26 @@ function resolveSkinportPrice(item: SkinportItem): number {
 
 /**
  * Merge multiple price candidates, rejecting outliers.
- * Uses median of valid candidates (not minimum).
+ * On large 2-way disagreement, prefers the lower (safer for trade-up EV).
  */
 export function mergePriceCandidates(candidates: number[]): number {
-  const valid = candidates.filter((p) => p > 0);
+  const valid = candidates.filter((p) => p > 0).sort((a, b) => a - b);
   if (!valid.length) return 0;
   if (valid.length === 1) return valid[0];
 
-  const sorted = [...valid].sort((a, b) => a - b);
-  const mid = sorted[Math.floor(sorted.length / 2)];
+  if (valid.length === 2) {
+    const [lo, hi] = valid;
+    if (hi / lo > 2) {
+      // e.g. Skinport $6 vs SteamApis $57 — keep the realistic lower print
+      return lo;
+    }
+    return r2((lo + hi) / 2);
+  }
 
-  const filtered = sorted.filter((p) => p >= mid * 0.2 && p <= mid * 5);
+  const mid = median(valid);
+  const filtered = valid.filter((p) => p >= mid * 0.45 && p <= mid * 2.2);
   if (!filtered.length) return mid;
-
-  filtered.sort((a, b) => a - b);
-  return r2(filtered[Math.floor(filtered.length / 2)]);
+  return median(filtered);
 }
 
 async function fetchSteamApisPrices(): Promise<{
@@ -210,20 +231,25 @@ function mergeBulkSources(
   let mergeCorrections = 0;
 
   for (const key of allKeys) {
-    const candidates: number[] = [];
-    if (steamApis?.[key]) candidates.push(steamApis[key]);
-    if (skinport?.[key]) candidates.push(skinport[key]);
+    const sa = steamApis?.[key] || 0;
+    const sp = skinport?.[key] || 0;
 
-    const merged = mergePriceCandidates(candidates);
-    if (merged > 0) {
-      if (
-        candidates.length > 1 &&
-        Math.max(...candidates) / Math.min(...candidates) > 2
-      ) {
+    if (sa > 0 && sp > 0) {
+      const hi = Math.max(sa, sp);
+      const lo = Math.min(sa, sp);
+      if (hi / lo > 2) {
+        // Skinport reflects live listings; SteamApis safe_ts can spike on thin volume
+        // Prefer Skinport when present, otherwise the lower print.
+        prices[key] = sp;
         mergeCorrections++;
+        continue;
       }
-      prices[key] = merged;
+      prices[key] = r2((sa + sp) / 2);
+      continue;
     }
+
+    const merged = mergePriceCandidates([sa, sp].filter((p) => p > 0));
+    if (merged > 0) prices[key] = merged;
   }
 
   const source: PriceMeta["source"] =
@@ -277,7 +303,7 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices"],
+  ["tradeup-bulk-prices-v2"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
