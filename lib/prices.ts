@@ -154,14 +154,14 @@ export function mergePriceCandidates(candidates: number[]): number {
 /**
  * Resolve SteamApis vs Skinport when they disagree.
  *
- * Default to SteamApis (Steam / TradeUpSpy aligned).
- * Only fall back to Skinport when SteamApis is a clear *high* spike
- * vs the skin's other wears (e.g. Control Panel BS $57 vs ~$6 siblings).
+ * Uses each source's own wear ladder so a consistently-wrong low SteamApis
+ * book (e.g. First Class ~$1) cannot veto a consistent Skinport ladder (~$50+).
  */
 export function resolveSourceConflict(
   steamApis: number,
   skinport: number,
-  siblingPrices: number[] = []
+  steamApisSiblings: number[] = [],
+  skinportSiblings: number[] = []
 ): { price: number; corrected: boolean } {
   const sa = steamApis > 0 ? steamApis : 0;
   const sp = skinport > 0 ? skinport : 0;
@@ -176,19 +176,30 @@ export function resolveSourceConflict(
     return { price: r2((sa + sp) / 2), corrected: false };
   }
 
-  const mid = median(siblingPrices.filter((p) => p > 0));
+  const saMid = median(steamApisSiblings.filter((p) => p > 0));
+  const spMid = median(skinportSiblings.filter((p) => p > 0));
 
-  // SteamApis high-spike: trust Skinport (Control Panel BS case)
-  if (sa === hi && mid > 0 && sa > mid * 2.5) {
+  // Solo spike vs that source's own siblings → take the other source
+  if (sa === hi && saMid > 0 && sa > saMid * 2.5) {
     return { price: sp, corrected: true };
   }
-
-  // Skinport high-spike (rare): trust SteamApis
-  if (sp === hi && mid > 0 && sp > mid * 2.5) {
+  if (sp === hi && spMid > 0 && sp > spMid * 2.5) {
     return { price: sa, corrected: true };
   }
 
-  // Underpriced Skinport vs Steam (Zeno MW $0.43 vs $1.02): keep SteamApis
+  // Two consistent ladders far apart → trust the higher book.
+  // Underpriced inputs create fake 600% ROI trade-ups (First Class bug).
+  if (saMid > 0 && spMid > 0) {
+    if (spMid / saMid >= 2.5) return { price: sp, corrected: true };
+    if (saMid / spMid >= 2.5) return { price: sa, corrected: true };
+  }
+
+  // Extreme disagreement without usable ladders — prefer higher
+  if (hi / lo >= 5) {
+    return { price: hi, corrected: true };
+  }
+
+  // Mild disagreement: SteamApis (closer to Steam / TradeUpSpy)
   return { price: sa, corrected: true };
 }
 
@@ -297,23 +308,25 @@ function mergeBulkSources(
     else if (sp > 0) prices[key] = sp;
   }
 
-  // Pass 2: disagreements — prefer SteamApis unless it's a high spike
-  // vs sibling wears (Steam / TradeUpSpy aligned by default)
+  // Pass 2: disagreements — compare each source against its own wear ladder
   for (const key of deferred) {
     const sa = steamApis?.[key] || 0;
     const sp = skinport?.[key] || 0;
     const base = skinBaseName(key);
-    const siblings: number[] = [];
-    // Prefer SteamApis sibling wears for spike detection context
+    const saSiblings: number[] = [];
+    const spSiblings: number[] = [];
     for (const [k, p] of Object.entries(steamApis || {})) {
-      if (k !== key && skinBaseName(k) === base && p > 0) siblings.push(p);
+      if (k !== key && skinBaseName(k) === base && p > 0) saSiblings.push(p);
     }
-    if (!siblings.length) {
-      for (const [k, p] of Object.entries(prices)) {
-        if (k !== key && skinBaseName(k) === base && p > 0) siblings.push(p);
-      }
+    for (const [k, p] of Object.entries(skinport || {})) {
+      if (k !== key && skinBaseName(k) === base && p > 0) spSiblings.push(p);
     }
-    const { price, corrected } = resolveSourceConflict(sa, sp, siblings);
+    const { price, corrected } = resolveSourceConflict(
+      sa,
+      sp,
+      saSiblings,
+      spSiblings
+    );
     if (price > 0) {
       prices[key] = price;
       if (corrected) mergeCorrections++;
@@ -371,7 +384,7 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v3"],
+  ["tradeup-bulk-prices-v4"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],

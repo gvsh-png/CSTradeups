@@ -525,58 +525,16 @@ export async function generateTradeUps(
   return selectDiverseResults(candidates, limit);
 }
 
-/** Best → worst wear. Worse condition should almost never cost more. */
-const WEARS = [
-  "Factory New",
-  "Minimal Wear",
-  "Field-Tested",
-  "Well-Worn",
-  "Battle-Scarred",
-] as const;
-
 /**
- * Light cross-wear cleanup only.
- *
- * IMPORTANT: Do NOT clamp prices to a global skin median. FN/MW often cost
- * 3–10× FT/BS on real markets (e.g. Calf Skin MW ~$0.27 vs FT ~$0.10).
- * The old median clamp crushed MW down to FT and made generate look
- * wildly profitable until refresh reloaded unsanitized prices.
+ * Light cleanup only. Aggressive cross-wear clamps caused worse bugs
+ * (First Class BS crushed; MW premiums destroyed). Source merge in
+ * lib/prices.ts handles SteamApis vs Skinport disagreements.
  */
 export function sanitizePrices(
   prices: PriceMap,
-  skinDB: SkinData[]
+  _skinDB: SkinData[]
 ): PriceMap {
-  const sanitized = { ...prices };
-
-  for (const skin of skinDB) {
-    const get = (wear: string) =>
-      sanitized[marketHashName(skin.name, wear)] || 0;
-    const set = (wear: string, price: number) => {
-      sanitized[marketHashName(skin.name, wear)] = r2(price);
-    };
-
-    // 1) Worse wear must not price above a better wear (bad data / spikes)
-    for (let i = 1; i < WEARS.length; i++) {
-      const better = get(WEARS[i - 1]);
-      const worse = get(WEARS[i]);
-      if (better > 0 && worse > 0 && worse > better * 1.2) {
-        set(WEARS[i], better * 0.95);
-      }
-    }
-
-    // 2) Only pull down a mid-tier that spikes ABOVE both neighbors
-    //    (never pull MW/FN down toward cheaper FT/BS)
-    for (let i = 1; i < WEARS.length - 1; i++) {
-      const prev = get(WEARS[i - 1]);
-      const cur = get(WEARS[i]);
-      const next = get(WEARS[i + 1]);
-      if (prev > 0 && next > 0 && cur > Math.max(prev, next) * 3) {
-        set(WEARS[i], (prev + next) / 2);
-      }
-    }
-  }
-
-  return sanitized;
+  return { ...prices };
 }
 
 /**
