@@ -16,6 +16,7 @@
   --accent-dim: #b8923f;
   --profit: #5ecf8e;
   --loss: #e35d5d;
+  --rail: #181c24;
 }
 
 * {
@@ -39,10 +40,40 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 90% 50% at 50% -10%, rgba(212, 168, 75, 0.06), transparent 55%),
-    linear-gradient(180deg, #161b22 0%, #12151a 40%, #10141a 100%);
+    radial-gradient(ellipse 70% 45% at 12% -5%, rgba(212, 168, 75, 0.07), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 88% 8%, rgba(94, 207, 142, 0.04), transparent 45%),
+    linear-gradient(180deg, #161b22 0%, #12151a 42%, #10141a 100%);
   pointer-events: none;
   z-index: 0;
+}
+
+/* Desktop: soft grid texture like market dashboards */
+@media (min-width: 1024px) {
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(47, 55, 66, 0.18) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(47, 55, 66, 0.18) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.35;
+  }
+
+  .header-desktop {
+    box-shadow: 0 1px 0 rgba(212, 168, 75, 0.06);
+  }
+
+  .panel-desktop {
+    background:
+      linear-gradient(165deg, rgba(34, 40, 49, 0.98), rgba(26, 31, 39, 0.96));
+    box-shadow:
+      0 0 0 1px rgba(212, 168, 75, 0.04),
+      0 18px 40px -28px rgba(0, 0, 0, 0.65);
+  }
 }
 
 @layer components {

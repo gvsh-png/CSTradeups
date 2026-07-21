@@ -6,7 +6,12 @@ import {
   type Complexity,
 } from "@/lib/constants";
 import type { AppSettings } from "@/lib/settings";
+import {
+  MAX_PRICE_DISPLAY,
+  MIN_PRICE_DISPLAY,
+} from "@/lib/currency";
 import { useSimulatedProgress } from "@/hooks/useSimulatedProgress";
+import { useCurrency } from "./CurrencyProvider";
 
 interface GeneratorFormProps {
   onGenerate: (params: {
@@ -23,6 +28,52 @@ interface GeneratorFormProps {
   onOpenSettings: () => void;
 }
 
+function PriceInput({
+  value,
+  onChange,
+  ariaLabel,
+  min,
+  max,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  ariaLabel: string;
+  min: number;
+  max: number;
+}) {
+  const { symbol, currency } = useCurrency();
+  const prefix = currency.prefix !== false;
+
+  return (
+    <div className="relative flex items-center">
+      {prefix && (
+        <span className="pointer-events-none absolute left-2.5 text-xs font-mono text-[var(--text-muted)]">
+          {symbol}
+        </span>
+      )}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={0.1}
+        value={Number.isFinite(value) ? value : ""}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          onChange(Number.isFinite(n) ? n : min);
+        }}
+        className={`input-field tabular-nums ${prefix ? "pl-7" : "pr-8"}`}
+        placeholder="0.0"
+        aria-label={ariaLabel}
+      />
+      {!prefix && (
+        <span className="pointer-events-none absolute right-2.5 text-xs font-mono text-[var(--text-muted)]">
+          {symbol}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function GeneratorForm({
   onGenerate,
   loading,
@@ -30,6 +81,7 @@ export default function GeneratorForm({
   onOpenSettings,
 }: GeneratorFormProps) {
   const progress = useSimulatedProgress(loading, "generate");
+  const { toUsd, code } = useCurrency();
   const [minPrice, setMinPrice] = useState(5);
   const [maxPrice, setMaxPrice] = useState(200);
   const [targetRoi, setTargetRoi] = useState(5);
@@ -58,9 +110,12 @@ export default function GeneratorForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const min = Math.max(MIN_PRICE_DISPLAY, minPrice || MIN_PRICE_DISPLAY);
+    const max = Math.max(min, maxPrice || min);
+    // API / market data are USD — convert display currency → USD
     onGenerate({
-      minPrice,
-      maxPrice,
+      minPrice: toUsd(min),
+      maxPrice: toUsd(Math.min(max, MAX_PRICE_DISPLAY)),
       targetRoi,
       complexity,
       feeType,
@@ -74,13 +129,18 @@ export default function GeneratorForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="panel p-4 space-y-5 lg:sticky lg:top-[4.5rem]"
+      className="panel panel-desktop p-4 lg:p-5 space-y-5 lg:sticky lg:top-[4.75rem]"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold tracking-tight">Parameters</h2>
+          <h2 className="text-sm font-semibold tracking-tight lg:text-[15px]">
+            Parameters
+          </h2>
           <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
             Configure scan filters
+            {code !== "USD" && (
+              <span className="text-accent"> · shown in {code}</span>
+            )}
           </p>
         </div>
         <button
@@ -94,32 +154,29 @@ export default function GeneratorForm({
         </button>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 lg:space-y-5">
         <div className="space-y-1.5">
           <span className="label">Price range</span>
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <input
-              type="number"
-              min={0}
-              step={1}
+            <PriceInput
               value={minPrice}
-              onChange={(e) => setMinPrice(Number(e.target.value))}
-              className="input-field"
-              placeholder="Min"
-              aria-label="Min price"
+              onChange={setMinPrice}
+              ariaLabel="Min price"
+              min={MIN_PRICE_DISPLAY}
+              max={MAX_PRICE_DISPLAY}
             />
             <span className="text-[var(--text-muted)] text-xs font-mono">—</span>
-            <input
-              type="number"
-              min={1}
-              step={1}
+            <PriceInput
               value={maxPrice}
-              onChange={(e) => setMaxPrice(Number(e.target.value))}
-              className="input-field"
-              placeholder="Max"
-              aria-label="Max price"
+              onChange={setMaxPrice}
+              ariaLabel="Max price"
+              min={MIN_PRICE_DISPLAY}
+              max={MAX_PRICE_DISPLAY}
             />
           </div>
+          <p className="text-[10px] font-mono text-[var(--text-muted)]">
+            From {MIN_PRICE_DISPLAY} · no upper cap
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -145,10 +202,10 @@ export default function GeneratorForm({
           {COMPLEXITY_OPTIONS.map((opt) => (
             <label
               key={opt.value}
-              className={`flex items-start gap-3 p-2.5 rounded-md border cursor-pointer transition-colors duration-150 ${
+              className={`flex items-start gap-3 p-2.5 lg:p-3 rounded-md border cursor-pointer transition-colors duration-150 ${
                 complexity === opt.value
                   ? "border-accent/40 bg-accent/5"
-                  : "border-[var(--border)]"
+                  : "border-[var(--border)] hover:border-[var(--border)]/80"
               }`}
             >
               <input
@@ -238,7 +295,7 @@ export default function GeneratorForm({
       <button
         type="submit"
         disabled={loading}
-        className="btn-primary"
+        className="btn-primary lg:py-3 lg:text-[13px] lg:tracking-wide"
         aria-busy={loading}
       >
         {loading ? (

@@ -1,6 +1,11 @@
 import type { TradeUpResult } from "@/lib/tradeup/types";
 import { RARITY_COLORS, rarityShort } from "@/lib/constants";
 import { proxiedImageUrl } from "@/lib/proxyImage";
+import {
+  DEFAULT_CURRENCY,
+  formatMoney,
+  type CurrencyCode,
+} from "@/lib/currency";
 
 const COLORS = {
   bg: "#1a1f27",
@@ -114,7 +119,15 @@ function Stat({
 }
 
 /** Clean, self-contained trade-up frame for PNG export */
-export default function TradeUpExport({ tradeUp }: { tradeUp: TradeUpResult }) {
+export default function TradeUpExport({
+  tradeUp,
+  currencyCode = DEFAULT_CURRENCY,
+}: {
+  tradeUp: TradeUpResult;
+  currencyCode?: CurrencyCode;
+}) {
+  const money = (n: number, signed?: boolean) =>
+    formatMoney(n, currencyCode, signed ? { signed: true } : undefined);
   const profitColor =
     tradeUp.expectedProfit >= 0 ? COLORS.profit : COLORS.loss;
   const inputTint = rarityTint(tradeUp.inputRarity);
@@ -219,7 +232,7 @@ export default function TradeUpExport({ tradeUp }: { tradeUp: TradeUpResult }) {
         />
         <Stat
           label="Avg profit"
-          value={`$${tradeUp.expectedProfit.toFixed(2)}`}
+          value={money(tradeUp.expectedProfit, true)}
           color={profitColor}
         />
         <Stat
@@ -227,7 +240,7 @@ export default function TradeUpExport({ tradeUp }: { tradeUp: TradeUpResult }) {
           value={`${tradeUp.roi}%`}
           color={profitColor}
         />
-        <Stat label="Cost" value={`$${tradeUp.totalCost.toFixed(2)}`} />
+        <Stat label="Cost" value={money(tradeUp.totalCost)} />
       </div>
 
       {/* Inputs */}
@@ -295,7 +308,7 @@ export default function TradeUpExport({ tradeUp }: { tradeUp: TradeUpResult }) {
                     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                   }}
                 >
-                  {input.wear} · ${input.price.toFixed(2)}
+                  {input.wear} · {money(input.price)}
                   {tradeUp.complexity !== "simple" &&
                   input.maxFloat != null
                     ? ` · ≤${input.maxFloat.toFixed(4)}`
@@ -392,7 +405,7 @@ export default function TradeUpExport({ tradeUp }: { tradeUp: TradeUpResult }) {
                     marginTop: 2,
                   }}
                 >
-                  ${outcome.price.toFixed(2)}
+                  {money(outcome.price)}
                 </div>
               </div>
             </div>

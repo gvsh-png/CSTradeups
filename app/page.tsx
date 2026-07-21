@@ -12,6 +12,8 @@ import SavedTradeUps from "@/components/SavedTradeUps";
 import SettingsPanel from "@/components/SettingsPanel";
 import AuthMenu from "@/components/AuthMenu";
 import { AuthProvider, useAuth } from "@/components/AuthProvider";
+import { CurrencyProvider } from "@/components/CurrencyProvider";
+import CurrencySelect from "@/components/CurrencySelect";
 import UpgradeModal from "@/components/UpgradeModal";
 import type { Complexity } from "@/lib/constants";
 
@@ -206,13 +208,14 @@ function HomeInner() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         savedCount={saved.length}
+        currencySlot={<CurrencySelect />}
         authSlot={<AuthMenu onUpgrade={() => openUpgrade()} />}
       />
 
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-8 relative z-10">
+      <main className="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-8 relative z-10">
         {activeTab === "generate" ? (
-          <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
-            <aside className="w-full lg:w-80 lg:shrink-0">
+          <div className="flex flex-col lg:flex-row gap-5 lg:gap-7 xl:gap-10">
+            <aside className="w-full lg:w-[22rem] xl:w-[24rem] lg:shrink-0">
               <GeneratorForm
                 onGenerate={handleGenerate}
                 loading={loading}
@@ -221,7 +224,33 @@ function HomeInner() {
               />
             </aside>
 
-            <section className="flex-1 min-w-0 space-y-3">
+            <section className="flex-1 min-w-0 space-y-3 lg:space-y-4">
+              <div className="hidden lg:flex items-end justify-between gap-4 pb-1">
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-accent/80">
+                    Results board
+                  </p>
+                  <h2 className="text-lg font-semibold tracking-tight mt-1">
+                    Trade-up contracts
+                  </h2>
+                </div>
+                {meta && !loading && (
+                  <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[10px] font-mono text-[var(--text-muted)]">
+                    <span>{String(meta.pricesLoaded)} prices</span>
+                    <span aria-hidden>·</span>
+                    <span>{String(meta.priceSource)}</span>
+                    {meta.excludedCollections ? (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>
+                          {String(meta.excludedCollections)} filtered
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
               {error && (
                 <div className="px-3 py-2.5 rounded-md bg-[var(--loss)]/10 border border-[var(--loss)]/20 text-[var(--loss)] text-[11px] leading-relaxed">
                   {error}
@@ -238,7 +267,7 @@ function HomeInner() {
               )}
 
               {meta && !loading && (
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-[var(--text-muted)]">
+                <div className="flex lg:hidden flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-[var(--text-muted)]">
                   <span>{String(meta.pricesLoaded)} prices</span>
                   <span aria-hidden>·</span>
                   <span>{String(meta.priceSource)}</span>
@@ -292,10 +321,12 @@ function HomeInner() {
 
 export default function Home() {
   return (
-    <AuthProvider>
-      <Suspense fallback={<div className="min-h-dvh bg-[var(--bg)]" />}>
-        <HomeInner />
-      </Suspense>
-    </AuthProvider>
+    <CurrencyProvider>
+      <AuthProvider>
+        <Suspense fallback={<div className="min-h-dvh bg-[var(--bg)]" />}>
+          <HomeInner />
+        </Suspense>
+      </AuthProvider>
+    </CurrencyProvider>
   );
 }

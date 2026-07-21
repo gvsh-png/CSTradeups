@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import TradeUpCard from "@/components/TradeUpCard";
+import { CurrencyProvider } from "@/components/CurrencyProvider";
+import CurrencySelect from "@/components/CurrencySelect";
 import { decodeTradeUpShare, hydrateTradeUpImages } from "@/lib/share";
 import { STORAGE_KEY } from "@/lib/constants";
 import type { SavedTradeUp, TradeUpResult } from "@/lib/tradeup/types";
@@ -167,30 +169,33 @@ function ShareContent() {
 
 export default function SharePage() {
   return (
-    <div className="min-h-dvh flex flex-col relative">
-      <Header
-        activeTab="generate"
-        onTabChange={(t) => {
-          window.location.href = t === "saved" ? "/?tab=saved" : "/";
-        }}
-        savedCount={0}
-      />
+    <CurrencyProvider>
+      <div className="min-h-dvh flex flex-col relative">
+        <Header
+          activeTab="generate"
+          onTabChange={(t) => {
+            window.location.href = t === "saved" ? "/?tab=saved" : "/";
+          }}
+          savedCount={0}
+          currencySlot={<CurrencySelect />}
+        />
 
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-5 lg:py-8 relative z-10">
-        <Suspense
-          fallback={
-            <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
-              Loading…
-            </div>
-          }
-        >
-          <ShareContent />
-        </Suspense>
-      </main>
+        <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-5 lg:py-8 relative z-10">
+          <Suspense
+            fallback={
+              <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
+                Loading…
+              </div>
+            }
+          >
+            <ShareContent />
+          </Suspense>
+        </main>
 
-      <footer className="border-t border-[var(--border)] py-3 text-center text-[10px] font-mono text-[var(--text-muted)] relative z-10">
-        market data · cached 24h
-      </footer>
-    </div>
+        <footer className="border-t border-[var(--border)] py-3 text-center text-[10px] font-mono text-[var(--text-muted)] relative z-10">
+          market data · cached 24h
+        </footer>
+      </div>
+    </CurrencyProvider>
   );
 }

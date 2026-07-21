@@ -6,6 +6,7 @@ import { rarityShort, rarityStyle } from "@/lib/constants";
 import type { ProgressState } from "@/hooks/useSimulatedProgress";
 import LoadingProgress from "./LoadingProgress";
 import MarketLinks from "./MarketLinks";
+import { useCurrency } from "./CurrencyProvider";
 
 interface TradeUpCardProps {
   tradeUp: TradeUpResult;
@@ -137,6 +138,7 @@ export default function TradeUpCard({
   savedAt,
   compact = false,
 }: TradeUpCardProps) {
+  const { money } = useCurrency();
   const [expanded, setExpanded] = useState(!compact);
   const [insight, setInsight] = useState<string | null>(tradeUp.insight ?? null);
   const [insightLoading, setInsightLoading] = useState(false);
@@ -230,7 +232,7 @@ export default function TradeUpCard({
   return (
     <article
       ref={cardRef}
-      className="panel overflow-hidden"
+      className="panel overflow-hidden lg:transition-shadow lg:hover:shadow-[0_12px_40px_-24px_rgba(0,0,0,0.7)]"
       aria-busy={refreshing}
     >
       {refreshing && refreshProgress && (
@@ -440,7 +442,7 @@ export default function TradeUpCard({
                   <MarketLinks skinName={input.name} wear={input.wear} />
                 </div>
                 <p className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5 truncate">
-                  {input.wear} · ${input.price.toFixed(2)}
+                  {input.wear} · {money(input.price)}
                   {tradeUp.complexity !== "simple" &&
                     input.maxFloat != null && (
                       <span> · ≤{input.maxFloat.toFixed(4)}</span>
@@ -461,11 +463,11 @@ export default function TradeUpCard({
           />
           <Stat
             label="Avg profit"
-            value={`$${tradeUp.expectedProfit.toFixed(2)}`}
+            value={money(tradeUp.expectedProfit, { signed: true })}
             color={profitColor}
           />
           <Stat label="ROI" value={`${tradeUp.roi}%`} color={profitColor} />
-          <Stat label="Cost" value={`$${tradeUp.totalCost.toFixed(2)}`} />
+          <Stat label="Cost" value={money(tradeUp.totalCost)} />
         </div>
       </div>
 
@@ -520,11 +522,10 @@ export default function TradeUpCard({
                         outcome.profit >= 0 ? "var(--profit)" : "var(--loss)",
                     }}
                   >
-                    {outcome.profit >= 0 ? "+" : ""}$
-                    {outcome.profit.toFixed(2)}
+                    {money(outcome.profit, { signed: true })}
                   </p>
                   <p className="text-[10px] text-[var(--text-muted)] tabular-nums">
-                    ${outcome.price.toFixed(2)}
+                    {money(outcome.price)}
                   </p>
                 </div>
               </div>

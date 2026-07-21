@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { createElement } from "react";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 import TradeUpExport from "@/components/TradeUpExport";
+import type { CurrencyCode } from "@/lib/currency";
 
 function waitForImages(root: HTMLElement, timeoutMs = 8000): Promise<void> {
   const images = Array.from(root.querySelectorAll("img"));
@@ -54,7 +55,19 @@ export async function exportTradeUpPng(tradeUp: TradeUpResult): Promise<void> {
   let root: Root | null = null;
   try {
     root = createRoot(host);
-    root.render(createElement(TradeUpExport, { tradeUp }));
+    root.render(
+      createElement(TradeUpExport, {
+        tradeUp,
+        currencyCode: (() => {
+          try {
+            const raw = localStorage.getItem("tradeup-gen-currency");
+            return (raw as CurrencyCode) || "USD";
+          } catch {
+            return "USD";
+          }
+        })(),
+      })
+    );
 
     // Allow React commit + layout
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
