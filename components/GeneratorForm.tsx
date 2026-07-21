@@ -17,7 +17,7 @@ interface GeneratorFormProps {
   onGenerate: (params: {
     minPrice: number;
     maxPrice: number;
-    risk: number;
+    targetWinChance: number;
     complexity: Complexity;
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
@@ -84,7 +84,7 @@ export default function GeneratorForm({
   const { toUsd, code } = useCurrency();
   const [minPrice, setMinPrice] = useState(5);
   const [maxPrice, setMaxPrice] = useState(200);
-  const [risk, setRisk] = useState(60);
+  const [targetWinChance, setTargetWinChance] = useState(60);
   const [complexity, setComplexity] = useState<Complexity>("simple");
   const [feeType, setFeeType] = useState<"steam" | "csfloat">("csfloat");
   const [excludeUnstable, setExcludeUnstable] = useState(true);
@@ -116,7 +116,7 @@ export default function GeneratorForm({
     onGenerate({
       minPrice: toUsd(min),
       maxPrice: toUsd(Math.min(max, MAX_PRICE_DISPLAY)),
-      risk,
+      targetWinChance,
       complexity,
       feeType,
       excludeUnstableCollections: excludeUnstable,
@@ -178,9 +178,9 @@ export default function GeneratorForm({
 
         <div className="space-y-2">
           <div className="flex justify-between items-baseline gap-2">
-            <span className="label">Risk</span>
+            <span className="label">Target win</span>
             <span className="text-sm font-mono text-accent tabular-nums">
-              {risk}%
+              {targetWinChance}%
             </span>
           </div>
           <input
@@ -188,18 +188,18 @@ export default function GeneratorForm({
             min={0}
             max={100}
             step={5}
-            value={risk}
-            onChange={(e) => setRisk(Number(e.target.value))}
+            value={targetWinChance}
+            onChange={(e) => setTargetWinChance(Number(e.target.value))}
             className="w-full"
-            aria-label="Risk tolerance"
+            aria-label="Target win chance"
           />
           <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)]">
-            <span>Safer</span>
             <span>Riskier</span>
+            <span>Safer</span>
           </div>
           <p className="text-[11px] text-[var(--text-muted)] leading-snug">
-            Targets ~{100 - risk}% win chance — higher risk shows lottery-style
-            contracts, not only sure things
+            Aim for contracts around this win chance — results vary within a
+            band, not only one percentage
           </p>
         </div>
 

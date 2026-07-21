@@ -89,7 +89,7 @@ function HomeInner() {
   const handleGenerate = async (params: {
     minPrice: number;
     maxPrice: number;
-    risk: number;
+    targetWinChance: number;
     complexity: Complexity;
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
@@ -130,7 +130,7 @@ function HomeInner() {
 
       if (!data.results?.length) {
         setError(
-          "No contracts matched. Try raising risk, widening price range, or adjusting collection filters."
+          "No contracts matched. Try adjusting target win, widening price range, or changing collection filters."
         );
       }
     } catch (err) {

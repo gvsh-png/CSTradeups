@@ -17,7 +17,10 @@ import {
 import { consumeScan } from "@/lib/usage/store";
 import type { Complexity } from "@/lib/constants";
 import type { GenerateParams } from "@/lib/tradeup/types";
-import { clampRisk, winChanceBandFromRisk } from "@/lib/tradeup/risk";
+import {
+  clampTargetWin,
+  winChanceBandFromTarget,
+} from "@/lib/tradeup/risk";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -60,19 +63,22 @@ export async function POST(request: Request) {
       ? body.customExcludedCollections
       : [];
 
-    const risk = clampRisk(
-      body.risk != null
-        ? Number(body.risk)
+    // Slider is target win % (60 → ~60% win). Legacy `risk` was inverted.
+    const targetWinChance = clampTargetWin(
+      body.targetWinChance != null
+        ? Number(body.targetWinChance)
         : body.minWinChance != null
-          ? 100 - Number(body.minWinChance)
-          : 60
+          ? Number(body.minWinChance)
+          : body.risk != null
+            ? 100 - Number(body.risk)
+            : 60
     );
-    const band = winChanceBandFromRisk(risk);
+    const band = winChanceBandFromTarget(targetWinChance);
 
     const params: GenerateParams = {
       minPrice: Number(body.minPrice) ?? 1,
       maxPrice: Number(body.maxPrice) ?? 500,
-      risk,
+      targetWinChance: band.target,
       minWinChance: band.minWinChance,
       maxWinChance: band.maxWinChance,
       complexity: (body.complexity as Complexity) || "simple",

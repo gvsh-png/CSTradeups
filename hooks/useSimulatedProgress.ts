@@ -12,7 +12,7 @@ const GENERATE_STAGES: LoadStage[] = [
   { until: 18, label: "Fetching live market prices…" },
   { until: 38, label: "Loading skin schema & collections…" },
   { until: 62, label: "Scoring trade-up contracts…" },
-  { until: 82, label: "Filtering by risk & price…" },
+  { until: 82, label: "Filtering by win chance & price…" },
   { until: 94, label: "Ranking best contracts…" },
   { until: 99, label: "Almost done…" },
 ];

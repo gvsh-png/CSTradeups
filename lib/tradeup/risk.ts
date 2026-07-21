@@ -1,43 +1,55 @@
 /**
- * Map UI Risk (0 = safest, 100 = riskiest) to a win-chance target band.
+ * Target win chance → filter band + soft ranking.
  *
- * Risk only as a minimum floor let high-EV 100% contracts always dominate.
- * A band around the target (and a max) makes the slider actually change results.
+ * The UI slider is the win % the user wants (e.g. 60 → ~60% win contracts).
+ * A wide band + soft score keeps variation instead of pinning every result
+ * to a single win %.
  */
 
-export function clampRisk(risk: number): number {
-  if (!Number.isFinite(risk)) return 60;
-  return Math.max(0, Math.min(100, risk));
+export function clampTargetWin(target: number): number {
+  if (!Number.isFinite(target)) return 60;
+  return Math.max(0, Math.min(100, target));
 }
 
-/** ± points around target win chance */
-export const RISK_WIN_BAND = 20;
+/** ± points around target — wide enough for real variety in the list */
+export const WIN_CHANCE_BAND = 25;
 
-export function winChanceBandFromRisk(risk: number): {
-  /** Preferred win chance % (100 − risk) */
+export function winChanceBandFromTarget(targetWin: number): {
   target: number;
   minWinChance: number;
   maxWinChance: number;
 } {
-  const r = clampRisk(risk);
-  const target = 100 - r;
+  const target = clampTargetWin(targetWin);
   return {
     target,
-    minWinChance: Math.max(0, target - RISK_WIN_BAND),
-    maxWinChance: Math.min(100, target + RISK_WIN_BAND),
+    minWinChance: Math.max(0, target - WIN_CHANCE_BAND),
+    maxWinChance: Math.min(100, target + WIN_CHANCE_BAND),
   };
 }
 
+/** @deprecated Use winChanceBandFromTarget — old Risk slider was inverted (60 risk → 40% win). */
+export function winChanceBandFromRisk(risk: number) {
+  return winChanceBandFromTarget(100 - clampTargetWin(risk));
+}
+
+export function clampRisk(risk: number): number {
+  return clampTargetWin(risk);
+}
+
 /**
- * Rank score: prefer contracts near the risk target, then by expected profit.
- * Higher is better.
+ * Soft rank: profit first, mild preference for being near the target.
+ * (Hard fit weights used to collapse every result onto one win %.)
  */
 export function riskRankScore(
   winPct: number,
   expectedProfit: number,
   targetWinChance: number
 ): number {
-  const dist = Math.abs(winPct - targetWinChance) / 100; // 0–1+
-  const fit = Math.max(0, 1 - dist);
-  return expectedProfit * (0.35 + 0.65 * fit) - dist * 40;
+  const dist = Math.abs(winPct - targetWinChance) / 100;
+  return expectedProfit - dist * 12;
+}
+
+/** Bucket win % into 10pt bins for list diversity */
+export function winChanceBucket(winPct: number): number {
+  return Math.round(Math.max(0, Math.min(100, winPct)) / 10) * 10;
 }

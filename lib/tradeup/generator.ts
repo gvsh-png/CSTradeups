@@ -20,7 +20,7 @@ import {
   r2,
   r4,
 } from "./float";
-import { riskRankScore, winChanceBandFromRisk } from "./risk";
+import { riskRankScore, winChanceBucket, winChanceBandFromTarget } from "./risk";
 import type {
   GenerateParams,
   PriceMap,
@@ -322,9 +322,9 @@ function bestCandidateForSkin(
 }
 
 /**
- * Pick up to `limit` trade-ups that prefer unique input skins (and weapons),
- * so the result list doesn't repeat the same items over and over.
- * Ranking prefers contracts near the risk target win chance, then profit.
+ * Pick up to `limit` trade-ups with skin diversity AND win-chance variety.
+ * Caps how many results share the same ~10% win bucket so the list isn't
+ * fifteen copies of "40% win".
  */
 function selectDiverseResults(
   candidates: TradeUpResult[],
@@ -340,6 +340,9 @@ function selectDiverseResults(
   const usedIds = new Set<string>();
   const usedSkins = new Set<string>();
   const usedWeapons = new Set<string>();
+  const winBucketCounts = new Map<number, number>();
+  // Spread across buckets: ~2 per 10pt bin for a 15-result list
+  const maxPerWinBucket = Math.max(2, Math.ceil(limit / 6));
 
   const inputSkins = (t: TradeUpResult) => t.inputs.map((i) => i.name);
   const inputWeapons = (t: TradeUpResult) =>
@@ -350,11 +353,17 @@ function selectDiverseResults(
     usedIds.add(t.id);
     for (const s of inputSkins(t)) usedSkins.add(s);
     for (const w of inputWeapons(t)) usedWeapons.add(w);
+    const b = winChanceBucket(t.winPct);
+    winBucketCounts.set(b, (winBucketCounts.get(b) || 0) + 1);
   };
 
-  // Pass 1: no shared input skins or weapons
+  const bucketOk = (t: TradeUpResult) =>
+    (winBucketCounts.get(winChanceBucket(t.winPct)) || 0) < maxPerWinBucket;
+
+  // Pass 1: unique skins+weapons, and spread win %
   for (const c of sorted) {
     if (selected.length >= limit) break;
+    if (!bucketOk(c)) continue;
     const skins = inputSkins(c);
     const weapons = inputWeapons(c);
     if (skins.some((s) => usedSkins.has(s))) continue;
@@ -362,24 +371,34 @@ function selectDiverseResults(
     take(c);
   }
 
-  // Pass 2: unique skins, weapons may repeat (different paint/collections)
+  // Pass 2: unique skins, weapons may repeat — still spread win %
   if (selected.length < limit) {
     for (const c of sorted) {
       if (selected.length >= limit) break;
       if (usedIds.has(c.id)) continue;
+      if (!bucketOk(c)) continue;
       const skins = inputSkins(c);
       if (skins.some((s) => usedSkins.has(s))) continue;
       take(c);
     }
   }
 
-  // Pass 3: allow partial overlap — skip only if every input skin is already used
+  // Pass 3: relax win-bucket cap, keep some skin novelty
   if (selected.length < limit) {
     for (const c of sorted) {
       if (selected.length >= limit) break;
       if (usedIds.has(c.id)) continue;
       const skins = inputSkins(c);
       if (skins.length > 0 && skins.every((s) => usedSkins.has(s))) continue;
+      take(c);
+    }
+  }
+
+  // Pass 4: fill any remaining slots
+  if (selected.length < limit) {
+    for (const c of sorted) {
+      if (selected.length >= limit) break;
+      if (usedIds.has(c.id)) continue;
       take(c);
     }
   }
@@ -582,7 +601,7 @@ export async function generateTradeUps(
     }
   }
 
-  const { target } = winChanceBandFromRisk(params.risk);
+  const { target } = winChanceBandFromTarget(params.targetWinChance);
   return selectDiverseResults(candidates, limit, target);
 }
 
