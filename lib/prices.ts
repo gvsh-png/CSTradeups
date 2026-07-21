@@ -5,6 +5,12 @@ import type { PriceMap } from "./tradeup/types";
 /** Shared price cache TTL — one bulk scan per day for all users */
 export const PRICE_CACHE_TTL = 86_400; // 24 hours in seconds
 
+/**
+ * Above this USD level, Steam Community Market prices are unreliable:
+ * listing caps, thin books, and missing real sells. Prefer Skinport.
+ */
+export const STEAM_TRUST_MAX_USD = 30;
+
 export interface PriceMeta {
   source: "steamapis" | "skinport" | "steam" | "merged";
   fetchedAt: string;
@@ -156,6 +162,10 @@ export function mergePriceCandidates(candidates: number[]): number {
  *
  * Uses each source's own wear ladder so a consistently-wrong low SteamApis
  * book (e.g. First Class ~$1) cannot veto a consistent Skinport ladder (~$50+).
+ *
+ * High-value rule: never trust Steam / SteamApis once either side clears
+ * STEAM_TRUST_MAX_USD (~$30) — Steam listing caps and dead books invent
+ * fake 700%+ ROI trade-ups.
  */
 export function resolveSourceConflict(
   steamApis: number,
@@ -166,9 +176,24 @@ export function resolveSourceConflict(
   const sa = steamApis > 0 ? steamApis : 0;
   const sp = skinport > 0 ? skinport : 0;
 
-  if (sa > 0 && sp <= 0) return { price: sa, corrected: false };
+  // Steam-only above trust ceiling → discard (no real Steam sell price)
+  if (sa > 0 && sp <= 0) {
+    if (sa >= STEAM_TRUST_MAX_USD) {
+      return { price: 0, corrected: true };
+    }
+    return { price: sa, corrected: false };
+  }
   if (sp > 0 && sa <= 0) return { price: sp, corrected: false };
   if (sa <= 0 && sp <= 0) return { price: 0, corrected: false };
+
+  // Mid / high value: Skinport is the market — ignore Steam entirely
+  if (
+    sa >= STEAM_TRUST_MAX_USD ||
+    sp >= STEAM_TRUST_MAX_USD ||
+    Math.max(sa, sp) >= STEAM_TRUST_MAX_USD
+  ) {
+    return { price: sp, corrected: sa !== sp };
+  }
 
   const hi = Math.max(sa, sp);
   const lo = Math.min(sa, sp);
@@ -199,7 +224,7 @@ export function resolveSourceConflict(
     return { price: hi, corrected: true };
   }
 
-  // Mild disagreement: SteamApis (closer to Steam / TradeUpSpy)
+  // Mild disagreement on cheap skins: SteamApis (closer to Steam / TradeUpSpy)
   return { price: sa, corrected: true };
 }
 
@@ -294,6 +319,17 @@ function mergeBulkSources(
     const sp = skinport?.[key] || 0;
 
     if (sa > 0 && sp > 0) {
+      // High-value: never blend Steam in — Skinport only
+      if (
+        sa >= STEAM_TRUST_MAX_USD ||
+        sp >= STEAM_TRUST_MAX_USD ||
+        Math.max(sa, sp) >= STEAM_TRUST_MAX_USD
+      ) {
+        prices[key] = sp;
+        if (sa !== sp) mergeCorrections++;
+        continue;
+      }
+
       const hi = Math.max(sa, sp);
       const lo = Math.min(sa, sp);
       if (hi / lo > 2) {
@@ -304,8 +340,15 @@ function mergeBulkSources(
       continue;
     }
 
-    if (sa > 0) prices[key] = sa;
-    else if (sp > 0) prices[key] = sp;
+    if (sp > 0) {
+      prices[key] = sp;
+    } else if (sa > 0 && sa < STEAM_TRUST_MAX_USD) {
+      // Steam-only is fine for cheap liquid skins only
+      prices[key] = sa;
+    } else if (sa >= STEAM_TRUST_MAX_USD) {
+      // Expensive Steam-only quote with no Skinport book → skip
+      mergeCorrections++;
+    }
   }
 
   // Pass 2: disagreements — compare each source against its own wear ladder
@@ -384,7 +427,7 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v4"],
+  ["tradeup-bulk-prices-v5"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],

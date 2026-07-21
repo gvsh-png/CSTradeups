@@ -7,6 +7,8 @@ function r2(n) {
   return Math.round(n * 100) / 100;
 }
 
+const STEAM_TRUST_MAX_USD = 30;
+
 function median(nums) {
   const valid = nums.filter((n) => n > 0).sort((a, b) => a - b);
   if (!valid.length) return 0;
@@ -23,9 +25,21 @@ function resolveSourceConflict(
 ) {
   const sa = steamApis > 0 ? steamApis : 0;
   const sp = skinport > 0 ? skinport : 0;
-  if (sa > 0 && sp <= 0) return sa;
+
+  if (sa > 0 && sp <= 0) {
+    if (sa >= STEAM_TRUST_MAX_USD) return 0;
+    return sa;
+  }
   if (sp > 0 && sa <= 0) return sp;
   if (sa <= 0 && sp <= 0) return 0;
+
+  if (
+    sa >= STEAM_TRUST_MAX_USD ||
+    sp >= STEAM_TRUST_MAX_USD ||
+    Math.max(sa, sp) >= STEAM_TRUST_MAX_USD
+  ) {
+    return sp;
+  }
 
   const hi = Math.max(sa, sp);
   const lo = Math.min(sa, sp);
@@ -74,11 +88,34 @@ assert(
   70
 );
 
-// Extreme disagreement, no siblings → higher (avoid fake ROI)
-assert("extreme no siblings prefer higher", resolveSourceConflict(1.27, 70, [], []), 70);
+// Extreme disagreement, no siblings → higher (avoid fake ROI) — but
+// with high-value Skinport rule, Skinport wins when either side ≥ $30
+assert("high-value prefer Skinport", resolveSourceConflict(1.27, 70, [], []), 70);
 
-// Close sources: average
+// Close sources on cheap skins: average
 assert("average when close", resolveSourceConflict(6.2, 5.9, [], []), 6.05);
+
+// High-value both present: always Skinport (Steam listing caps)
+assert(
+  "Icarus-class ignore Steam even if close",
+  resolveSourceConflict(620, 648, [], []),
+  648
+);
+assert(
+  "high Steam-only discarded",
+  resolveSourceConflict(511, 0, [], []),
+  0
+);
+assert(
+  "high Skinport-only kept",
+  resolveSourceConflict(0, 511, [], []),
+  511
+);
+assert(
+  "mid-tier Steam vs Skinport → Skinport",
+  resolveSourceConflict(45, 38, [], []),
+  38
+);
 
 assert("median even", median([6, 57]), 31.5);
 
