@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 import { rarityShort, rarityStyle } from "@/lib/constants";
+import MarketLinks from "./MarketLinks";
 
 interface TradeUpCardProps {
   tradeUp: TradeUpResult;
@@ -377,12 +378,17 @@ export default function TradeUpCard({
                 rarity={tradeUp.inputRarity}
               />
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-medium truncate">
-                  {input.count > 1 && (
-                    <span className="text-accent font-mono">{input.count}× </span>
-                  )}
-                  {input.name}
-                </p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] font-medium truncate min-w-0">
+                    {input.count > 1 && (
+                      <span className="text-accent font-mono">
+                        {input.count}×{" "}
+                      </span>
+                    )}
+                    {input.name}
+                  </p>
+                  <MarketLinks skinName={input.name} wear={input.wear} />
+                </div>
                 <p className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5 truncate">
                   {input.wear} · ${input.price.toFixed(2)}
                   {tradeUp.complexity !== "simple" &&
@@ -445,9 +451,12 @@ export default function TradeUpCard({
                   rarity={tradeUp.outputRarity}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium truncate">
-                    {outcome.name}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[11px] font-medium truncate min-w-0">
+                      {outcome.name}
+                    </p>
+                    <MarketLinks skinName={outcome.name} wear={outcome.wear} />
+                  </div>
                   <p className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5 truncate">
                     {outcome.wear} · {outcome.float.toFixed(4)}
                   </p>
