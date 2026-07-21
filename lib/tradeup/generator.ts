@@ -242,6 +242,92 @@ function toTradeUpResult(
   };
 }
 
+function weaponOf(skinName: string): string {
+  return skinName.split(" | ")[0] || skinName;
+}
+
+/** Best priced wear/float option for a skin under the budget cap */
+function bestCandidateForSkin(
+  skin: SkinData,
+  prices: PriceMap,
+  maxUnitPrice: number,
+  testFloats: number[]
+): InputCandidate | null {
+  let best: InputCandidate | null = null;
+  for (const tf of testFloats) {
+    const af = clampFloat(tf, skin.minF, skin.maxF);
+    const wear = getWear(af);
+    const price = getPrice(prices, skin.name, wear);
+    if (price <= 0 || price > maxUnitPrice) continue;
+    if (!best || price < best.price) {
+      best = { skin, price, wear, float: af };
+    }
+  }
+  return best;
+}
+
+/**
+ * Pick up to `limit` trade-ups that prefer unique input skins (and weapons),
+ * so the result list doesn't repeat the same items over and over.
+ */
+function selectDiverseResults(
+  candidates: TradeUpResult[],
+  limit: number
+): TradeUpResult[] {
+  const sorted = [...candidates].sort(
+    (a, b) => b.expectedProfit - a.expectedProfit
+  );
+  const selected: TradeUpResult[] = [];
+  const usedIds = new Set<string>();
+  const usedSkins = new Set<string>();
+  const usedWeapons = new Set<string>();
+
+  const inputSkins = (t: TradeUpResult) => t.inputs.map((i) => i.name);
+  const inputWeapons = (t: TradeUpResult) =>
+    t.inputs.map((i) => weaponOf(i.name));
+
+  const take = (t: TradeUpResult) => {
+    selected.push(t);
+    usedIds.add(t.id);
+    for (const s of inputSkins(t)) usedSkins.add(s);
+    for (const w of inputWeapons(t)) usedWeapons.add(w);
+  };
+
+  // Pass 1: no shared input skins or weapons
+  for (const c of sorted) {
+    if (selected.length >= limit) break;
+    const skins = inputSkins(c);
+    const weapons = inputWeapons(c);
+    if (skins.some((s) => usedSkins.has(s))) continue;
+    if (weapons.some((w) => usedWeapons.has(w))) continue;
+    take(c);
+  }
+
+  // Pass 2: unique skins, weapons may repeat (different paint/collections)
+  if (selected.length < limit) {
+    for (const c of sorted) {
+      if (selected.length >= limit) break;
+      if (usedIds.has(c.id)) continue;
+      const skins = inputSkins(c);
+      if (skins.some((s) => usedSkins.has(s))) continue;
+      take(c);
+    }
+  }
+
+  // Pass 3: allow partial overlap — skip only if every input skin is already used
+  if (selected.length < limit) {
+    for (const c of sorted) {
+      if (selected.length >= limit) break;
+      if (usedIds.has(c.id)) continue;
+      const skins = inputSkins(c);
+      if (skins.length > 0 && skins.every((s) => usedSkins.has(s))) continue;
+      take(c);
+    }
+  }
+
+  return selected;
+}
+
 export async function generateTradeUps(
   skinDB: SkinData[],
   byCR: Record<string, SkinData[]>,
@@ -253,162 +339,190 @@ export async function generateTradeUps(
   const candidates: TradeUpResult[] = [];
   const seenKeys = new Set<string>();
   const limit = params.limit ?? 20;
+  /** Distinct input skins kept per collection×rarity */
+  const SKINS_PER_POOL = 4;
+  /** How many filler partners to try per primary */
+  const FILLER_CAP = 10;
 
-  const cheapIn: Record<string, InputCandidate> = {};
+  const cheapIn: Record<string, InputCandidate[]> = {};
   const testFloats = [0.27, 0.11, 0.035, 0.42, 0.7];
+  const maxUnit = params.maxPrice / 5;
 
   for (const [key, list] of Object.entries(byCR)) {
+    const options: InputCandidate[] = [];
     for (const skin of list) {
-      for (const tf of testFloats) {
-        const af = clampFloat(tf, skin.minF, skin.maxF);
-        const wear = getWear(af);
-        const price = getPrice(prices, skin.name, wear);
-        if (price <= 0) continue;
-        if (price > params.maxPrice / 5) continue;
-
-        if (!cheapIn[key] || price < cheapIn[key].price) {
-          cheapIn[key] = { skin, price, wear, float: af };
-        }
-      }
+      const best = bestCandidateForSkin(skin, prices, maxUnit, testFloats);
+      if (best) options.push(best);
     }
+    options.sort((a, b) => a.price - b.price);
+    // Prefer distinct weapons first, then fill remaining slots by price
+    const picked: InputCandidate[] = [];
+    const seenWeapons = new Set<string>();
+    for (const opt of options) {
+      if (picked.length >= SKINS_PER_POOL) break;
+      const w = weaponOf(opt.skin.name);
+      if (seenWeapons.has(w)) continue;
+      seenWeapons.add(w);
+      picked.push(opt);
+    }
+    for (const opt of options) {
+      if (picked.length >= SKINS_PER_POOL) break;
+      if (picked.some((p) => p.skin.name === opt.skin.name)) continue;
+      picked.push(opt);
+    }
+    if (picked.length) cheapIn[key] = picked;
   }
 
   for (let ri = 0; ri < RARITY_ORDER.length - 1; ri++) {
     const inR = RARITY_ORDER[ri];
     const nextR = RARITY_ORDER[ri + 1];
 
-    const ci: Record<string, InputCandidate> = {};
-    for (const [key, val] of Object.entries(cheapIn)) {
-      const [, rarity] = key.split("|");
-      if (rarity === inR) {
-        ci[key.split("|")[0]] = val;
-      }
+    const ci: Record<string, InputCandidate[]> = {};
+    for (const [key, vals] of Object.entries(cheapIn)) {
+      const [cid, rarity] = key.split("|");
+      if (rarity === inR) ci[cid] = vals;
     }
 
-    for (const [pcid, pInp] of Object.entries(ci)) {
+    for (const [pcid, primaries] of Object.entries(ci)) {
       const pOS = byCR[`${pcid}|${nextR}`] || [];
       if (!pOS.length) continue;
 
-      const pN = norm(pInp.float, pInp.skin.minF, pInp.skin.maxF);
+      for (const pInp of primaries) {
+        const pN = norm(pInp.float, pInp.skin.minF, pInp.skin.maxF);
 
-      const singleInputs: TradeUpInput[] = [
-        {
-          name: pInp.skin.name,
-          count: 10,
-          price: pInp.price,
-          wear: pInp.wear,
-          float: pInp.float,
-          minF: pInp.skin.minF,
-          maxF: pInp.skin.maxF,
-          image: pInp.skin.image,
-        },
-      ];
+        const singleInputs: TradeUpInput[] = [
+          {
+            name: pInp.skin.name,
+            count: 10,
+            price: pInp.price,
+            wear: pInp.wear,
+            float: pInp.float,
+            minF: pInp.skin.minF,
+            maxF: pInp.skin.maxF,
+            image: pInp.skin.image,
+          },
+        ];
 
-      const singleOuts = buildOutcomes(
-        [{ count: 10, outs: pOS, n: pN }],
-        prices,
-        schema
-      );
-
-      const dk = `s|${pcid}|${pInp.skin.name}`;
-      if (!seenKeys.has(dk)) {
-        seenKeys.add(dk);
-        const result = toTradeUpResult(
-          singleInputs,
-          singleOuts,
-          params,
-          schema,
-          inR,
-          nextR,
-          "single",
-          fee
+        const singleOuts = buildOutcomes(
+          [{ count: 10, outs: pOS, n: pN }],
+          prices,
+          schema
         );
-        if (result) candidates.push(result);
-      }
 
-      const bestOutP = Math.max(...singleOuts.map((o) => o.price), 0);
-      if (bestOutP < pInp.price * 1.2) continue;
-
-      const fillers: {
-        cid: string;
-        inp: InputCandidate;
-        outs: SkinData[];
-        n: number;
-      }[] = [];
-
-      for (const [fid, f] of Object.entries(ci)) {
-        if (fid === pcid) continue;
-        const fOuts = byCR[`${fid}|${nextR}`] || [];
-        if (!fOuts.length) continue;
-        fillers.push({
-          cid: fid,
-          inp: f,
-          outs: fOuts,
-          n: norm(f.float, f.skin.minF, f.skin.maxF),
-        });
-      }
-
-      fillers.sort((a, b) => a.inp.price - b.inp.price);
-
-      for (const f1 of fillers.slice(0, 8)) {
-        for (const sp of partitions(10, 2, 1)) {
-          const inputs: TradeUpInput[] = [
-            {
-              name: pInp.skin.name,
-              count: sp[0],
-              price: pInp.price,
-              wear: pInp.wear,
-              float: pInp.float,
-              minF: pInp.skin.minF,
-              maxF: pInp.skin.maxF,
-              image: pInp.skin.image,
-            },
-            {
-              name: f1.inp.skin.name,
-              count: sp[1],
-              price: f1.inp.price,
-              wear: f1.inp.wear,
-              float: f1.inp.float,
-              minF: f1.inp.skin.minF,
-              maxF: f1.inp.skin.maxF,
-              image: f1.inp.skin.image,
-            },
-          ];
-
-          const outs = buildOutcomes(
-            [
-              { count: sp[0], outs: pOS, n: pN },
-              { count: sp[1], outs: f1.outs, n: f1.n },
-            ],
-            prices,
-            schema
-          );
-
-          const mixKey = inputs
-            .map((i) => `${i.name}:${i.count}`)
-            .sort()
-            .join("|");
-          if (seenKeys.has(mixKey)) continue;
-          seenKeys.add(mixKey);
-
+        const dk = `s|${pcid}|${pInp.skin.name}`;
+        if (!seenKeys.has(dk)) {
+          seenKeys.add(dk);
           const result = toTradeUpResult(
-            inputs,
-            outs,
+            singleInputs,
+            singleOuts,
             params,
             schema,
             inR,
             nextR,
-            "mixed",
+            "single",
             fee
           );
           if (result) candidates.push(result);
+        }
+
+        const bestOutP = Math.max(...singleOuts.map((o) => o.price), 0);
+        if (bestOutP < pInp.price * 1.2) continue;
+
+        const fillers: {
+          cid: string;
+          inp: InputCandidate;
+          outs: SkinData[];
+          n: number;
+        }[] = [];
+
+        for (const [fid, flist] of Object.entries(ci)) {
+          if (fid === pcid) continue;
+          const fOuts = byCR[`${fid}|${nextR}`] || [];
+          if (!fOuts.length) continue;
+          for (const f of flist) {
+            // Skip same skin or same weapon as primary for clearer variety
+            if (f.skin.name === pInp.skin.name) continue;
+            if (weaponOf(f.skin.name) === weaponOf(pInp.skin.name)) continue;
+            fillers.push({
+              cid: fid,
+              inp: f,
+              outs: fOuts,
+              n: norm(f.float, f.skin.minF, f.skin.maxF),
+            });
+          }
+        }
+
+        fillers.sort((a, b) => a.inp.price - b.inp.price);
+
+        // Prefer filler skins we haven't paired with this primary yet
+        const seenFillerSkins = new Set<string>();
+        const diverseFillers: typeof fillers = [];
+        for (const f of fillers) {
+          if (seenFillerSkins.has(f.inp.skin.name)) continue;
+          seenFillerSkins.add(f.inp.skin.name);
+          diverseFillers.push(f);
+          if (diverseFillers.length >= FILLER_CAP) break;
+        }
+
+        for (const f1 of diverseFillers) {
+          for (const sp of partitions(10, 2, 1)) {
+            const inputs: TradeUpInput[] = [
+              {
+                name: pInp.skin.name,
+                count: sp[0],
+                price: pInp.price,
+                wear: pInp.wear,
+                float: pInp.float,
+                minF: pInp.skin.minF,
+                maxF: pInp.skin.maxF,
+                image: pInp.skin.image,
+              },
+              {
+                name: f1.inp.skin.name,
+                count: sp[1],
+                price: f1.inp.price,
+                wear: f1.inp.wear,
+                float: f1.inp.float,
+                minF: f1.inp.skin.minF,
+                maxF: f1.inp.skin.maxF,
+                image: f1.inp.skin.image,
+              },
+            ];
+
+            const outs = buildOutcomes(
+              [
+                { count: sp[0], outs: pOS, n: pN },
+                { count: sp[1], outs: f1.outs, n: f1.n },
+              ],
+              prices,
+              schema
+            );
+
+            const mixKey = inputs
+              .map((i) => `${i.name}:${i.count}`)
+              .sort()
+              .join("|");
+            if (seenKeys.has(mixKey)) continue;
+            seenKeys.add(mixKey);
+
+            const result = toTradeUpResult(
+              inputs,
+              outs,
+              params,
+              schema,
+              inR,
+              nextR,
+              "mixed",
+              fee
+            );
+            if (result) candidates.push(result);
+          }
         }
       }
     }
   }
 
-  candidates.sort((a, b) => b.expectedProfit - a.expectedProfit);
-  return candidates.slice(0, limit);
+  return selectDiverseResults(candidates, limit);
 }
 
 const WEARS = [
