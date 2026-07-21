@@ -119,6 +119,32 @@ assert(
 
 assert("median even", median([6, 57]), 31.5);
 
+/** Ghost wears with zero Steam sold and zero Skinport listings are dropped */
+function hasBuyableLiquidity(liq) {
+  return liq.steamSold7 > 0 || liq.steamSold30 > 0 || liq.skinportQty > 0;
+}
+
+assert(
+  "dead Steam+Skinport rejected",
+  hasBuyableLiquidity({ steamSold7: 0, steamSold30: 0, skinportQty: 0 }) ? 1 : 0,
+  0
+);
+assert(
+  "Steam sold30 keeps item",
+  hasBuyableLiquidity({ steamSold7: 0, steamSold30: 2, skinportQty: 0 }) ? 1 : 0,
+  1
+);
+assert(
+  "Skinport listing keeps item",
+  hasBuyableLiquidity({ steamSold7: 0, steamSold30: 0, skinportQty: 1 }) ? 1 : 0,
+  1
+);
+assert(
+  "Steam sold7 alone keeps item",
+  hasBuyableLiquidity({ steamSold7: 1, steamSold30: 0, skinportQty: 0 }) ? 1 : 0,
+  1
+);
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);

@@ -19,6 +19,8 @@ export interface PriceMeta {
   steamApisCount: number;
   skinportCount: number;
   corrections: number;
+  /** Dropped because Steam sold=0 and Skinport quantity=0 */
+  deadMarkets: number;
 }
 
 interface SteamApisItem {
@@ -47,6 +49,24 @@ interface SkinportItem {
   mean_price: number | null;
   suggested_price: number | null;
   quantity: number;
+}
+
+/** Per-item market depth used to drop ghost / unlistable wears */
+export interface MarketLiquidity {
+  steamSold7: number;
+  steamSold30: number;
+  skinportQty: number;
+}
+
+/**
+ * True when the wear can actually be bought somewhere:
+ * at least one Steam sale in 7d/30d, or ≥1 Skinport listing.
+ * Stale "safe" prices with zero sold and zero listings are excluded.
+ */
+export function hasBuyableLiquidity(liq: MarketLiquidity): boolean {
+  return (
+    liq.steamSold7 > 0 || liq.steamSold30 > 0 || liq.skinportQty > 0
+  );
 }
 
 export interface BulkPriceResult {
@@ -230,6 +250,7 @@ export function resolveSourceConflict(
 
 async function fetchSteamApisPrices(): Promise<{
   prices: PriceMap;
+  sold: Record<string, { sold7: number; sold30: number }>;
   corrections: number;
 } | null> {
   const apiKey = process.env.STEAMAPIS_API_KEY;
@@ -246,11 +267,16 @@ async function fetchSteamApisPrices(): Promise<{
     if (!data?.data) return null;
 
     const prices: PriceMap = {};
+    const sold: Record<string, { sold7: number; sold30: number }> = {};
     let corrections = 0;
 
     for (const item of data.data as SteamApisItem[]) {
       const name = item.market_hash_name;
       if (!name) continue;
+
+      const sold7 = item.prices?.sold?.last_7d || 0;
+      const sold30 = item.prices?.sold?.last_30d || 0;
+      sold[name] = { sold7, sold30 };
 
       const { price, corrected } = resolveSteamApisPrice(item);
       if (price > 0) {
@@ -259,13 +285,16 @@ async function fetchSteamApisPrices(): Promise<{
       }
     }
 
-    return { prices, corrections };
+    return { prices, sold, corrections };
   } catch {
     return null;
   }
 }
 
-async function fetchSkinportPrices(): Promise<PriceMap | null> {
+async function fetchSkinportPrices(): Promise<{
+  prices: PriceMap;
+  quantity: Record<string, number>;
+} | null> {
   try {
     const res = await fetch(
       "https://api.skinport.com/v1/items?app_id=730&currency=USD&tradable=0",
@@ -283,12 +312,14 @@ async function fetchSkinportPrices(): Promise<PriceMap | null> {
     if (!Array.isArray(data)) return null;
 
     const prices: PriceMap = {};
+    const quantity: Record<string, number> = {};
     for (const item of data) {
+      quantity[item.market_hash_name] = item.quantity || 0;
       const price = resolveSkinportPrice(item);
       if (price > 0) prices[item.market_hash_name] = price;
     }
 
-    return prices;
+    return { prices, quantity };
   } catch {
     return null;
   }
@@ -302,7 +333,9 @@ function skinBaseName(marketHashName: string): string {
 function mergeBulkSources(
   steamApis: PriceMap | null,
   skinport: PriceMap | null,
-  steamApisCorrections: number
+  steamApisCorrections: number,
+  steamSold: Record<string, { sold7: number; sold30: number }> | null = null,
+  skinportQty: Record<string, number> | null = null
 ): BulkPriceResult {
   const prices: PriceMap = {};
   const allKeys = new Set([
@@ -311,12 +344,26 @@ function mergeBulkSources(
   ]);
 
   let mergeCorrections = 0;
+  let deadMarkets = 0;
   const deferred: string[] = [];
+
+  const liquidityFor = (key: string): MarketLiquidity => ({
+    steamSold7: steamSold?.[key]?.sold7 || 0,
+    steamSold30: steamSold?.[key]?.sold30 || 0,
+    skinportQty: skinportQty?.[key] || 0,
+  });
 
   // Pass 1: agree / single-source keys — build wear context
   for (const key of allKeys) {
     const sa = steamApis?.[key] || 0;
     const sp = skinport?.[key] || 0;
+
+    // Ghost wears: stale Steam "safe" price or Skinport suggested with
+    // zero sold and zero listings — never feed these into trade-ups.
+    if (!hasBuyableLiquidity(liquidityFor(key))) {
+      if (sa > 0 || sp > 0) deadMarkets++;
+      continue;
+    }
 
     if (sa > 0 && sp > 0) {
       // High-value: never blend Steam in — Skinport only
@@ -398,6 +445,7 @@ function mergeBulkSources(
       steamApisCount: Object.keys(steamApis || {}).length,
       skinportCount: Object.keys(skinport || {}).length,
       corrections: steamApisCorrections + mergeCorrections,
+      deadMarkets,
     },
   };
 }
@@ -407,15 +455,17 @@ function mergeBulkSources(
  * One SteamApis call + one Skinport call = 1 API request total (SteamApis).
  */
 async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
-  const [steamApisResult, skinport] = await Promise.all([
+  const [steamApisResult, skinportResult] = await Promise.all([
     fetchSteamApisPrices(),
     fetchSkinportPrices(),
   ]);
 
   const result = mergeBulkSources(
     steamApisResult?.prices ?? null,
-    skinport,
-    steamApisResult?.corrections ?? 0
+    skinportResult?.prices ?? null,
+    steamApisResult?.corrections ?? 0,
+    steamApisResult?.sold ?? null,
+    skinportResult?.quantity ?? null
   );
 
   return result;
@@ -424,10 +474,11 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
 /**
  * Daily shared price cache — all users share the same bulk price data.
  * Refreshes automatically after 24 hours on the next request.
+ * v6: drop zero-liquidity Steam/Skinport ghost prices.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v5"],
+  ["tradeup-bulk-prices-v6"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
