@@ -61,6 +61,7 @@ export default function TradeUpResults({
           tradeUp={tradeUp}
           onSave={() => onSave(tradeUp)}
           saved={isSaved(tradeUp.id)}
+          showShare
         />
       ))}
     </div>

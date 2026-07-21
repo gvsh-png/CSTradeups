@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getUnstableCollectionKeySet, NEW_COLLECTION_MAX_AGE_DAYS } from "@/lib/collections";
+import {
+  discoverNewCollections,
+  getUnstableCollectionKeySet,
+  loadDiscoveries,
+  NEW_COLLECTION_MAX_AGE_DAYS,
+} from "@/lib/collections";
 import { getBulkPrices } from "@/lib/prices";
 import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
@@ -16,6 +21,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
+    const customExcluded: string[] = Array.isArray(body.customExcludedCollections)
+      ? body.customExcludedCollections
+      : [];
+
     const params: GenerateParams = {
       minPrice: Number(body.minPrice) ?? 1,
       maxPrice: Number(body.maxPrice) ?? 500,
@@ -27,9 +36,18 @@ export async function POST(request: Request) {
     };
 
     const schema = await fetchSchema();
+    await loadDiscoveries();
+    const discoveries = discoverNewCollections(schema);
+
     const excludedKeys = params.excludeUnstableCollections
-      ? getUnstableCollectionKeySet(schema)
-      : undefined;
+      ? getUnstableCollectionKeySet(
+          schema,
+          new Date(),
+          NEW_COLLECTION_MAX_AGE_DAYS,
+          discoveries,
+          customExcluded
+        )
+      : new Set(customExcluded);
 
     const skinDB = buildSkinDatabase(schema, excludedKeys);
     const byCR = groupByCollectionRarity(skinDB);
@@ -58,9 +76,7 @@ export async function POST(request: Request) {
         skinportPrices: priceMeta.skinportCount,
         pricesCachedAt: priceMeta.fetchedAt,
         pricesCachedUntil: priceMeta.cachedUntil,
-        excludedCollections: params.excludeUnstableCollections
-          ? excludedKeys?.size ?? 0
-          : 0,
+        excludedCollections: excludedKeys.size,
         newCollectionMaxAgeDays: params.excludeUnstableCollections
           ? NEW_COLLECTION_MAX_AGE_DAYS
           : 0,

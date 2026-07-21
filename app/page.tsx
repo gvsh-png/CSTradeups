@@ -1,23 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { SavedTradeUp, TradeUpResult } from "@/lib/tradeup/types";
 import { STORAGE_KEY } from "@/lib/constants";
+import { loadSettings, type AppSettings } from "@/lib/settings";
 import Header from "@/components/Header";
 import GeneratorForm from "@/components/GeneratorForm";
 import TradeUpResults from "@/components/TradeUpResults";
 import SavedTradeUps from "@/components/SavedTradeUps";
+import SettingsPanel from "@/components/SettingsPanel";
 import type { Complexity } from "@/lib/constants";
 
 type Tab = "generate" | "saved";
 
-export default function Home() {
+function HomeInner() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>("generate");
   const [results, setResults] = useState<TradeUpResult[]>([]);
   const [saved, setSaved] = useState<SavedTradeUp[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<Record<string, unknown> | null>(null);
+  const [settings, setSettings] = useState<AppSettings>(loadSettings());
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -26,7 +32,8 @@ export default function Home() {
     } catch {
       /* ignore */
     }
-  }, []);
+    if (searchParams.get("tab") === "saved") setActiveTab("saved");
+  }, [searchParams]);
 
   const persistSaved = useCallback((items: SavedTradeUp[]) => {
     setSaved(items);
@@ -40,6 +47,7 @@ export default function Home() {
     complexity: Complexity;
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
+    customExcludedCollections: string[];
   }) => {
     setLoading(true);
     setError(null);
@@ -60,7 +68,7 @@ export default function Home() {
 
       if (!data.results?.length) {
         setError(
-          "No contracts matched. Try lowering ROI, widening price range, or disabling collection filter."
+          "No contracts matched. Try lowering ROI, widening price range, or adjusting collection filters."
         );
       }
     } catch (err) {
@@ -79,6 +87,10 @@ export default function Home() {
     persistSaved(saved.filter((s) => s.id !== id));
   };
 
+  const handleUpdate = (item: SavedTradeUp) => {
+    persistSaved(saved.map((s) => (s.id === item.id ? item : s)));
+  };
+
   const isSaved = (id: string) => saved.some((s) => s.id === id);
 
   return (
@@ -89,7 +101,12 @@ export default function Home() {
         {activeTab === "generate" ? (
           <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
             <aside className="lg:w-72 xl:w-80 lg:shrink-0">
-              <GeneratorForm onGenerate={handleGenerate} loading={loading} />
+              <GeneratorForm
+                onGenerate={handleGenerate}
+                loading={loading}
+                settings={settings}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
             </aside>
 
             <section className="flex-1 min-w-0">
@@ -110,20 +127,6 @@ export default function Home() {
                       <span>{String(meta.excludedCollections)} collections filtered</span>
                     </>
                   ) : null}
-                  {meta.pricesCachedUntil ? (
-                    <>
-                      <span>·</span>
-                      <span>
-                        cache until{" "}
-                        {new Date(String(meta.pricesCachedUntil)).toLocaleString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </>
-                  ) : null}
                 </div>
               )}
 
@@ -136,13 +139,31 @@ export default function Home() {
             </section>
           </div>
         ) : (
-          <SavedTradeUps items={saved} onRemove={handleRemove} />
+          <SavedTradeUps
+            items={saved}
+            onRemove={handleRemove}
+            onUpdate={handleUpdate}
+          />
         )}
       </main>
 
       <footer className="border-t border-[var(--border)] py-3 text-center text-[10px] font-mono text-[var(--text-muted)] relative z-10">
         market data · cached 24h
       </footer>
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onChange={setSettings}
+      />
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-dvh bg-[var(--bg)]" />}>
+      <HomeInner />
+    </Suspense>
   );
 }

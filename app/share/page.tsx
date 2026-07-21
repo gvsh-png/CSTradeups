@@ -1,0 +1,132 @@
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Header from "@/components/Header";
+import TradeUpCard from "@/components/TradeUpCard";
+import { decodeTradeUpShare } from "@/lib/share";
+import { STORAGE_KEY } from "@/lib/constants";
+import type { SavedTradeUp, TradeUpResult } from "@/lib/tradeup/types";
+
+function ShareContent() {
+  const searchParams = useSearchParams();
+  const encoded = searchParams.get("d") || "";
+  const [tradeUp, setTradeUp] = useState<TradeUpResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!encoded) {
+      setError("Missing share data.");
+      return;
+    }
+    const decoded = decodeTradeUpShare(encoded);
+    if (!decoded) {
+      setError("Invalid or corrupted share link.");
+      return;
+    }
+    setTradeUp(decoded);
+  }, [encoded]);
+
+  useEffect(() => {
+    if (!tradeUp) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const items = JSON.parse(raw) as SavedTradeUp[];
+      setSaved(items.some((s) => s.id === tradeUp.id));
+    } catch {
+      /* ignore */
+    }
+  }, [tradeUp]);
+
+  const handleSave = () => {
+    if (!tradeUp) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const items: SavedTradeUp[] = raw ? JSON.parse(raw) : [];
+      if (items.some((s) => s.id === tradeUp.id)) {
+        setSaved(true);
+        return;
+      }
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify([
+          { ...tradeUp, savedAt: new Date().toISOString() },
+          ...items,
+        ])
+      );
+      setSaved(true);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <>
+      {error && (
+        <div className="panel p-6 text-center">
+          <p className="text-sm text-[var(--loss)] mb-3">{error}</p>
+          <a href="/" className="text-xs font-mono text-accent hover:underline">
+            ← Back to scanner
+          </a>
+        </div>
+      )}
+
+      {tradeUp && !error && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-wider text-accent mb-1">
+                Shared trade-up
+              </p>
+              <h1 className="text-sm font-semibold">Contract view</h1>
+            </div>
+            <a href="/" className="btn-ghost text-[11px]">
+              New scan
+            </a>
+          </div>
+
+          <TradeUpCard
+            tradeUp={tradeUp}
+            onSave={handleSave}
+            saved={saved}
+            showShare
+          />
+        </div>
+      )}
+
+      {!tradeUp && !error && (
+        <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
+          Loading…
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function SharePage() {
+  return (
+    <div className="min-h-dvh flex flex-col relative">
+      <Header
+        activeTab="generate"
+        onTabChange={(t) => {
+          window.location.href = t === "saved" ? "/?tab=saved" : "/";
+        }}
+        savedCount={0}
+      />
+
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-6 lg:py-10 relative z-10">
+        <Suspense
+          fallback={
+            <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
+              Loading…
+            </div>
+          }
+        >
+          <ShareContent />
+        </Suspense>
+      </main>
+    </div>
+  );
+}

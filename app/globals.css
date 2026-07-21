@@ -75,7 +75,7 @@ body::before {
 
   .btn-ghost {
     @apply py-2 px-3 rounded-md text-xs font-medium border border-[var(--border)]
-      text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--border)]/80
+      text-[var(--text-muted)] hover:text-[var(--text)]
       transition-colors duration-150;
   }
 

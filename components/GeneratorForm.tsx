@@ -5,6 +5,7 @@ import {
   COMPLEXITY_OPTIONS,
   type Complexity,
 } from "@/lib/constants";
+import type { AppSettings } from "@/lib/settings";
 
 interface GeneratorFormProps {
   onGenerate: (params: {
@@ -14,11 +15,19 @@ interface GeneratorFormProps {
     complexity: Complexity;
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
+    customExcludedCollections: string[];
   }) => void;
   loading: boolean;
+  settings: AppSettings;
+  onOpenSettings: () => void;
 }
 
-export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProps) {
+export default function GeneratorForm({
+  onGenerate,
+  loading,
+  settings,
+  onOpenSettings,
+}: GeneratorFormProps) {
   const [minPrice, setMinPrice] = useState(5);
   const [maxPrice, setMaxPrice] = useState(200);
   const [targetRoi, setTargetRoi] = useState(5);
@@ -30,7 +39,7 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
   const [unstableList, setUnstableList] = useState<
     { key: string; name: string; releaseDate: string; ageDays: number }[]
   >([]);
-  const [maxAgeDays, setMaxAgeDays] = useState(90);
+  const [maxAgeDays, setMaxAgeDays] = useState(30);
 
   useEffect(() => {
     fetch("/api/collections")
@@ -54,8 +63,11 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
       complexity,
       feeType,
       excludeUnstableCollections: excludeUnstable,
+      customExcludedCollections: settings.customExcludedCollections,
     });
   };
+
+  const customCount = settings.customExcludedCollections.length;
 
   return (
     <form
@@ -69,7 +81,15 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
             Configure scan filters
           </p>
         </div>
-        <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 shrink-0" />
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="text-[10px] font-mono text-[var(--text-muted)] hover:text-accent transition-colors"
+          title="Settings"
+        >
+          settings
+          {customCount > 0 && <span className="text-accent"> ({customCount})</span>}
+        </button>
       </div>
 
       <div className="space-y-4">
@@ -195,9 +215,9 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
               {unstableList.map((c) => (
                 <li key={c.key} className="text-[10px] text-[var(--text-muted)] font-mono truncate">
                   {c.name}
-                  <span className="text-[var(--text-muted)]/60">
+                  <span className="opacity-60">
                     {" "}
-                    · {c.ageDays}d old · expires in {maxAgeDays - c.ageDays}d
+                    · {c.ageDays}d · +{maxAgeDays - c.ageDays}d left
                   </span>
                 </li>
               ))}
