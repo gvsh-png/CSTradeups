@@ -104,11 +104,18 @@ export default function Home() {
 
               {meta && !loading && (
                 <p className="mb-4 text-xs text-[var(--text-muted)]">
-                  {String(meta.pricesLoaded)} prices loaded
-                  {meta.priceSource ? ` · source: ${String(meta.priceSource)}` : ""}
-                  {meta.priceCorrections
-                    ? ` · ${String(meta.priceCorrections)} outliers corrected`
-                    : ""}
+                  {String(meta.pricesLoaded)} prices · source:{" "}
+                  {String(meta.priceSource ?? "unknown")}
+                  {meta.pricesCachedUntil ? (
+                    <>
+                      {" "}
+                      · cached until{" "}
+                      {new Date(String(meta.pricesCachedUntil)).toLocaleString(
+                        undefined,
+                        { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+                      )}
+                    </>
+                  ) : null}
                 </p>
               )}
 

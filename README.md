@@ -26,11 +26,34 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CSFLOAT_API_KEY` | No | CSFloat API key for enhanced data |
-| `STEAMAPIS_API_KEY` | No | SteamApis key for bulk Steam Market prices |
-| `OPENROUTER_API_KEY` | No | OpenRouter key for AI trade-up insights |
+| `STEAMAPIS_API_KEY` | **Recommended** | Bulk Steam Market sale prices. One API call fetches all ~34k items. |
+| `OPENROUTER_API_KEY` | Optional | AI trade-up contract insights |
+| `CSFLOAT_API_KEY` | Not needed | Unused for pricing |
 
-Without `STEAMAPIS_API_KEY`, prices are fetched individually from Steam Community Market (slower but works out of the box).
+### Do I need other APIs?
+
+**No — SteamApis alone is enough for pricing.** The app automatically uses Skinport as a free backup (no key required) when merging prices. OpenRouter is only for optional AI insights.
+
+### API usage & caching
+
+Prices are **cached for 24 hours** and shared across all users. The first request of the day triggers one bulk scan; every request after that uses the cache until it expires.
+
+| Source | Key needed? | Cost | Usage with daily cache |
+|--------|-------------|------|------------------------|
+| **SteamApis** | Yes (free tier) | 500 requests/month free | **~1 request/day ≈ 30/month** |
+| Skinport | No | Free (8 req/5min limit) | 1 request/day (automatic backup) |
+| CSFloat schema | No | Free | Cached 24h |
+| OpenRouter | Optional | Pay per use | Only when clicking "AI Insight" |
+
+### SteamApis free tier
+
+- **500 requests per billing cycle** (monthly, resets each cycle)
+- **Free forever** — recurring, not one-time
+- With daily caching you use **~30 requests/month** (one bulk fetch per day)
+- Overage if you exceed 500: €0.0005 per extra request
+- Paid tiers start at €9.99/mo for 100k requests if you need more
+
+Without `STEAMAPIS_API_KEY`, only Skinport prices are used (less complete coverage for all wears).
 
 ## Deploy to Vercel
 

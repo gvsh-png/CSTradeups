@@ -1,9 +1,15 @@
+import { unstable_cache } from "next/cache";
 import { parsePrice, r2 } from "./tradeup/float";
 import type { PriceMap } from "./tradeup/types";
+
+/** Shared price cache TTL — one bulk scan per day for all users */
+export const PRICE_CACHE_TTL = 86_400; // 24 hours in seconds
 
 export interface PriceMeta {
   source: "steamapis" | "skinport" | "steam" | "merged";
   fetchedAt: string;
+  cachedUntil: string;
+  fromCache: boolean;
   steamApisCount: number;
   skinportCount: number;
   corrections: number;
@@ -37,14 +43,10 @@ interface SkinportItem {
   quantity: number;
 }
 
-const priceCache = new Map<string, { price: number; fetchedAt: number }>();
-const CACHE_TTL = 10 * 60 * 1000;
-
-let bulkCache: {
+export interface BulkPriceResult {
   prices: PriceMap;
   meta: PriceMeta;
-  fetchedAt: number;
-} | null = null;
+}
 
 /**
  * Pick the best price from SteamApis data, rejecting outlier sales.
@@ -138,7 +140,7 @@ async function fetchSteamApisPrices(): Promise<{
   try {
     const res = await fetch(
       `https://api.steamapis.com/market/items/730?api_key=${apiKey}`,
-      { next: { revalidate: 600 } }
+      { cache: "no-store" }
     );
     if (!res.ok) return null;
 
@@ -174,7 +176,7 @@ async function fetchSkinportPrices(): Promise<PriceMap | null> {
           "Accept-Encoding": "br",
           "User-Agent": "TradeUpGen/1.0",
         },
-        next: { revalidate: 300 },
+        cache: "no-store",
       }
     );
     if (!res.ok) return null;
@@ -194,52 +196,18 @@ async function fetchSkinportPrices(): Promise<PriceMap | null> {
   }
 }
 
-async function fetchSteamMedianPrice(
-  marketHashName: string
-): Promise<number> {
-  const cached = priceCache.get(marketHashName);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-    return cached.price;
-  }
-
-  try {
-    const url = `https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(marketHashName)}`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; TradeUpGen/1.0)" },
-      next: { revalidate: 600 },
-    });
-
-    if (!res.ok) return cached?.price ?? 0;
-    const data = await res.json();
-    if (!data.success) return cached?.price ?? 0;
-
-    const median = parsePrice(data.median_price || "0");
-    const lowest = parsePrice(data.lowest_price || "0");
-
-    const price = mergePriceCandidates(
-      median > 0 ? [median, lowest] : lowest > 0 ? [lowest] : []
-    );
-
-    if (price > 0) {
-      priceCache.set(marketHashName, { price, fetchedAt: Date.now() });
-    }
-    return price;
-  } catch {
-    return cached?.price ?? 0;
-  }
-}
-
 function mergeBulkSources(
   steamApis: PriceMap | null,
-  skinport: PriceMap | null
-): { prices: PriceMap; meta: PriceMeta } {
+  skinport: PriceMap | null,
+  steamApisCorrections: number
+): BulkPriceResult {
   const prices: PriceMap = {};
   const allKeys = new Set([
     ...Object.keys(steamApis || {}),
     ...Object.keys(skinport || {}),
   ]);
 
-  let corrections = 0;
+  let mergeCorrections = 0;
 
   for (const key of allKeys) {
     const candidates: number[] = [];
@@ -252,7 +220,7 @@ function mergeBulkSources(
         candidates.length > 1 &&
         Math.max(...candidates) / Math.min(...candidates) > 2
       ) {
-        corrections++;
+        mergeCorrections++;
       }
       prices[key] = merged;
     }
@@ -267,81 +235,64 @@ function mergeBulkSources(
           ? "skinport"
           : "steam";
 
+  const fetchedAt = new Date();
+  const cachedUntil = new Date(fetchedAt.getTime() + PRICE_CACHE_TTL * 1000);
+
   return {
     prices,
     meta: {
       source,
-      fetchedAt: new Date().toISOString(),
+      fetchedAt: fetchedAt.toISOString(),
+      cachedUntil: cachedUntil.toISOString(),
+      fromCache: false,
       steamApisCount: Object.keys(steamApis || {}).length,
       skinportCount: Object.keys(skinport || {}).length,
-      corrections,
+      corrections: steamApisCorrections + mergeCorrections,
     },
   };
 }
 
-export async function getBulkPrices(): Promise<{
-  prices: PriceMap;
-  meta: PriceMeta;
-}> {
-  if (bulkCache && Date.now() - bulkCache.fetchedAt < CACHE_TTL) {
-    return { prices: bulkCache.prices, meta: bulkCache.meta };
-  }
-
+/**
+ * Internal fetch — called at most once per day via unstable_cache.
+ * One SteamApis call + one Skinport call = 1 API request total (SteamApis).
+ */
+async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
   const [steamApisResult, skinport] = await Promise.all([
     fetchSteamApisPrices(),
     fetchSkinportPrices(),
   ]);
 
-  const steamApis = steamApisResult?.prices ?? null;
-  const { prices, meta } = mergeBulkSources(steamApis, skinport);
+  const result = mergeBulkSources(
+    steamApisResult?.prices ?? null,
+    skinport,
+    steamApisResult?.corrections ?? 0
+  );
 
-  if (steamApisResult) {
-    meta.corrections += steamApisResult.corrections;
-  }
-
-  if (Object.keys(prices).length > 0) {
-    bulkCache = {
-      prices,
-      meta,
-      fetchedAt: Date.now(),
-    };
-  }
-
-  return {
-    prices: bulkCache?.prices ?? prices,
-    meta: bulkCache?.meta ?? meta,
-  };
+  return result;
 }
 
-export async function fetchPricesForItems(
-  marketHashNames: string[],
-  maxFetches = 100
-): Promise<PriceMap> {
-  const { prices: bulk } = await getBulkPrices();
-  const prices: PriceMap = { ...bulk };
-
-  const missing = marketHashNames
-    .filter((n) => !prices[n] || prices[n] <= 0)
-    .slice(0, maxFetches);
-
-  const batchSize = 4;
-  for (let i = 0; i < missing.length; i += batchSize) {
-    const batch = missing.slice(i, i + batchSize);
-    const results = await Promise.all(
-      batch.map(async (name) => {
-        const price = await fetchSteamMedianPrice(name);
-        return { name, price };
-      })
-    );
-    for (const { name, price } of results) {
-      if (price > 0) prices[name] = price;
-    }
-    if (i + batchSize < missing.length) {
-      await new Promise((r) => setTimeout(r, 400));
-    }
+/**
+ * Daily shared price cache — all users share the same bulk price data.
+ * Refreshes automatically after 24 hours on the next request.
+ */
+const getCachedBulkPrices = unstable_cache(
+  async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
+  ["tradeup-bulk-prices"],
+  {
+    revalidate: PRICE_CACHE_TTL,
+    tags: ["prices"],
   }
+);
 
-  return prices;
+export async function getBulkPrices(): Promise<BulkPriceResult> {
+  const result = await getCachedBulkPrices();
+  return {
+    prices: result.prices,
+    meta: {
+      ...result.meta,
+      fromCache: true,
+    },
+  };
 }
 
 export function getPrice(

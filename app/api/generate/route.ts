@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { fetchPricesForItems, getBulkPrices } from "@/lib/prices";
+import { getBulkPrices } from "@/lib/prices";
 import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
-  collectNeededMarketHashNames,
   generateTradeUps,
   sanitizePrices,
 } from "@/lib/tradeup/generator";
@@ -29,12 +28,8 @@ export async function POST(request: Request) {
     const skinDB = buildSkinDatabase(schema);
     const byCR = groupByCollectionRarity(skinDB);
 
-    const neededNames = collectNeededMarketHashNames(skinDB, byCR, params);
     const { prices: bulk, meta: priceMeta } = await getBulkPrices();
-    const missing = neededNames.filter((n) => !bulk[n] || bulk[n] <= 0);
-    const fetched = missing.length > 0 ? await fetchPricesForItems(missing) : {};
-    const rawPrices = { ...bulk, ...fetched };
-    const prices = sanitizePrices(rawPrices, skinDB);
+    const prices = sanitizePrices(bulk, skinDB);
 
     const priceCount = Object.values(prices).filter((p) => p > 0).length;
 
@@ -51,11 +46,12 @@ export async function POST(request: Request) {
       meta: {
         skinsLoaded: skinDB.length,
         pricesLoaded: priceCount,
-        pricesFetched: missing.length,
         priceSource: priceMeta.source,
         priceCorrections: priceMeta.corrections,
         steamApisPrices: priceMeta.steamApisCount,
         skinportPrices: priceMeta.skinportCount,
+        pricesCachedAt: priceMeta.fetchedAt,
+        pricesCachedUntil: priceMeta.cachedUntil,
         params,
         generatedAt: new Date().toISOString(),
       },

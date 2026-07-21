@@ -114,7 +114,7 @@ export function groupByCollectionRarity(
 }
 
 let schemaCache: { data: SchemaData; fetchedAt: number } | null = null;
-const SCHEMA_TTL = 60 * 60 * 1000;
+const SCHEMA_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function fetchSchema(): Promise<SchemaData> {
   if (schemaCache && Date.now() - schemaCache.fetchedAt < SCHEMA_TTL) {
@@ -122,7 +122,7 @@ export async function fetchSchema(): Promise<SchemaData> {
   }
 
   const res = await fetch("https://csfloat.com/api/v1/schema", {
-    next: { revalidate: 3600 },
+    next: { revalidate: 86400 },
   });
 
   if (!res.ok) throw new Error(`Schema fetch failed: ${res.status}`);
