@@ -9,11 +9,13 @@ import { getSkinImage } from "../schema";
 import {
   clampFloat,
   f32,
+  floatForWear,
   getMaxInputFloat,
   getWear,
   marketHashName,
   norm,
   outF,
+  possibleWears,
   r2,
   r4,
 } from "./float";
@@ -171,9 +173,19 @@ function buildOutcomes(
 
   for (const slot of slots) {
     for (const outSkin of slot.outs) {
-      const outFloat = outF(avgN, outSkin.minF, outSkin.maxF);
+      // Always land inside this skin's float caps (min/max), never exterior wear myths
+      const outFloat = clampFloat(
+        outF(avgN, outSkin.minF, outSkin.maxF),
+        outSkin.minF,
+        outSkin.maxF
+      );
       const wear = getWear(outFloat);
+      // Skip wears that don't exist for this skin's caps (defensive)
+      if (!possibleWears(outSkin.minF, outSkin.maxF, 0.001).includes(wear)) {
+        continue;
+      }
       const price = getPrice(prices, outSkin.name, wear);
+      if (price <= 0) continue;
 
       mixed.push({
         name: outSkin.name,
@@ -187,6 +199,12 @@ function buildOutcomes(
         outMaxF: outSkin.maxF,
       });
     }
+  }
+
+  // Re-normalize probs if some outcomes were dropped for impossible wears / no price
+  const probSum = mixed.reduce((s, o) => s + o.prob, 0);
+  if (probSum > 0 && Math.abs(probSum - 1) > 1e-6) {
+    for (const o of mixed) o.prob = o.prob / probSum;
   }
 
   return mixed;
@@ -203,6 +221,8 @@ function toTradeUpResult(
   fee: number,
   prices: PriceMap
 ): TradeUpResult | null {
+  if (!outcomes.length) return null;
+
   const totalCost = r2(inputs.reduce((s, i) => s + i.price * i.count, 0));
   const ev = outcomes.reduce(
     (s, o) => s + o.prob * o.price * (1 - fee),
@@ -275,13 +295,13 @@ function weaponOf(skinName: string): string {
 function bestCandidateForSkin(
   skin: SkinData,
   prices: PriceMap,
-  maxUnitPrice: number,
-  testFloats: number[]
+  maxUnitPrice: number
 ): InputCandidate | null {
   let best: InputCandidate | null = null;
-  for (const tf of testFloats) {
-    const af = clampFloat(tf, skin.minF, skin.maxF);
-    const wear = getWear(af);
+  // Only wears that exist inside this skin's float caps (respect min/max)
+  for (const wear of possibleWears(skin.minF, skin.maxF)) {
+    const af = floatForWear(skin.minF, skin.maxF, wear);
+    if (af == null) continue;
     const price = getPrice(prices, skin.name, wear);
     if (price <= 0 || price > maxUnitPrice) continue;
     if (!best || price < best.price) {
@@ -370,13 +390,12 @@ export async function generateTradeUps(
   const FILLER_CAP = 10;
 
   const cheapIn: Record<string, InputCandidate[]> = {};
-  const testFloats = [0.27, 0.11, 0.035, 0.42, 0.7];
   const maxUnit = params.maxPrice / 5;
 
   for (const [key, list] of Object.entries(byCR)) {
     const options: InputCandidate[] = [];
     for (const skin of list) {
-      const best = bestCandidateForSkin(skin, prices, maxUnit, testFloats);
+      const best = bestCandidateForSkin(skin, prices, maxUnit);
       if (best) options.push(best);
     }
     options.sort((a, b) => a.price - b.price);
@@ -624,12 +643,11 @@ export function collectNeededMarketHashNames(
 ): string[] {
   const names = new Set<string>();
   const inputRarities = new Set(["Mil-Spec Grade", "Restricted", "Classified"]);
-  const wears = ["Battle-Scarred", "Field-Tested", "Minimal Wear", "Well-Worn"];
 
   const relevantSkins = skinDB.filter((s) => inputRarities.has(s.rarity));
 
   for (const skin of relevantSkins) {
-    for (const wear of wears) {
+    for (const wear of possibleWears(skin.minF, skin.maxF)) {
       names.add(marketHashName(skin.name, wear));
     }
   }
@@ -643,7 +661,7 @@ export function collectNeededMarketHashNames(
 
     for (const skin of list) {
       if (!inputRarities.has(skin.rarity) && skin.rarity !== nextR) continue;
-      for (const wear of wears) {
+      for (const wear of possibleWears(skin.minF, skin.maxF)) {
         names.add(marketHashName(skin.name, wear));
       }
     }

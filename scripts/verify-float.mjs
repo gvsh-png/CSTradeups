@@ -1,10 +1,18 @@
 /**
  * Verify the new CS2 trade-up float formula (normalized per-input floats,
- * float32 precision) matches known TradeUpSpy-style behavior.
+ * float32 precision) and per-skin float-cap wear rules.
  * Run: node scripts/verify-float.mjs
  */
 
 const f32 = Math.fround;
+
+const WEAR_RANGES = [
+  { name: "Factory New", min: 0, max: 0.07 },
+  { name: "Minimal Wear", min: 0.07, max: 0.15 },
+  { name: "Field-Tested", min: 0.15, max: 0.38 },
+  { name: "Well-Worn", min: 0.38, max: 0.45 },
+  { name: "Battle-Scarred", min: 0.45, max: 1.0 },
+];
 
 function norm(f, min, max) {
   return max <= min ? 0 : f32((f32(f) - f32(min)) / (f32(max) - f32(min)));
@@ -20,6 +28,22 @@ function getWear(float) {
   if (float < 0.38) return "Field-Tested";
   if (float < 0.45) return "Well-Worn";
   return "Battle-Scarred";
+}
+
+function wearIntersection(minF, maxF, wear) {
+  const band = WEAR_RANGES.find((w) => w.name === wear);
+  if (!band) return null;
+  const lo = Math.max(minF, band.min);
+  const hi = Math.min(maxF, band.max);
+  if (!(hi > lo)) return null;
+  return { lo, hi };
+}
+
+function possibleWears(minF, maxF, minSpan = 0.01) {
+  return WEAR_RANGES.map((w) => w.name).filter((name) => {
+    const hit = wearIntersection(minF, maxF, name);
+    return Boolean(hit && hit.hi - hit.lo >= minSpan - 1e-9);
+  });
 }
 
 let failed = 0;
@@ -79,6 +103,41 @@ function assert(name, ok, detail = "") {
     Math.abs(out - (0.06 + 0.5 * 0.74)) < 1e-5,
     `out=${out}`
   );
+}
+
+// Case 6: Hot Rod (0–0.08) — only FN/MW exist, never FT/WW/BS
+{
+  const wears = possibleWears(0, 0.08);
+  assert(
+    "Hot Rod possible wears FN+MW only",
+    wears.join(",") === "Factory New,Minimal Wear",
+    wears.join(",")
+  );
+}
+
+// Case 7: Minotaur's Labyrinth (0–0.39) — no BS (cap below 0.45)
+{
+  const wears = possibleWears(0, 0.39);
+  assert("Minotaur has no Battle-Scarred", !wears.includes("Battle-Scarred"));
+  assert("Minotaur allows Field-Tested", wears.includes("Field-Tested"));
+  assert("Minotaur allows Minimal Wear", wears.includes("Minimal Wear"));
+}
+
+// Case 8: Nitro (0.06–0.8) — cannot go below 0.06 (no clean 0.00 FN)
+{
+  const wears = possibleWears(0.06, 0.8);
+  assert("Nitro still allows Factory New band", wears.includes("Factory New"));
+  const out = outF(0, 0.06, 0.8);
+  assert("Nitro floor at minF", Math.abs(out - 0.06) < 1e-6, `out=${out}`);
+}
+
+// Case 9: Icarus Fell / Chronos caps — avgN=1 maps to maxF, never above
+{
+  const icarus = outF(1, 0, 0.1);
+  const chronos = outF(1, 0, 0.4);
+  assert("Icarus never above 0.10", icarus <= 0.1 + 1e-6, `out=${icarus}`);
+  assert("Chronos never above 0.40", chronos <= 0.4 + 1e-6, `out=${chronos}`);
+  assert("Icarus wear MW at cap", getWear(icarus) === "Minimal Wear");
 }
 
 if (failed) {

@@ -34,6 +34,60 @@ export function clampFloat(float: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, float));
 }
 
+/**
+ * Intersection of an exterior wear band with a skin's [minF, maxF] float cap.
+ * Returns null when that wear cannot exist for the skin.
+ */
+export function wearIntersection(
+  minF: number,
+  maxF: number,
+  wear: string
+): { lo: number; hi: number } | null {
+  const band = WEAR_RANGES.find((w) => w.name === wear);
+  if (!band) return null;
+  const lo = Math.max(minF, band.min);
+  const hi = Math.min(maxF, band.max);
+  if (!(hi > lo)) return null;
+  return { lo, hi };
+}
+
+/**
+ * Wears that actually exist for this skin's float caps.
+ * `minSpan` drops razor-thin edge wears (e.g. WW on a 0–0.39 skin).
+ */
+export function possibleWears(
+  minF: number,
+  maxF: number,
+  minSpan = 0.01
+): string[] {
+  return WEAR_RANGES.map((w) => w.name).filter((name) => {
+    const hit = wearIntersection(minF, maxF, name);
+    // Epsilon: 0.08-0.07 is 0.009999… in IEEE float
+    return Boolean(hit && hit.hi - hit.lo >= minSpan - 1e-9);
+  });
+}
+
+/** Midpoint float inside the skin∩wear band, or null if the wear is impossible */
+export function floatForWear(
+  minF: number,
+  maxF: number,
+  wear: string
+): number | null {
+  const hit = wearIntersection(minF, maxF, wear);
+  if (!hit) return null;
+  return r4((hit.lo + hit.hi) / 2);
+}
+
+export function isWearPossible(
+  minF: number,
+  maxF: number,
+  wear: string,
+  minSpan = 0.01
+): boolean {
+  const hit = wearIntersection(minF, maxF, wear);
+  return Boolean(hit && hit.hi - hit.lo >= minSpan - 1e-9);
+}
+
 export function marketHashName(skinName: string, wear: string): string {
   return `${skinName} (${wear})`;
 }
