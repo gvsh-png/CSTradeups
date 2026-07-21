@@ -84,7 +84,12 @@ body::before {
   }
 
   .stat-value {
-    @apply text-sm sm:text-base font-semibold font-mono tabular-nums;
+    @apply text-sm font-semibold font-mono tabular-nums;
+  }
+
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)]
+      text-[var(--text-muted)] transition-colors duration-150 disabled:opacity-40;
   }
 }
 

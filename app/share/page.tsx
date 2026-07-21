@@ -63,26 +63,29 @@ function ShareContent() {
   };
 
   return (
-    <>
+    <div className="space-y-4">
       {error && (
-        <div className="panel p-6 text-center">
-          <p className="text-sm text-[var(--loss)] mb-3">{error}</p>
-          <a href="/" className="text-xs font-mono text-accent hover:underline">
+        <div className="panel p-6 text-center space-y-3">
+          <p className="text-sm text-[var(--loss)]">{error}</p>
+          <a
+            href="/"
+            className="inline-block text-xs font-mono text-accent hover:underline"
+          >
             ← Back to scanner
           </a>
         </div>
       )}
 
       {tradeUp && !error && (
-        <div className="space-y-4">
+        <>
           <div className="flex items-center justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-mono uppercase tracking-wider text-accent mb-1">
                 Shared trade-up
               </p>
               <h1 className="text-sm font-semibold">Contract view</h1>
             </div>
-            <a href="/" className="btn-ghost text-[11px]">
+            <a href="/" className="btn-ghost shrink-0">
               New scan
             </a>
           </div>
@@ -93,7 +96,7 @@ function ShareContent() {
             saved={saved}
             showShare
           />
-        </div>
+        </>
       )}
 
       {!tradeUp && !error && (
@@ -101,7 +104,7 @@ function ShareContent() {
           Loading…
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -116,7 +119,7 @@ export default function SharePage() {
         savedCount={0}
       />
 
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-6 lg:py-10 relative z-10">
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-5 lg:py-8 relative z-10">
         <Suspense
           fallback={
             <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
@@ -127,6 +130,10 @@ export default function SharePage() {
           <ShareContent />
         </Suspense>
       </main>
+
+      <footer className="border-t border-[var(--border)] py-3 text-center text-[10px] font-mono text-[var(--text-muted)] relative z-10">
+        market data · cached 24h
+      </footer>
     </div>
   );
 }

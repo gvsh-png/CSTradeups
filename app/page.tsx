@@ -80,7 +80,10 @@ function HomeInner() {
 
   const handleSave = (tradeUp: TradeUpResult) => {
     if (saved.some((s) => s.id === tradeUp.id)) return;
-    persistSaved([{ ...tradeUp, savedAt: new Date().toISOString() }, ...saved]);
+    persistSaved([
+      { ...tradeUp, savedAt: new Date().toISOString() },
+      ...saved,
+    ]);
   };
 
   const handleRemove = (id: string) => {
@@ -95,12 +98,16 @@ function HomeInner() {
 
   return (
     <div className="min-h-dvh flex flex-col relative">
-      <Header activeTab={activeTab} onTabChange={setActiveTab} savedCount={saved.length} />
+      <Header
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        savedCount={saved.length}
+      />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-8 relative z-10">
         {activeTab === "generate" ? (
           <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
-            <aside className="lg:w-72 xl:w-80 lg:shrink-0">
+            <aside className="w-full lg:w-80 lg:shrink-0">
               <GeneratorForm
                 onGenerate={handleGenerate}
                 loading={loading}
@@ -109,22 +116,24 @@ function HomeInner() {
               />
             </aside>
 
-            <section className="flex-1 min-w-0">
+            <section className="flex-1 min-w-0 space-y-3">
               {error && (
-                <div className="mb-3 px-3 py-2.5 rounded-md bg-[var(--loss)]/8 border border-[var(--loss)]/20 text-[var(--loss)] text-[11px]">
+                <div className="px-3 py-2.5 rounded-md bg-[var(--loss)]/10 border border-[var(--loss)]/20 text-[var(--loss)] text-[11px] leading-relaxed">
                   {error}
                 </div>
               )}
 
               {meta && !loading && (
-                <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-[var(--text-muted)]">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-[var(--text-muted)]">
                   <span>{String(meta.pricesLoaded)} prices</span>
-                  <span>·</span>
+                  <span aria-hidden>·</span>
                   <span>{String(meta.priceSource)}</span>
                   {meta.excludedCollections ? (
                     <>
-                      <span>·</span>
-                      <span>{String(meta.excludedCollections)} collections filtered</span>
+                      <span aria-hidden>·</span>
+                      <span>
+                        {String(meta.excludedCollections)} filtered
+                      </span>
                     </>
                   ) : null}
                 </div>

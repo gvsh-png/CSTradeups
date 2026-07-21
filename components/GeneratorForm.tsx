@@ -72,10 +72,10 @@ export default function GeneratorForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="panel p-4 sm:p-5 space-y-5 lg:sticky lg:top-[4.5rem] relative z-10"
+      className="panel p-4 space-y-5 lg:sticky lg:top-[4.5rem]"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-tight">Parameters</h2>
           <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
             Configure scan filters
@@ -84,18 +84,18 @@ export default function GeneratorForm({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="text-[10px] font-mono text-[var(--text-muted)] hover:text-accent transition-colors"
+          className="shrink-0 h-8 px-2.5 rounded-md border border-[var(--border)] text-[10px] font-mono text-[var(--text-muted)] hover:text-accent hover:border-accent/30 transition-colors"
           title="Settings"
         >
           settings
-          {customCount > 0 && <span className="text-accent"> ({customCount})</span>}
+          {customCount > 0 ? ` (${customCount})` : ""}
         </button>
       </div>
 
       <div className="space-y-4">
-        <label className="block space-y-1.5">
+        <div className="space-y-1.5">
           <span className="label">Price range</span>
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
             <input
               type="number"
               min={0}
@@ -104,6 +104,7 @@ export default function GeneratorForm({
               onChange={(e) => setMinPrice(Number(e.target.value))}
               className="input-field"
               placeholder="Min"
+              aria-label="Min price"
             />
             <span className="text-[var(--text-muted)] text-xs font-mono">—</span>
             <input
@@ -114,14 +115,17 @@ export default function GeneratorForm({
               onChange={(e) => setMaxPrice(Number(e.target.value))}
               className="input-field"
               placeholder="Max"
+              aria-label="Max price"
             />
           </div>
-        </label>
+        </div>
 
-        <label className="block space-y-2">
+        <div className="space-y-2">
           <div className="flex justify-between items-center">
             <span className="label">Target ROI</span>
-            <span className="text-sm font-mono text-accent tabular-nums">{targetRoi}%</span>
+            <span className="text-sm font-mono text-accent tabular-nums">
+              {targetRoi}%
+            </span>
           </div>
           <input
             type="range"
@@ -132,17 +136,17 @@ export default function GeneratorForm({
             onChange={(e) => setTargetRoi(Number(e.target.value))}
             className="w-full"
           />
-        </label>
+        </div>
 
         <fieldset className="space-y-2">
-          <legend className="label mb-2">Complexity</legend>
+          <legend className="label mb-1">Complexity</legend>
           {COMPLEXITY_OPTIONS.map((opt) => (
             <label
               key={opt.value}
               className={`flex items-start gap-3 p-2.5 rounded-md border cursor-pointer transition-colors duration-150 ${
                 complexity === opt.value
                   ? "border-accent/40 bg-accent/5"
-                  : "border-[var(--border)] hover:border-[var(--border)]/80"
+                  : "border-[var(--border)]"
               }`}
             >
               <input
@@ -151,7 +155,7 @@ export default function GeneratorForm({
                 value={opt.value}
                 checked={complexity === opt.value}
                 onChange={() => setComplexity(opt.value)}
-                className="mt-0.5"
+                className="mt-0.5 shrink-0"
               />
               <div className="min-w-0">
                 <span className="text-sm font-medium">{opt.label}</span>
@@ -163,7 +167,7 @@ export default function GeneratorForm({
           ))}
         </fieldset>
 
-        <fieldset className="space-y-2">
+        <fieldset>
           <legend className="label mb-2">Sell on</legend>
           <div className="grid grid-cols-2 gap-2">
             {(["csfloat", "steam"] as const).map((fee) => (
@@ -171,7 +175,7 @@ export default function GeneratorForm({
                 key={fee}
                 type="button"
                 onClick={() => setFeeType(fee)}
-                className={`py-2 rounded-md text-xs font-medium border transition-colors duration-150 ${
+                className={`h-9 rounded-md text-xs font-medium border transition-colors duration-150 ${
                   feeType === fee
                     ? "border-accent/50 bg-accent/10 text-accent"
                     : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
@@ -189,7 +193,7 @@ export default function GeneratorForm({
               type="checkbox"
               checked={excludeUnstable}
               onChange={(e) => setExcludeUnstable(e.target.checked)}
-              className="mt-0.5"
+              className="mt-0.5 shrink-0"
             />
             <div className="min-w-0 flex-1">
               <span className="text-sm font-medium">Exclude new collections</span>
@@ -211,9 +215,12 @@ export default function GeneratorForm({
             </button>
           )}
           {showCollections && (
-            <ul className="max-h-28 overflow-y-auto scrollbar-thin space-y-1 pt-1 border-t border-[var(--border-subtle)]">
+            <ul className="max-h-28 overflow-y-auto scrollbar-thin space-y-1 pt-2 border-t border-[var(--border)]">
               {unstableList.map((c) => (
-                <li key={c.key} className="text-[10px] text-[var(--text-muted)] font-mono truncate">
+                <li
+                  key={c.key}
+                  className="text-[10px] text-[var(--text-muted)] font-mono truncate"
+                >
                   {c.name}
                   <span className="opacity-60">
                     {" "}
@@ -229,9 +236,24 @@ export default function GeneratorForm({
       <button type="submit" disabled={loading} className="btn-primary">
         {loading ? (
           <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <svg
+              className="animate-spin w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="3"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
             </svg>
             Scanning
           </span>
