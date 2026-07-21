@@ -51,7 +51,7 @@ export interface TradeUpResult {
   description: string;
   fee: number;
   generatedAt: string;
-  /** Cached AI insight — persists across save/share */
+  /** Cached AI insight — cleared on price refresh so users can request a new one */
   insight?: string;
 }
 

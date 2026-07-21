@@ -29,8 +29,12 @@ export async function POST(request: Request) {
     }
 
     const fee = tradeUp.fee ?? CSFLOAT_FEE;
-    const refreshed = repriceTradeUp({ ...tradeUp, fee }, prices);
+    // Drop cached AI insight — prices changed, so analysis is stale.
+    // Client can request a fresh one after refresh.
+    const { insight: _expiredInsight, ...tradeUpWithoutInsight } = tradeUp;
+    const refreshed = repriceTradeUp({ ...tradeUpWithoutInsight, fee }, prices);
     refreshed.generatedAt = new Date().toISOString();
+    delete refreshed.insight;
 
     return NextResponse.json({
       tradeUp: refreshed,

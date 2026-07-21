@@ -86,9 +86,15 @@ function ShareContent() {
     }
   };
 
-  const handleInsight = (insight: string) => {
+  const handleInsight = (insight: string | undefined) => {
     if (!tradeUp) return;
-    const updated = { ...tradeUp, insight };
+    const updated =
+      insight === undefined
+        ? (() => {
+            const { insight: _removed, ...rest } = tradeUp;
+            return rest;
+          })()
+        : { ...tradeUp, insight };
     setTradeUp(updated);
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -96,7 +102,12 @@ function ShareContent() {
       const items = JSON.parse(raw) as SavedTradeUp[];
       const idx = items.findIndex((s) => s.id === updated.id);
       if (idx >= 0) {
-        items[idx] = { ...items[idx], insight };
+        if (insight === undefined) {
+          const { insight: _removed, ...rest } = items[idx];
+          items[idx] = rest as SavedTradeUp;
+        } else {
+          items[idx] = { ...items[idx], insight };
+        }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
       }
     } catch {

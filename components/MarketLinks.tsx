@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { csfloatUrl, steamMarketUrl } from "@/lib/marketLinks";
 
 type Props = {
@@ -14,7 +13,7 @@ function LinkBtn({
 }: {
   href: string;
   title: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <a
@@ -47,6 +46,22 @@ function SteamIcon() {
   );
 }
 
+/** Official CSFloat mark from csfloat.com/assets/icons/icon.svg */
+function CsFloatIcon() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/icons/csfloat.svg"
+      alt=""
+      width={14}
+      height={14}
+      className="h-3.5 w-3.5"
+      aria-hidden
+      draggable={false}
+    />
+  );
+}
+
 /** Steam + CSFloat icons to verify an item's live market price */
 export default function MarketLinks({ skinName, wear, className = "" }: Props) {
   return (
@@ -61,20 +76,7 @@ export default function MarketLinks({ skinName, wear, className = "" }: Props) {
         href={csfloatUrl(skinName, wear)}
         title={`CSFloat — ${skinName} (${wear})`}
       >
-        <svg
-          viewBox="0 0 24 24"
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          aria-hidden
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M3 7h18M6 7v10a2 2 0 002 2h8a2 2 0 002-2V7M9 11h6M9 15h4"
-          />
-        </svg>
+        <CsFloatIcon />
       </LinkBtn>
     </div>
   );

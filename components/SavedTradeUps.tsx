@@ -27,9 +27,10 @@ export default function SavedTradeUps({
       });
       const data = await res.json();
       if (res.ok && data.tradeUp) {
+        // Expire old AI analysis when prices refresh — user can request a new one
+        const { insight: _old, ...refreshed } = data.tradeUp as SavedTradeUp;
         onUpdate({
-          ...data.tradeUp,
-          insight: data.tradeUp.insight ?? item.insight,
+          ...refreshed,
           savedAt: item.savedAt,
           note: item.note,
         });
@@ -82,7 +83,14 @@ export default function SavedTradeUps({
           onRefresh={() => handleRefresh(item)}
           refreshing={refreshingId === item.id}
           onRemove={() => onRemove(item.id)}
-          onInsight={(insight) => onUpdate({ ...item, insight })}
+          onInsight={(insight) => {
+            if (insight === undefined) {
+              const { insight: _removed, ...rest } = item;
+              onUpdate(rest as SavedTradeUp);
+            } else {
+              onUpdate({ ...item, insight });
+            }
+          }}
           showShare
         />
       ))}

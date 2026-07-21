@@ -8,7 +8,7 @@ import MarketLinks from "./MarketLinks";
 interface TradeUpCardProps {
   tradeUp: TradeUpResult;
   onSave?: (tradeUp: TradeUpResult) => void;
-  onInsight?: (insight: string) => void;
+  onInsight?: (insight: string | undefined) => void;
   saved?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -142,15 +142,14 @@ export default function TradeUpCard({
   const fetchedRef = useRef(Boolean(tradeUp.insight));
 
   useEffect(() => {
-    if (tradeUp.insight) {
-      setInsight(tradeUp.insight);
-      fetchedRef.current = true;
-    }
+    // Sync (and clear) when parent expires insight after a price refresh
+    setInsight(tradeUp.insight ?? null);
+    fetchedRef.current = Boolean(tradeUp.insight);
   }, [tradeUp.insight, tradeUp.id]);
 
   const withInsight = (base: TradeUpResult = tradeUp): TradeUpResult => ({
     ...base,
-    insight: insight ?? base.insight,
+    insight: insight ?? undefined,
   });
 
   const profitColor =
@@ -187,8 +186,8 @@ export default function TradeUpCard({
     onInsight?.(text);
   };
 
-  const fetchInsight = async () => {
-    if (insight || fetchedRef.current) return;
+  const fetchInsight = async (force = false) => {
+    if (!force && (insight || fetchedRef.current)) return;
     setInsightLoading(true);
     try {
       const res = await fetch("/api/insight", {
@@ -199,11 +198,17 @@ export default function TradeUpCard({
       const data = await res.json();
       if (res.ok && typeof data.insight === "string") {
         persistInsight(data.insight);
-      } else {
+      } else if (!insight || force) {
         setInsight("AI unavailable — add OPENROUTER_API_KEY.");
+        fetchedRef.current = false;
+        if (force) onInsight?.(undefined);
       }
     } catch {
-      setInsight("Could not load insight.");
+      if (!insight || force) {
+        setInsight("Could not load insight.");
+        fetchedRef.current = false;
+        if (force) onInsight?.(undefined);
+      }
     } finally {
       setInsightLoading(false);
     }
@@ -500,7 +505,7 @@ export default function TradeUpCard({
             {!insight && (
               <button
                 type="button"
-                onClick={fetchInsight}
+                onClick={() => fetchInsight(false)}
                 disabled={insightLoading}
                 className="w-full mt-1 py-2.5 text-[11px] font-mono text-accent hover:text-accent-dim transition-colors duration-150 disabled:opacity-40 border border-[var(--border)] rounded-md"
               >
@@ -508,10 +513,20 @@ export default function TradeUpCard({
               </button>
             )}
             {insight && (
-              <div className="mt-1 p-3 bg-[var(--surface)] rounded-md border border-[var(--border)]">
-                <p className="text-[10px] font-mono uppercase tracking-wider text-accent mb-1.5">
-                  AI analysis
-                </p>
+              <div className="mt-1 p-3 bg-[var(--surface)] rounded-md border border-[var(--border)] space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-accent">
+                    AI analysis
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => fetchInsight(true)}
+                    disabled={insightLoading}
+                    className="text-[10px] font-mono text-[var(--text-muted)] hover:text-accent transition-colors duration-150 disabled:opacity-40"
+                  >
+                    {insightLoading ? "Loading…" : "New analysis"}
+                  </button>
+                </div>
                 <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
                   {insight}
                 </p>

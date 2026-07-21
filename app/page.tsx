@@ -86,15 +86,29 @@ function HomeInner() {
     ]);
   };
 
-  const handleInsight = (id: string, insight: string) => {
+  const handleInsight = (id: string, insight: string | undefined) => {
     setResults((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, insight } : r))
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        if (insight === undefined) {
+          const { insight: _removed, ...rest } = r;
+          return rest;
+        }
+        return { ...r, insight };
+      })
     );
     // Also persist onto saved copy if already bookmarked
     const savedMatch = saved.find((s) => s.id === id);
     if (savedMatch) {
       persistSaved(
-        saved.map((s) => (s.id === id ? { ...s, insight } : s))
+        saved.map((s) => {
+          if (s.id !== id) return s;
+          if (insight === undefined) {
+            const { insight: _removed, ...rest } = s;
+            return rest as SavedTradeUp;
+          }
+          return { ...s, insight };
+        })
       );
     }
   };

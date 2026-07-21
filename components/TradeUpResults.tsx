@@ -7,7 +7,7 @@ interface TradeUpResultsProps {
   results: TradeUpResult[];
   loading: boolean;
   onSave: (tradeUp: TradeUpResult) => void;
-  onInsight: (id: string, insight: string) => void;
+  onInsight: (id: string, insight: string | undefined) => void;
   isSaved: (id: string) => boolean;
 }
 
