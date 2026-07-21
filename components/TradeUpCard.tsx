@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TradeUpResult } from "@/lib/tradeup/types";
+import { rarityShort, rarityStyle } from "@/lib/constants";
 
 interface TradeUpCardProps {
   tradeUp: TradeUpResult;
-  onSave?: () => void;
+  onSave?: (tradeUp: TradeUpResult) => void;
+  onInsight?: (insight: string) => void;
   saved?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -73,22 +75,55 @@ function Stat({
   );
 }
 
-function SkinThumb({ src, alt }: { src?: string; alt: string }) {
+function SkinThumb({
+  src,
+  alt,
+  rarity,
+}: {
+  src?: string;
+  alt: string;
+  rarity: string;
+}) {
+  const style = rarityStyle(rarity);
   return src ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={alt}
-      className="w-10 h-10 shrink-0 object-contain rounded border border-[var(--border)] bg-[var(--surface)]"
+      className="w-10 h-10 shrink-0 object-contain rounded border"
+      style={{
+        borderColor: style.borderColor,
+        backgroundColor: style.backgroundColor,
+      }}
     />
   ) : (
-    <div className="w-10 h-10 shrink-0 rounded border border-[var(--border)] bg-[var(--surface)]" />
+    <div
+      className="w-10 h-10 shrink-0 rounded border"
+      style={{
+        borderColor: style.borderColor,
+        backgroundColor: style.backgroundColor,
+      }}
+    />
+  );
+}
+
+function RarityBadge({ rarity }: { rarity: string }) {
+  const style = rarityStyle(rarity);
+  return (
+    <span
+      className="text-[9px] font-mono font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border"
+      style={style}
+      title={rarity}
+    >
+      {rarityShort(rarity)}
+    </span>
   );
 }
 
 export default function TradeUpCard({
   tradeUp,
   onSave,
+  onInsight,
   saved = false,
   onRefresh,
   refreshing = false,
@@ -98,18 +133,31 @@ export default function TradeUpCard({
   compact = false,
 }: TradeUpCardProps) {
   const [expanded, setExpanded] = useState(!compact);
-  const [insight, setInsight] = useState<string | null>(null);
+  const [insight, setInsight] = useState<string | null>(tradeUp.insight ?? null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pngLoading, setPngLoading] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
+  const fetchedRef = useRef(Boolean(tradeUp.insight));
+
+  useEffect(() => {
+    if (tradeUp.insight) {
+      setInsight(tradeUp.insight);
+      fetchedRef.current = true;
+    }
+  }, [tradeUp.insight, tradeUp.id]);
+
+  const withInsight = (base: TradeUpResult = tradeUp): TradeUpResult => ({
+    ...base,
+    insight: insight ?? base.insight,
+  });
 
   const profitColor =
     tradeUp.expectedProfit >= 0 ? "var(--profit)" : "var(--loss)";
 
   const handleShare = async () => {
     const { buildShareUrl } = await import("@/lib/share");
-    const url = buildShareUrl(tradeUp);
+    const url = buildShareUrl(withInsight());
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -125,7 +173,7 @@ export default function TradeUpCard({
     try {
       const { toPng } = await import("html-to-image");
       const dataUrl = await toPng(cardRef.current, {
-        backgroundColor: "#030304",
+        backgroundColor: "#1a1f27",
         pixelRatio: 2,
         cacheBust: true,
       });
@@ -140,8 +188,14 @@ export default function TradeUpCard({
     }
   };
 
+  const persistInsight = (text: string) => {
+    setInsight(text);
+    fetchedRef.current = true;
+    onInsight?.(text);
+  };
+
   const fetchInsight = async () => {
-    if (insight) return;
+    if (insight || fetchedRef.current) return;
     setInsightLoading(true);
     try {
       const res = await fetch("/api/insight", {
@@ -150,8 +204,11 @@ export default function TradeUpCard({
         body: JSON.stringify({ tradeUp }),
       });
       const data = await res.json();
-      if (res.ok) setInsight(data.insight);
-      else setInsight("AI unavailable — add OPENROUTER_API_KEY.");
+      if (res.ok && typeof data.insight === "string") {
+        persistInsight(data.insight);
+      } else {
+        setInsight("AI unavailable — add OPENROUTER_API_KEY.");
+      }
     } catch {
       setInsight("Could not load insight.");
     } finally {
@@ -165,29 +222,26 @@ export default function TradeUpCard({
       ? `Created ${new Date(tradeUp.generatedAt).toLocaleString()}`
       : null;
 
+  const inputStyle = rarityStyle(tradeUp.inputRarity);
+  const outputStyle = rarityStyle(tradeUp.outputRarity);
+
   return (
     <article ref={cardRef} className="panel overflow-hidden">
-      {/* Header */}
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--text-muted)]">
-                {tradeUp.inputRarity
-                  .replace(" Grade", "")
-                  .replace("Mil-Spec", "Mil")}
-              </span>
+              <RarityBadge rarity={tradeUp.inputRarity} />
               <span className="text-[var(--text-muted)] text-[10px]">→</span>
-              <span className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--text-muted)]">
-                {tradeUp.outputRarity
-                  .replace(" Grade", "")
-                  .replace("Mil-Spec", "Mil")}
-              </span>
+              <RarityBadge rarity={tradeUp.outputRarity} />
               {tradeUp.type === "mixed" && (
                 <span className="text-[9px] font-mono text-[var(--text-muted)] border border-[var(--border)] px-1.5 py-0.5 rounded">
                   MIX
                 </span>
               )}
+              <span className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--text-muted)]">
+                {tradeUp.complexity}
+              </span>
             </div>
             <p className="text-[11px] text-[var(--text-muted)] font-mono leading-snug break-words">
               {tradeUp.description}
@@ -200,7 +254,6 @@ export default function TradeUpCard({
           </div>
         </div>
 
-        {/* Action toolbar — always its own row so it never overlaps text */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {onRefresh && (
             <IconBtn
@@ -266,7 +319,7 @@ export default function TradeUpCard({
           )}
           {onSave && (
             <IconBtn
-              onClick={onSave}
+              onClick={() => onSave(withInsight())}
               disabled={saved}
               active={saved}
               title={saved ? "Saved" : "Save"}
@@ -311,16 +364,26 @@ export default function TradeUpCard({
         </div>
       </div>
 
-      {/* Inputs */}
       <div className="px-4 pb-4">
-        <p className="label mb-2">Inputs</p>
+        <div className="flex items-center gap-2 mb-2">
+          <p className="label mb-0">Inputs</p>
+          <RarityBadge rarity={tradeUp.inputRarity} />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {tradeUp.inputs.map((input, i) => (
             <div
               key={i}
-              className="flex items-center gap-2.5 bg-[var(--surface)] rounded-md border border-[var(--border)] p-2 min-w-0"
+              className="flex items-center gap-2.5 rounded-md border p-2 min-w-0"
+              style={{
+                borderColor: inputStyle.borderColor,
+                backgroundColor: inputStyle.backgroundColor,
+              }}
             >
-              <SkinThumb src={input.image} alt={input.name} />
+              <SkinThumb
+                src={input.image}
+                alt={input.name}
+                rarity={tradeUp.inputRarity}
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium truncate">
                   {input.count > 1 && (
@@ -341,7 +404,6 @@ export default function TradeUpCard({
         </div>
       </div>
 
-      {/* Stats */}
       <div className="px-4 pb-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 p-3 bg-[var(--surface)] rounded-md border border-[var(--border)]">
           <Stat
@@ -354,23 +416,21 @@ export default function TradeUpCard({
             value={`$${tradeUp.expectedProfit.toFixed(2)}`}
             color={profitColor}
           />
-          <Stat
-            label="ROI"
-            value={`${tradeUp.roi}%`}
-            color={profitColor}
-          />
+          <Stat label="ROI" value={`${tradeUp.roi}%`} color={profitColor} />
           <Stat label="Cost" value={`$${tradeUp.totalCost.toFixed(2)}`} />
         </div>
       </div>
 
-      {/* Outcomes */}
       <div className="border-t border-[var(--border)]">
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
           className="w-full px-4 py-3 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)] hover:text-[var(--text)] transition-colors duration-150"
         >
-          <span>OUTCOMES · {tradeUp.outcomes.length}</span>
+          <span className="flex items-center gap-2">
+            OUTCOMES · {tradeUp.outcomes.length}
+            <RarityBadge rarity={tradeUp.outputRarity} />
+          </span>
           <span className="text-accent w-4 text-center">
             {expanded ? "−" : "+"}
           </span>
@@ -381,9 +441,17 @@ export default function TradeUpCard({
             {tradeUp.outcomes.map((outcome, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 p-2 rounded-md bg-[var(--surface)] border border-[var(--border)] min-w-0"
+                className="flex items-center gap-2.5 p-2 rounded-md border min-w-0"
+                style={{
+                  borderColor: outputStyle.borderColor,
+                  backgroundColor: outputStyle.backgroundColor,
+                }}
               >
-                <SkinThumb src={outcome.image} alt={outcome.name} />
+                <SkinThumb
+                  src={outcome.image}
+                  alt={outcome.name}
+                  rarity={tradeUp.outputRarity}
+                />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-medium truncate">
                     {outcome.name}
@@ -411,22 +479,25 @@ export default function TradeUpCard({
               </div>
             ))}
 
-            <button
-              type="button"
-              onClick={fetchInsight}
-              disabled={insightLoading}
-              className="w-full mt-1 py-2.5 text-[11px] font-mono text-accent hover:text-accent-dim transition-colors duration-150 disabled:opacity-40 border border-[var(--border)] rounded-md"
-            >
-              {insightLoading
-                ? "Loading…"
-                : insight
-                  ? "AI analysis"
-                  : "Get AI analysis"}
-            </button>
+            {!insight && (
+              <button
+                type="button"
+                onClick={fetchInsight}
+                disabled={insightLoading}
+                className="w-full mt-1 py-2.5 text-[11px] font-mono text-accent hover:text-accent-dim transition-colors duration-150 disabled:opacity-40 border border-[var(--border)] rounded-md"
+              >
+                {insightLoading ? "Loading…" : "Get AI analysis"}
+              </button>
+            )}
             {insight && (
-              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed p-3 bg-[var(--surface)] rounded-md border border-[var(--border)]">
-                {insight}
-              </p>
+              <div className="mt-1 p-3 bg-[var(--surface)] rounded-md border border-[var(--border)]">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-accent mb-1.5">
+                  AI analysis
+                </p>
+                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                  {insight}
+                </p>
+              </div>
             )}
           </div>
         )}

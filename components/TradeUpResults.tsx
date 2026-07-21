@@ -7,6 +7,7 @@ interface TradeUpResultsProps {
   results: TradeUpResult[];
   loading: boolean;
   onSave: (tradeUp: TradeUpResult) => void;
+  onInsight: (id: string, insight: string) => void;
   isSaved: (id: string) => boolean;
 }
 
@@ -14,6 +15,7 @@ export default function TradeUpResults({
   results,
   loading,
   onSave,
+  onInsight,
   isSaved,
 }: TradeUpResultsProps) {
   if (loading) {
@@ -69,7 +71,8 @@ export default function TradeUpResults({
         <TradeUpCard
           key={tradeUp.id}
           tradeUp={tradeUp}
-          onSave={() => onSave(tradeUp)}
+          onSave={onSave}
+          onInsight={(insight) => onInsight(tradeUp.id, insight)}
           saved={isSaved(tradeUp.id)}
           showShare
         />

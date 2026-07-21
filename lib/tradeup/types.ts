@@ -51,6 +51,8 @@ export interface TradeUpResult {
   description: string;
   fee: number;
   generatedAt: string;
+  /** Cached AI insight — persists across save/share */
+  insight?: string;
 }
 
 export interface GenerateParams {

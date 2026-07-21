@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --bg: #030304;
-  --bg-elevated: #08080d;
-  --surface: #0c0c12;
-  --surface-raised: #111118;
-  --border: #1c1c28;
-  --border-subtle: #14141c;
-  --text: #ececf1;
-  --text-muted: #6e6e80;
-  --accent: #00d4aa;
-  --accent-dim: #00a884;
-  --violet: #8b7cf6;
-  --profit: #00e676;
-  --loss: #ff5252;
+  /* CS2-inspired gunmetal — dark but not pure black */
+  --bg: #12151a;
+  --bg-elevated: #161b22;
+  --surface: #1a1f27;
+  --surface-raised: #222831;
+  --border: #2f3742;
+  --border-subtle: #262d38;
+  --text: #e8eaed;
+  --text-muted: #8b93a0;
+  --accent: #d4a84b;
+  --accent-dim: #b8923f;
+  --profit: #5ecf8e;
+  --loss: #e35d5d;
 }
 
 * {
@@ -38,22 +38,16 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% -10%, rgba(212, 168, 75, 0.06), transparent 55%),
+    linear-gradient(180deg, #161b22 0%, #12151a 40%, #10141a 100%);
   pointer-events: none;
   z-index: 0;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 70%);
 }
 
 @layer components {
   .panel {
     @apply bg-[var(--surface-raised)] border border-[var(--border)] rounded-lg;
-  }
-
-  .panel-interactive {
-    @apply panel transition-colors duration-150;
   }
 
   .input-field {
@@ -63,12 +57,12 @@ body::before {
   }
 
   .input-field:focus {
-    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   }
 
   .btn-primary {
     @apply w-full py-2.5 rounded-md text-sm font-medium
-      bg-[var(--accent)] text-[#030304]
+      bg-[var(--accent)] text-[#12151a]
       hover:bg-[var(--accent-dim)] disabled:opacity-40 disabled:cursor-not-allowed
       transition-colors duration-150;
   }
@@ -85,11 +79,6 @@ body::before {
 
   .stat-value {
     @apply text-sm font-semibold font-mono tabular-nums;
-  }
-
-  .icon-btn {
-    @apply inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)]
-      text-[var(--text-muted)] transition-colors duration-150 disabled:opacity-40;
   }
 }
 

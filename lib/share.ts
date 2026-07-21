@@ -16,6 +16,8 @@ interface SharePayload {
   ep: number;
   roi: number;
   win: number;
+  /** Cached AI insight — travels with share links */
+  ins?: string;
   inputs: {
     n: string;
     c: number;
@@ -59,6 +61,7 @@ function toCompact(tradeUp: TradeUpResult): SharePayload {
     ep: tradeUp.expectedProfit,
     roi: tradeUp.roi,
     win: tradeUp.winPct,
+    ...(tradeUp.insight ? { ins: tradeUp.insight } : {}),
     inputs: tradeUp.inputs.map((i) => ({
       n: i.name,
       c: i.count,
@@ -99,6 +102,7 @@ function fromCompact(p: SharePayload): TradeUpResult {
     winPct: p.win,
     avgWin: 0,
     avgLoss: 0,
+    insight: p.ins,
     inputs: p.inputs.map((i) => ({
       name: i.n,
       count: i.c,

@@ -40,23 +40,43 @@ function ShareContent() {
     }
   }, [tradeUp]);
 
-  const handleSave = () => {
-    if (!tradeUp) return;
+  const handleSave = (item?: TradeUpResult) => {
+    const toSave = item ?? tradeUp;
+    if (!toSave) return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const items: SavedTradeUp[] = raw ? JSON.parse(raw) : [];
-      if (items.some((s) => s.id === tradeUp.id)) {
+      if (items.some((s) => s.id === toSave.id)) {
         setSaved(true);
         return;
       }
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify([
-          { ...tradeUp, savedAt: new Date().toISOString() },
+          { ...toSave, savedAt: new Date().toISOString() },
           ...items,
         ])
       );
       setSaved(true);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleInsight = (insight: string) => {
+    if (!tradeUp) return;
+    const updated = { ...tradeUp, insight };
+    setTradeUp(updated);
+    // Persist onto saved copy if already bookmarked
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const items = JSON.parse(raw) as SavedTradeUp[];
+      const idx = items.findIndex((s) => s.id === updated.id);
+      if (idx >= 0) {
+        items[idx] = { ...items[idx], insight };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      }
     } catch {
       /* ignore */
     }
@@ -93,6 +113,7 @@ function ShareContent() {
           <TradeUpCard
             tradeUp={tradeUp}
             onSave={handleSave}
+            onInsight={handleInsight}
             saved={saved}
             showShare
           />

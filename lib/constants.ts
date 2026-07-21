@@ -26,6 +26,25 @@ export const RARITY_COLORS: Record<string, string> = {
   Extraordinary: "#e4ae39",
 };
 
+/** Short but clear rarity label (drops trailing "Grade") */
+export function rarityShort(rarity: string): string {
+  return rarity.replace(/ Grade$/, "");
+}
+
+/** Inline styles for rarity-tinted surfaces: colored border + soft fill */
+export function rarityStyle(rarity: string): {
+  borderColor: string;
+  backgroundColor: string;
+  color: string;
+} {
+  const color = RARITY_COLORS[rarity] || "#8b93a0";
+  return {
+    borderColor: `${color}66`,
+    backgroundColor: `${color}18`,
+    color,
+  };
+}
+
 export const WEAR_RANGES = [
   { name: "Factory New", min: 0, max: 0.07 },
   { name: "Minimal Wear", min: 0.07, max: 0.15 },

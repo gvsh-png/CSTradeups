@@ -86,6 +86,19 @@ function HomeInner() {
     ]);
   };
 
+  const handleInsight = (id: string, insight: string) => {
+    setResults((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, insight } : r))
+    );
+    // Also persist onto saved copy if already bookmarked
+    const savedMatch = saved.find((s) => s.id === id);
+    if (savedMatch) {
+      persistSaved(
+        saved.map((s) => (s.id === id ? { ...s, insight } : s))
+      );
+    }
+  };
+
   const handleRemove = (id: string) => {
     persistSaved(saved.filter((s) => s.id !== id));
   };
@@ -143,6 +156,7 @@ function HomeInner() {
                 results={results}
                 loading={loading}
                 onSave={handleSave}
+                onInsight={handleInsight}
                 isSaved={isSaved}
               />
             </section>

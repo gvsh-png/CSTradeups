@@ -8,23 +8,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        void: {
-          DEFAULT: "#030304",
-          elevated: "#08080d",
-        },
         surface: {
-          DEFAULT: "#0c0c12",
-          raised: "#111118",
-          border: "#1c1c28",
-          hover: "#16161f",
+          DEFAULT: "#1a1f27",
+          raised: "#222831",
+          border: "#2f3742",
+          hover: "#28303a",
         },
         accent: {
-          DEFAULT: "#00d4aa",
-          dim: "#00a884",
-          muted: "#00d4aa20",
+          DEFAULT: "#d4a84b",
+          dim: "#b8923f",
+          muted: "#d4a84b20",
         },
-        profit: "#00e676",
-        loss: "#ff5252",
+        profit: "#5ecf8e",
+        loss: "#e35d5d",
         rarity: {
           consumer: "#b0c3d9",
           industrial: "#5e98d9",

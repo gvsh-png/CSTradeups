@@ -29,6 +29,7 @@ export default function SavedTradeUps({
       if (res.ok && data.tradeUp) {
         onUpdate({
           ...data.tradeUp,
+          insight: data.tradeUp.insight ?? item.insight,
           savedAt: item.savedAt,
           note: item.note,
         });
@@ -81,6 +82,7 @@ export default function SavedTradeUps({
           onRefresh={() => handleRefresh(item)}
           refreshing={refreshingId === item.id}
           onRemove={() => onRemove(item.id)}
+          onInsight={(insight) => onUpdate({ ...item, insight })}
           showShare
         />
       ))}
