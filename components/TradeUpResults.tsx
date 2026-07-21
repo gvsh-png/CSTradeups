@@ -1,6 +1,8 @@
 "use client";
 
 import type { TradeUpResult } from "@/lib/tradeup/types";
+import { useSimulatedProgress } from "@/hooks/useSimulatedProgress";
+import LoadingProgress from "./LoadingProgress";
 import TradeUpCard from "./TradeUpCard";
 
 interface TradeUpResultsProps {
@@ -18,19 +20,15 @@ export default function TradeUpResults({
   onInsight,
   isSaved,
 }: TradeUpResultsProps) {
+  const progress = useSimulatedProgress(loading, "generate");
+
   if (loading) {
     return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="panel p-4 animate-pulse space-y-3">
-            <div className="h-3 bg-[var(--border)] rounded w-1/3" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="h-14 bg-[var(--border)] rounded-md" />
-              <div className="h-14 bg-[var(--border)] rounded-md" />
-            </div>
-            <div className="h-16 bg-[var(--border)] rounded-md" />
-          </div>
-        ))}
+      <div aria-busy="true" aria-live="polite">
+        <LoadingProgress
+          progress={progress}
+          title="Scanning trade-ups"
+        />
       </div>
     );
   }

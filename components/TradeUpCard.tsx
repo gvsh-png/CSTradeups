@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 import { rarityShort, rarityStyle } from "@/lib/constants";
+import type { ProgressState } from "@/hooks/useSimulatedProgress";
+import LoadingProgress from "./LoadingProgress";
 import MarketLinks from "./MarketLinks";
 
 interface TradeUpCardProps {
@@ -12,6 +14,7 @@ interface TradeUpCardProps {
   saved?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
+  refreshProgress?: ProgressState;
   onRemove?: () => void;
   showShare?: boolean;
   savedAt?: string;
@@ -128,6 +131,7 @@ export default function TradeUpCard({
   saved = false,
   onRefresh,
   refreshing = false,
+  refreshProgress,
   onRemove,
   showShare = true,
   savedAt,
@@ -219,8 +223,28 @@ export default function TradeUpCard({
   const outputStyle = rarityStyle(tradeUp.outputRarity);
 
   return (
-    <article ref={cardRef} className="panel overflow-hidden">
-      <div className="p-4 space-y-3">
+    <article
+      ref={cardRef}
+      className="panel overflow-hidden"
+      aria-busy={refreshing}
+    >
+      {refreshing && refreshProgress && (
+        <div className="px-4 pt-3 pb-2 border-b border-[var(--border)] bg-accent/5">
+          <LoadingProgress
+            progress={refreshProgress}
+            title="Refreshing prices"
+            compact
+          />
+          <p className="mt-1.5 text-[10px] font-mono text-[var(--text-muted)]">
+            Still working · not stuck
+          </p>
+        </div>
+      )}
+      <div
+        className={`p-4 space-y-3 transition-opacity duration-200 ${
+          refreshing ? "opacity-60 pointer-events-none" : ""
+        }`}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -252,7 +276,11 @@ export default function TradeUpCard({
             <IconBtn
               onClick={onRefresh}
               disabled={refreshing}
-              title="Refresh prices"
+              title={
+                refreshing && refreshProgress
+                  ? `Refreshing · ${refreshProgress.percent}%`
+                  : "Refresh prices"
+              }
             >
               <svg
                 className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}
