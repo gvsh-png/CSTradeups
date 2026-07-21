@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import TradeUpCard from "@/components/TradeUpCard";
-import { decodeTradeUpShare } from "@/lib/share";
+import { decodeTradeUpShare, hydrateTradeUpImages } from "@/lib/share";
 import { STORAGE_KEY } from "@/lib/constants";
 import type { SavedTradeUp, TradeUpResult } from "@/lib/tradeup/types";
 
@@ -14,18 +14,41 @@ function ShareContent() {
   const [tradeUp, setTradeUp] = useState<TradeUpResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!encoded) {
-      setError("Missing share data.");
-      return;
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      setTradeUp(null);
+
+      if (!encoded) {
+        setError("Missing share data. Ask for a fresh share link.");
+        setLoading(false);
+        return;
+      }
+
+      const decoded = decodeTradeUpShare(encoded);
+      if (!decoded) {
+        setError(
+          "This share link is invalid or was truncated. Copy it again from TradeUp Gen."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const hydrated = await hydrateTradeUpImages(decoded);
+      if (cancelled) return;
+      setTradeUp(hydrated);
+      setLoading(false);
     }
-    const decoded = decodeTradeUpShare(encoded);
-    if (!decoded) {
-      setError("Invalid or corrupted share link.");
-      return;
-    }
-    setTradeUp(decoded);
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [encoded]);
 
   useEffect(() => {
@@ -67,7 +90,6 @@ function ShareContent() {
     if (!tradeUp) return;
     const updated = { ...tradeUp, insight };
     setTradeUp(updated);
-    // Persist onto saved copy if already bookmarked
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
@@ -96,14 +118,23 @@ function ShareContent() {
         </div>
       )}
 
-      {tradeUp && !error && (
+      {loading && !error && (
+        <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
+          Loading shared contract…
+        </div>
+      )}
+
+      {tradeUp && !error && !loading && (
         <>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] font-mono uppercase tracking-wider text-accent mb-1">
                 Shared trade-up
               </p>
-              <h1 className="text-sm font-semibold">Contract view</h1>
+              <h1 className="text-sm font-semibold truncate">
+                {tradeUp.inputRarity.replace(/ Grade$/, "")} →{" "}
+                {tradeUp.outputRarity.replace(/ Grade$/, "")}
+              </h1>
             </div>
             <a href="/" className="btn-ghost shrink-0">
               New scan
@@ -118,12 +149,6 @@ function ShareContent() {
             showShare
           />
         </>
-      )}
-
-      {!tradeUp && !error && (
-        <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
-          Loading…
-        </div>
       )}
     </div>
   );
