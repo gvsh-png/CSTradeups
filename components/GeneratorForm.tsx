@@ -27,7 +27,10 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
   const [excludeUnstable, setExcludeUnstable] = useState(true);
   const [unstableCount, setUnstableCount] = useState(0);
   const [showCollections, setShowCollections] = useState(false);
-  const [unstableList, setUnstableList] = useState<{ key: string; name: string }[]>([]);
+  const [unstableList, setUnstableList] = useState<
+    { key: string; name: string; releaseDate: string; ageDays: number }[]
+  >([]);
+  const [maxAgeDays, setMaxAgeDays] = useState(90);
 
   useEffect(() => {
     fetch("/api/collections")
@@ -36,6 +39,7 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
         if (d.unstable) {
           setUnstableList(d.unstable);
           setUnstableCount(d.count);
+          if (d.maxAgeDays) setMaxAgeDays(d.maxAgeDays);
         }
       })
       .catch(() => {});
@@ -170,9 +174,9 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
             <div className="min-w-0 flex-1">
               <span className="text-sm font-medium">Exclude new collections</span>
               <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
-                Skip recently added collections with unstable pricing
+                Skip collections released in the last {maxAgeDays} days
                 {unstableCount > 0 && (
-                  <span className="text-accent"> · {unstableCount} excluded</span>
+                  <span className="text-accent"> · {unstableCount} active</span>
                 )}
               </p>
             </div>
@@ -187,10 +191,14 @@ export default function GeneratorForm({ onGenerate, loading }: GeneratorFormProp
             </button>
           )}
           {showCollections && (
-            <ul className="max-h-28 overflow-y-auto scrollbar-thin space-y-0.5 pt-1 border-t border-[var(--border-subtle)]">
+            <ul className="max-h-28 overflow-y-auto scrollbar-thin space-y-1 pt-1 border-t border-[var(--border-subtle)]">
               {unstableList.map((c) => (
                 <li key={c.key} className="text-[10px] text-[var(--text-muted)] font-mono truncate">
                   {c.name}
+                  <span className="text-[var(--text-muted)]/60">
+                    {" "}
+                    · {c.ageDays}d old · expires in {maxAgeDays - c.ageDays}d
+                  </span>
                 </li>
               ))}
             </ul>

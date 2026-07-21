@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUnstableCollectionKeySet } from "@/lib/collections";
+import { getUnstableCollectionKeySet, NEW_COLLECTION_MAX_AGE_DAYS } from "@/lib/collections";
 import { getBulkPrices } from "@/lib/prices";
 import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
@@ -60,6 +60,9 @@ export async function POST(request: Request) {
         pricesCachedUntil: priceMeta.cachedUntil,
         excludedCollections: params.excludeUnstableCollections
           ? excludedKeys?.size ?? 0
+          : 0,
+        newCollectionMaxAgeDays: params.excludeUnstableCollections
+          ? NEW_COLLECTION_MAX_AGE_DAYS
           : 0,
         params,
         generatedAt: new Date().toISOString(),

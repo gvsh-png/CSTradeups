@@ -1,50 +1,77 @@
 import type { SchemaData } from "./tradeup/types";
 
+/** Collections younger than this are considered unstable */
+export const NEW_COLLECTION_MAX_AGE_DAYS = 90;
+
 /**
- * Explicitly flagged collections with unstable or immature market pricing.
- * Update this list when new cases drop.
+ * Known collection release dates (ISO).
+ * Only collections listed here can be excluded — everything else is treated as stable.
+ * Add an entry when a new collection drops; it auto-expires after NEW_COLLECTION_MAX_AGE_DAYS.
  */
-export const UNSTABLE_COLLECTION_KEYS = new Set([
-  "set_community_35", // Fever
-  "set_community_36", // Genesis
-  "set_community_37", // Dead Hand
-  "set_community_34", // Gallery
-  "set_community_33", // Kilowatt
-  "set_community_32", // Revolution
-  "set_timed_drops_achroma", // Achroma
-  "set_timed_drops_cool", // Ascent
-  "set_timed_drops_neutral", // Boreal
-  "set_realism_camo", // Sport & Field
-  "set_spy_tech", // Spy Tech
-  "set_overpass_2024", // Overpass 2024
-  "set_graphic_design", // Graphic Design
-]);
+export const COLLECTION_RELEASE_DATES: Record<string, string> = {
+  set_arabesque: "2026-07-14", // Arabesque Collection
+  set_sparta: "2026-07-14", // Sparta Collection (key may vary once in schema)
+};
 
-const UNSTABLE_PATTERNS = [
-  /^set_timed_drops_/,
-  /^set_community_3[5-9]$/,
-  /^set_community_4\d$/,
-];
+export function getCollectionAgeDays(key: string, now = new Date()): number | null {
+  const released = COLLECTION_RELEASE_DATES[key];
+  if (!released) return null;
 
-export function isUnstableCollectionKey(key: string): boolean {
-  if (UNSTABLE_COLLECTION_KEYS.has(key)) return true;
-  return UNSTABLE_PATTERNS.some((p) => p.test(key));
+  const releaseDate = new Date(released);
+  if (Number.isNaN(releaseDate.getTime())) return null;
+
+  const diffMs = now.getTime() - releaseDate.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-export function getUnstableCollections(schema: SchemaData): {
-  key: string;
-  name: string;
-}[] {
-  return (schema.collections || [])
-    .filter((c) => isUnstableCollectionKey(c.key))
-    .map((c) => ({ key: c.key, name: c.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+export function isUnstableCollectionKey(
+  key: string,
+  now = new Date(),
+  maxAgeDays = NEW_COLLECTION_MAX_AGE_DAYS
+): boolean {
+  const ageDays = getCollectionAgeDays(key, now);
+  if (ageDays === null) return false;
+  return ageDays >= 0 && ageDays < maxAgeDays;
 }
 
-export function getUnstableCollectionKeySet(schema: SchemaData): Set<string> {
+export function getUnstableCollections(
+  schema: SchemaData,
+  now = new Date(),
+  maxAgeDays = NEW_COLLECTION_MAX_AGE_DAYS
+): { key: string; name: string; releaseDate: string; ageDays: number }[] {
+  const colMap = new Map(
+    (schema.collections || []).map((c) => [c.key, c.name])
+  );
+
+  const results: { key: string; name: string; releaseDate: string; ageDays: number }[] = [];
+
+  for (const [key, releaseDate] of Object.entries(COLLECTION_RELEASE_DATES)) {
+    const ageDays = getCollectionAgeDays(key, now);
+    if (ageDays === null || ageDays < 0 || ageDays >= maxAgeDays) continue;
+
+    results.push({
+      key,
+      name: colMap.get(key) || key,
+      releaseDate,
+      ageDays,
+    });
+  }
+
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function getUnstableCollectionKeySet(
+  schema: SchemaData,
+  now = new Date(),
+  maxAgeDays = NEW_COLLECTION_MAX_AGE_DAYS
+): Set<string> {
   const keys = new Set<string>();
   for (const c of schema.collections || []) {
-    if (isUnstableCollectionKey(c.key)) keys.add(c.key);
+    if (isUnstableCollectionKey(c.key, now, maxAgeDays)) keys.add(c.key);
+  }
+  // Also include keys not yet in schema but flagged with a recent release date
+  for (const key of Object.keys(COLLECTION_RELEASE_DATES)) {
+    if (isUnstableCollectionKey(key, now, maxAgeDays)) keys.add(key);
   }
   return keys;
 }
