@@ -17,6 +17,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No trade-up provided" }, { status: 400 });
     }
 
+    const model =
+      process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
+
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -26,7 +29,7 @@ export async function POST(request: Request) {
         "X-Title": "TradeUp Gen",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
+        model,
         messages: [
           {
             role: "system",

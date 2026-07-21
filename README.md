@@ -26,9 +26,9 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `STEAMAPIS_API_KEY` | **Recommended** | Bulk Steam Market sale prices. One API call fetches all ~34k items. |
-| `OPENROUTER_API_KEY` | Optional | AI trade-up contract insights |
-| `CSFLOAT_API_KEY` | Not needed | Unused for pricing |
+| `STEAMAPIS_API_KEY` | **Recommended** | Bulk Steam Market sale prices |
+| `OPENROUTER_API_KEY` | Optional | AI trade-up insights (~$0.0002 per click) |
+| `OPENROUTER_MODEL` | Optional | AI model override (default: `google/gemini-2.5-flash-lite`) |
 
 ### Do I need other APIs?
 
