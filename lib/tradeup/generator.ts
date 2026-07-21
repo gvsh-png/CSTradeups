@@ -4,7 +4,7 @@ import {
   STEAM_FEE,
   type Complexity,
 } from "../constants";
-import { getPrice, median } from "../prices";
+import { getPrice } from "../prices";
 import { getSkinImage } from "../schema";
 import {
   clampFloat,
@@ -535,8 +535,12 @@ const WEARS = [
 ] as const;
 
 /**
- * Cross-wear sanity check: reject outlier prints and enforce rough
- * wear ordering (BS shouldn't price above FT, etc.).
+ * Light cross-wear cleanup only.
+ *
+ * IMPORTANT: Do NOT clamp prices to a global skin median. FN/MW often cost
+ * 3–10× FT/BS on real markets (e.g. Calf Skin MW ~$0.27 vs FT ~$0.10).
+ * The old median clamp crushed MW down to FT and made generate look
+ * wildly profitable until refresh reloaded unsanitized prices.
  */
 export function sanitizePrices(
   prices: PriceMap,
@@ -545,68 +549,87 @@ export function sanitizePrices(
   const sanitized = { ...prices };
 
   for (const skin of skinDB) {
-    const wearPrices: number[] = [];
-    for (const wear of WEARS) {
-      const p = prices[marketHashName(skin.name, wear)];
-      if (p && p > 0) wearPrices.push(p);
-    }
-    if (wearPrices.length < 2) continue;
+    const get = (wear: string) =>
+      sanitized[marketHashName(skin.name, wear)] || 0;
+    const set = (wear: string, price: number) => {
+      sanitized[marketHashName(skin.name, wear)] = r2(price);
+    };
 
-    const mid = median(wearPrices);
-    if (mid <= 0) continue;
-
-    // 1) Absolute outliers vs skin median (tighter than before)
-    const inliers = wearPrices.filter((w) => w >= mid * 0.3 && w <= mid * 3);
-    const fallback = inliers.length ? median(inliers) : mid;
-
-    for (const wear of WEARS) {
-      const key = marketHashName(skin.name, wear);
-      const p = sanitized[key];
-      if (!p || p <= 0) continue;
-
-      if (p > mid * 3 || p < mid * 0.3) {
-        if (fallback > 0) sanitized[key] = fallback;
-      }
-    }
-
-    // 2) Wear-order: worse wear shouldn't price above better wear
+    // 1) Worse wear must not price above a better wear (bad data / spikes)
     for (let i = 1; i < WEARS.length; i++) {
-      const betterKey = marketHashName(skin.name, WEARS[i - 1]);
-      const worseKey = marketHashName(skin.name, WEARS[i]);
-      const better = sanitized[betterKey] || 0;
-      const worse = sanitized[worseKey] || 0;
-      if (better > 0 && worse > 0 && worse > better * 1.12) {
-        sanitized[worseKey] = r2(better * 0.92);
+      const better = get(WEARS[i - 1]);
+      const worse = get(WEARS[i]);
+      if (better > 0 && worse > 0 && worse > better * 1.2) {
+        set(WEARS[i], better * 0.95);
       }
     }
 
-    // 3) Wear-order floor: better wear shouldn't sit far below a worse wear
-    // (e.g. MW $0.43 while FT is $0.80 — MW is underpriced)
-    for (let i = WEARS.length - 2; i >= 0; i--) {
-      const betterKey = marketHashName(skin.name, WEARS[i]);
-      const worseKey = marketHashName(skin.name, WEARS[i + 1]);
-      const better = sanitized[betterKey] || 0;
-      const worse = sanitized[worseKey] || 0;
-      if (better > 0 && worse > 0 && better < worse * 0.9) {
-        sanitized[betterKey] = r2(worse * 1.08);
-      }
-    }
-
-    // 4) Spike mid-tier vs both neighbors
+    // 2) Only pull down a mid-tier that spikes ABOVE both neighbors
+    //    (never pull MW/FN down toward cheaper FT/BS)
     for (let i = 1; i < WEARS.length - 1; i++) {
-      const prev = sanitized[marketHashName(skin.name, WEARS[i - 1])] || 0;
-      const curKey = marketHashName(skin.name, WEARS[i]);
-      const cur = sanitized[curKey] || 0;
-      const next = sanitized[marketHashName(skin.name, WEARS[i + 1])] || 0;
-      if (prev > 0 && next > 0 && cur > 0) {
-        const neighbor = r2((prev + next) / 2);
-        if (cur > neighbor * 2.5) sanitized[curKey] = neighbor;
-        if (cur < neighbor * 0.4) sanitized[curKey] = neighbor;
+      const prev = get(WEARS[i - 1]);
+      const cur = get(WEARS[i]);
+      const next = get(WEARS[i + 1]);
+      if (prev > 0 && next > 0 && cur > Math.max(prev, next) * 3) {
+        set(WEARS[i], (prev + next) / 2);
       }
     }
   }
 
   return sanitized;
+}
+
+/**
+ * Re-apply live bulk prices to a trade-up and recompute EV / ROI / win%.
+ * Shared by /api/refresh and post-generate so both paths match.
+ */
+export function repriceTradeUp(
+  tradeUp: TradeUpResult,
+  prices: PriceMap
+): TradeUpResult {
+  const fee = tradeUp.fee;
+
+  const inputs = tradeUp.inputs.map((input) => {
+    const price = getPrice(prices, input.name, input.wear) || input.price;
+    return { ...input, price };
+  });
+
+  const totalCost = r2(
+    inputs.reduce((s, i) => s + i.price * i.count, 0)
+  );
+
+  const outcomes = tradeUp.outcomes
+    .map((o) => {
+      const price = getPrice(prices, o.name, o.wear) || o.price;
+      const profit = r2(price * (1 - fee) - totalCost);
+      return { ...o, price, profit };
+    })
+    .sort((a, b) => b.price - a.price);
+
+  const ev = outcomes.reduce((s, o) => {
+    const prob = o.prob / 100;
+    return s + prob * o.price * (1 - fee);
+  }, 0);
+
+  const expectedProfit = r2(ev - totalCost);
+  const roi = totalCost > 0 ? r2((expectedProfit / totalCost) * 100) : 0;
+
+  let winPct = 0;
+  for (const o of outcomes) {
+    if (o.profit >= 0) winPct += o.prob;
+  }
+  winPct = r2(winPct);
+
+  return {
+    ...tradeUp,
+    inputs,
+    outcomes,
+    totalCost,
+    expectedValue: r2(ev),
+    expectedProfit,
+    roi,
+    winPct,
+  };
 }
 
 export function collectNeededMarketHashNames(

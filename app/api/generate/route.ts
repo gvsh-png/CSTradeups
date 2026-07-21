@@ -9,6 +9,7 @@ import { getBulkPrices } from "@/lib/prices";
 import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
   generateTradeUps,
+  repriceTradeUp,
   sanitizePrices,
 } from "@/lib/tradeup/generator";
 import type { Complexity } from "@/lib/constants";
@@ -57,13 +58,17 @@ export async function POST(request: Request) {
 
     const priceCount = Object.values(prices).filter((p) => p > 0).length;
 
-    const results = await generateTradeUps(
+    const rawResults = await generateTradeUps(
       skinDB,
       byCR,
       prices,
       schema,
       params
     );
+
+    // Final reprice with the same map refresh uses — keeps scan results
+    // accurate without needing a manual refresh after save.
+    const results = rawResults.map((t) => repriceTradeUp(t, prices));
 
     return NextResponse.json({
       results,
