@@ -174,9 +174,6 @@ export default function GeneratorForm({
               max={MAX_PRICE_DISPLAY}
             />
           </div>
-          <p className="text-[10px] font-mono text-[var(--text-muted)]">
-            From {MIN_PRICE_DISPLAY} · no upper cap
-          </p>
         </div>
 
         <div className="space-y-2">

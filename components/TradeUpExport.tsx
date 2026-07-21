@@ -180,17 +180,6 @@ export default function TradeUpExport({
           >
             TradeUp<span style={{ color: COLORS.accent }}>.gen</span>
           </div>
-          <div
-            style={{
-              fontSize: 11,
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-              color: COLORS.mute,
-              textTransform: "uppercase",
-            }}
-          >
-            {tradeUp.complexity}
-            {tradeUp.type === "mixed" ? " · mixed" : ""}
-          </div>
         </div>
 
         <div
@@ -199,23 +188,11 @@ export default function TradeUpExport({
             alignItems: "center",
             gap: 8,
             flexWrap: "wrap",
-            marginBottom: 8,
           }}
         >
           <Badge rarity={tradeUp.inputRarity} />
           <span style={{ color: COLORS.mute, fontSize: 12 }}>→</span>
           <Badge rarity={tradeUp.outputRarity} />
-        </div>
-
-        <div
-          style={{
-            fontSize: 12,
-            color: COLORS.mute,
-            lineHeight: 1.45,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          }}
-        >
-          {tradeUp.description}
         </div>
       </div>
 

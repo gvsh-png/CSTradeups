@@ -258,18 +258,7 @@ export default function TradeUpCard({
               <RarityBadge rarity={tradeUp.inputRarity} />
               <span className="text-[var(--text-muted)] text-[10px]">→</span>
               <RarityBadge rarity={tradeUp.outputRarity} />
-              {tradeUp.type === "mixed" && (
-                <span className="text-[9px] font-mono text-[var(--text-muted)] border border-[var(--border)] px-1.5 py-0.5 rounded">
-                  MIX
-                </span>
-              )}
-              <span className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--text-muted)]">
-                {tradeUp.complexity}
-              </span>
             </div>
-            <p className="text-[11px] text-[var(--text-muted)] font-mono leading-snug break-words">
-              {tradeUp.description}
-            </p>
             {dateLabel && (
               <p className="text-[10px] text-[var(--text-muted)] font-mono opacity-70">
                 {dateLabel}
