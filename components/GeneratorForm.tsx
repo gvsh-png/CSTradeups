@@ -84,7 +84,7 @@ export default function GeneratorForm({
   const { toUsd, code } = useCurrency();
   const [minPrice, setMinPrice] = useState(5);
   const [maxPrice, setMaxPrice] = useState(200);
-  const [minWinChance, setMinWinChance] = useState(40);
+  const [risk, setRisk] = useState(60);
   const [complexity, setComplexity] = useState<Complexity>("simple");
   const [feeType, setFeeType] = useState<"steam" | "csfloat">("csfloat");
   const [excludeUnstable, setExcludeUnstable] = useState(true);
@@ -116,7 +116,8 @@ export default function GeneratorForm({
     onGenerate({
       minPrice: toUsd(min),
       maxPrice: toUsd(Math.min(max, MAX_PRICE_DISPLAY)),
-      minWinChance,
+      // Risk 0 = safest (≥100% win), Risk 100 = wildest (≥0% win)
+      minWinChance: Math.max(0, Math.min(100, 100 - risk)),
       complexity,
       feeType,
       excludeUnstableCollections: excludeUnstable,
@@ -178,9 +179,9 @@ export default function GeneratorForm({
 
         <div className="space-y-2">
           <div className="flex justify-between items-baseline gap-2">
-            <span className="label">Min win chance</span>
+            <span className="label">Risk</span>
             <span className="text-sm font-mono text-accent tabular-nums">
-              {minWinChance}%
+              {risk}%
             </span>
           </div>
           <input
@@ -188,13 +189,17 @@ export default function GeneratorForm({
             min={0}
             max={100}
             step={5}
-            value={minWinChance}
-            onChange={(e) => setMinWinChance(Number(e.target.value))}
+            value={risk}
+            onChange={(e) => setRisk(Number(e.target.value))}
             className="w-full"
-            aria-label="Minimum chance of profit"
+            aria-label="Risk tolerance"
           />
+          <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)]">
+            <span>Safer</span>
+            <span>Riskier</span>
+          </div>
           <p className="text-[11px] text-[var(--text-muted)] leading-snug">
-            Only show contracts where you profit at least this often
+            Higher risk includes contracts that win less often (lottery-style)
           </p>
         </div>
 

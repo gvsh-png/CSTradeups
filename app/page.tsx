@@ -130,7 +130,7 @@ function HomeInner() {
 
       if (!data.results?.length) {
         setError(
-          "No contracts matched. Try lowering min win chance, widening price range, or adjusting collection filters."
+          "No contracts matched. Try raising risk, widening price range, or adjusting collection filters."
         );
       }
     } catch (err) {
