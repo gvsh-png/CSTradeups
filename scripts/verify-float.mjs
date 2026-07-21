@@ -115,12 +115,27 @@ function assert(name, ok, detail = "") {
   );
 }
 
-// Case 7: Minotaur's Labyrinth (0–0.39) — no BS (cap below 0.45)
+// Case 7: Minotaur's Labyrinth (0–0.39) — WW band is only ~0.01, not buyable
 {
-  const wears = possibleWears(0, 0.39);
-  assert("Minotaur has no Battle-Scarred", !wears.includes("Battle-Scarred"));
-  assert("Minotaur allows Field-Tested", wears.includes("Field-Tested"));
-  assert("Minotaur allows Minimal Wear", wears.includes("Minimal Wear"));
+  const loose = possibleWears(0, 0.39, 0.01);
+  const strict = possibleWears(0, 0.39, 0.025);
+  assert("Minotaur has no Battle-Scarred", !loose.includes("Battle-Scarred"));
+  assert("Minotaur allows Field-Tested", loose.includes("Field-Tested"));
+  assert(
+    "Minotaur WW blocked for inputs (strict span)",
+    !strict.includes("Well-Worn"),
+    strict.join(",")
+  );
+}
+
+// Case 6b: Hot Rod input wears — MW too thin under strict span, FN ok
+{
+  const strict = possibleWears(0, 0.08, 0.025);
+  assert(
+    "Hot Rod input wears FN only under strict span",
+    strict.join(",") === "Factory New",
+    strict.join(",")
+  );
 }
 
 // Case 8: Nitro (0.06–0.8) — cannot go below 0.06 (no clean 0.00 FN)

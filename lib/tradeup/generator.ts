@@ -12,6 +12,7 @@ import {
   floatForWear,
   getMaxInputFloat,
   getWear,
+  INPUT_WEAR_MIN_SPAN,
   marketHashName,
   norm,
   outF,
@@ -223,6 +224,14 @@ function toTradeUpResult(
 ): TradeUpResult | null {
   if (!outcomes.length) return null;
 
+  // Reject contracts that somehow used an unobtainable input wear
+  for (const i of inputs) {
+    const ok = possibleWears(i.minF, i.maxF, INPUT_WEAR_MIN_SPAN).includes(
+      i.wear
+    );
+    if (!ok) return null;
+  }
+
   const totalCost = r2(inputs.reduce((s, i) => s + i.price * i.count, 0));
   const ev = outcomes.reduce(
     (s, o) => s + o.prob * o.price * (1 - fee),
@@ -298,8 +307,8 @@ function bestCandidateForSkin(
   maxUnitPrice: number
 ): InputCandidate | null {
   let best: InputCandidate | null = null;
-  // Only wears that exist inside this skin's float caps (respect min/max)
-  for (const wear of possibleWears(skin.minF, skin.maxF)) {
+  // Strict span — no "Well-Worn" on a skin that only reaches 0.39
+  for (const wear of possibleWears(skin.minF, skin.maxF, INPUT_WEAR_MIN_SPAN)) {
     const af = floatForWear(skin.minF, skin.maxF, wear);
     if (af == null) continue;
     const price = getPrice(prices, skin.name, wear);

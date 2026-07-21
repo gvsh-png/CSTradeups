@@ -53,8 +53,12 @@ export function wearIntersection(
 
 /**
  * Wears that actually exist for this skin's float caps.
- * `minSpan` drops razor-thin edge wears (e.g. WW on a 0–0.39 skin).
+ * Default `minSpan` (0.01) is for outcomes / pricing lookups.
+ * Use INPUT_WEAR_MIN_SPAN for buyable input wears — drops razor-thin
+ * edge bands like Well-Worn on Minotaur's Labyrinth (0–0.39).
  */
+export const INPUT_WEAR_MIN_SPAN = 0.025;
+
 export function possibleWears(
   minF: number,
   maxF: number,
