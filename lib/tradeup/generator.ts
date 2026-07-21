@@ -107,13 +107,24 @@ function applyComplexity(
   complexity: Complexity,
   outcomes: OutcomeCalc[],
   fee: number,
-  totalCost: number
+  totalCost: number,
+  prices: PriceMap
 ): TradeUpInput[] {
   if (complexity === "simple") {
     return inputs.map((i) => ({ ...i, maxFloat: i.maxF }));
   }
 
   if (complexity === "moderate") {
+    // Price each outcome at the wear its float would land on for a given
+    // normalized input value — uses the new normalized trade-up formula.
+    const outcomeByRange = new Map<string, OutcomeCalc[]>();
+    for (const o of outcomes) {
+      const key = `${o.outMinF}|${o.outMaxF}`;
+      const list = outcomeByRange.get(key) || [];
+      list.push(o);
+      outcomeByRange.set(key, list);
+    }
+
     return inputs.map((i) => {
       const maxFloat = getMaxInputFloat(
         { minF: i.minF, maxF: i.maxF },
@@ -121,11 +132,17 @@ function applyComplexity(
         totalCost,
         fee,
         (wear, outMin, outMax) => {
-          const f = outF(norm(i.float, i.minF, i.maxF), outMin, outMax);
-          return getPrice({} as PriceMap, i.name, getWear(f));
+          const candidates = outcomeByRange.get(`${outMin}|${outMax}`) || [];
+          if (!candidates.length) return 0;
+          const sum = candidates.reduce(
+            (s, o) => s + (getPrice(prices, o.name, wear) || o.price),
+            0
+          );
+          return sum / candidates.length;
         }
       );
-      return { ...i, maxFloat };
+      // Never report a cap below the wear the trade-up was priced at
+      return { ...i, maxFloat: Math.max(maxFloat, r4(i.float)) };
     });
   }
 
@@ -146,10 +163,14 @@ function buildOutcomes(
 ): OutcomeCalc[] {
   const mixed: OutcomeCalc[] = [];
 
+  // New CS2 trade-up formula: average the per-input normalized floats
+  // (float32), then map into each outcome skin's own float range.
+  const avgN = f32(
+    slots.reduce((s, sl) => s + f32(sl.n) * sl.count, 0) / 10
+  );
+
   for (const slot of slots) {
     for (const outSkin of slot.outs) {
-      const avgN =
-        slots.reduce((s, sl) => s + sl.n * sl.count, 0) / 10;
       const outFloat = outF(avgN, outSkin.minF, outSkin.maxF);
       const wear = getWear(outFloat);
       const price = getPrice(prices, outSkin.name, wear);
@@ -159,6 +180,8 @@ function buildOutcomes(
         float: r4(outFloat),
         wear,
         price,
+        // New odds: collection weight = inputs from that collection / 10,
+        // split evenly across that collection's outcomes.
         prob: (slot.count / 10) * (1 / slot.outs.length),
         outMinF: outSkin.minF,
         outMaxF: outSkin.maxF,
@@ -177,7 +200,8 @@ function toTradeUpResult(
   inputRarity: string,
   outputRarity: string,
   type: "single" | "mixed",
-  fee: number
+  fee: number,
+  prices: PriceMap
 ): TradeUpResult | null {
   const totalCost = r2(inputs.reduce((s, i) => s + i.price * i.count, 0));
   const ev = outcomes.reduce(
@@ -197,7 +221,8 @@ function toTradeUpResult(
     params.complexity,
     outcomes,
     fee,
-    totalCost
+    totalCost,
+    prices
   );
 
   const tradeOutcomes: TradeUpOutcome[] = outcomes
@@ -420,7 +445,8 @@ export async function generateTradeUps(
             inR,
             nextR,
             "single",
-            fee
+            fee,
+            prices
           );
           if (result) candidates.push(result);
         }
@@ -513,7 +539,8 @@ export async function generateTradeUps(
               inR,
               nextR,
               "mixed",
-              fee
+              fee,
+              prices
             );
             if (result) candidates.push(result);
           }
