@@ -18,12 +18,12 @@ export async function GET(request: Request) {
       });
     }
 
-    const prices = await getBulkPrices();
+    const { prices, meta } = await getBulkPrices();
     return NextResponse.json({
       prices,
       count: Object.keys(prices).length,
+      meta,
       fetchedAt: new Date().toISOString(),
-      source: process.env.STEAMAPIS_API_KEY ? "steamapis" : "cache",
     });
   } catch (error) {
     return NextResponse.json(

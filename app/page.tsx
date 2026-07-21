@@ -104,8 +104,11 @@ export default function Home() {
 
               {meta && !loading && (
                 <p className="mb-4 text-xs text-[var(--text-muted)]">
-                  Loaded {String(meta.pricesLoaded)} prices from{" "}
-                  {String(meta.skinsLoaded)} skins
+                  {String(meta.pricesLoaded)} prices loaded
+                  {meta.priceSource ? ` · source: ${String(meta.priceSource)}` : ""}
+                  {meta.priceCorrections
+                    ? ` · ${String(meta.priceCorrections)} outliers corrected`
+                    : ""}
                 </p>
               )}
 

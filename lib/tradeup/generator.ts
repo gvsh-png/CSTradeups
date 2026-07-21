@@ -4,14 +4,13 @@ import {
   STEAM_FEE,
   type Complexity,
 } from "../constants";
-import { getPrice } from "../prices";
+import { getPrice, mergePriceCandidates } from "../prices";
 import { getSkinImage } from "../schema";
 import {
   clampFloat,
   f32,
   getMaxInputFloat,
   getWear,
-  getWearFloat,
   marketHashName,
   norm,
   outF,
@@ -420,6 +419,44 @@ const WEARS = [
   "Battle-Scarred",
 ] as const;
 
+/**
+ * Cross-wear sanity check: reject prices that are extreme outliers
+ * compared to other wears of the same skin.
+ */
+export function sanitizePrices(
+  prices: PriceMap,
+  skinDB: SkinData[]
+): PriceMap {
+  const sanitized = { ...prices };
+
+  for (const skin of skinDB) {
+    const wearPrices: number[] = [];
+    for (const wear of WEARS) {
+      const p = prices[marketHashName(skin.name, wear)];
+      if (p && p > 0) wearPrices.push(p);
+    }
+    if (wearPrices.length < 2) continue;
+
+    const sorted = [...wearPrices].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+
+    for (const wear of WEARS) {
+      const key = marketHashName(skin.name, wear);
+      const p = sanitized[key];
+      if (!p || p <= 0) continue;
+
+      if (p < median * 0.15 || p > median * 8) {
+        const corrected = mergePriceCandidates(
+          wearPrices.filter((w) => w >= median * 0.15 && w <= median * 8)
+        );
+        if (corrected > 0) sanitized[key] = corrected;
+      }
+    }
+  }
+
+  return sanitized;
+}
+
 export function collectNeededMarketHashNames(
   skinDB: SkinData[],
   byCR: Record<string, SkinData[]>,
@@ -427,7 +464,7 @@ export function collectNeededMarketHashNames(
 ): string[] {
   const names = new Set<string>();
   const inputRarities = new Set(["Mil-Spec Grade", "Restricted", "Classified"]);
-  const wears = ["Field-Tested", "Minimal Wear"];
+  const wears = ["Battle-Scarred", "Field-Tested", "Minimal Wear", "Well-Worn"];
 
   const relevantSkins = skinDB.filter((s) => inputRarities.has(s.rarity));
 
