@@ -14,10 +14,13 @@ async function resolveSteamId(
   customerId: string | undefined,
   metadataSteamId?: string | null
 ): Promise<string | null> {
-  if (metadataSteamId) return metadataSteamId;
-  if (!customerId) return null;
-  const user = await findByStripeCustomer(customerId);
-  return user?.steamId ?? null;
+  // Prefer the linked customer record — never let client metadata override it
+  if (customerId) {
+    const user = await findByStripeCustomer(customerId);
+    if (user?.steamId) return user.steamId;
+  }
+  // First checkout only: metadata set server-side in /api/billing/checkout
+  return metadataSteamId || null;
 }
 
 export async function POST(request: Request) {

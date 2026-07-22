@@ -19,6 +19,29 @@ export function getWear(float: number): string {
   return "Battle-Scarred";
 }
 
+/**
+ * Wear for a float that already sits inside a skin's [minF, maxF].
+ * At exact maxF (== a wear boundary like 0.07/0.15/0.38/0.45), plain
+ * getWear() returns the *next* tier which has zero intersection with the
+ * skin — that used to drop outcomes and (before the EV fix) inflate odds.
+ */
+export function getWearForSkin(
+  float: number,
+  minF: number,
+  maxF: number
+): string {
+  const clamped = clampFloat(float, minF, maxF);
+  const wear = getWear(clamped);
+  if (isWearPossible(minF, maxF, wear, 0.001)) return wear;
+
+  // Prefer the highest possible wear that still intersects the skin caps
+  for (let i = WEAR_RANGES.length - 1; i >= 0; i--) {
+    const name = WEAR_RANGES[i].name;
+    if (isWearPossible(minF, maxF, name, 0.001)) return name;
+  }
+  return wear;
+}
+
 export function getWearFloat(wear: string): number {
   const map: Record<string, number> = {
     "Factory New": 0.035,
@@ -111,7 +134,7 @@ export function r4(n: number): number {
 
 export function getMaxInputFloat(
   inSkin: { minF: number; maxF: number },
-  outSkins: { minF: number; maxF: number }[],
+  outSkins: { minF: number; maxF: number; weight?: number }[],
   totalCost: number,
   fee: number,
   priceFn: (wear: string, outMin: number, outMax: number) => number
@@ -119,14 +142,17 @@ export function getMaxInputFloat(
   let lo = 0;
   let hi = 1;
   let best = 0;
+  const weightSum =
+    outSkins.reduce((s, sk) => s + (sk.weight ?? 1), 0) || outSkins.length;
 
   for (let s = 0; s < 20; s++) {
     const mid = (lo + hi) / 2;
     let ev = 0;
     for (const sk of outSkins) {
       const outFloat = outF(f32(mid), sk.minF, sk.maxF);
-      const wear = getWear(outFloat);
-      ev += (1 / outSkins.length) * priceFn(wear, sk.minF, sk.maxF) * (1 - fee);
+      const wear = getWearForSkin(outFloat, sk.minF, sk.maxF);
+      const w = (sk.weight ?? 1) / weightSum;
+      ev += w * priceFn(wear, sk.minF, sk.maxF) * (1 - fee);
     }
     if (ev >= totalCost) {
       best = mid;

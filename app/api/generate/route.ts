@@ -63,28 +63,33 @@ export async function POST(request: Request) {
       ? body.customExcludedCollections
       : [];
 
+    const finite = (v: unknown, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
     // Slider is target win % (60 → ~60% win). Legacy `risk` was inverted.
     const targetWinChance = clampTargetWin(
       body.targetWinChance != null
-        ? Number(body.targetWinChance)
+        ? finite(body.targetWinChance, 60)
         : body.minWinChance != null
-          ? Number(body.minWinChance)
+          ? finite(body.minWinChance, 60)
           : body.risk != null
-            ? 100 - Number(body.risk)
+            ? 100 - finite(body.risk, 40)
             : 60
     );
     const band = winChanceBandFromTarget(targetWinChance);
 
     const params: GenerateParams = {
-      minPrice: Number(body.minPrice) ?? 1,
-      maxPrice: Number(body.maxPrice) ?? 500,
+      minPrice: finite(body.minPrice, 1),
+      maxPrice: finite(body.maxPrice, 500),
       targetWinChance: band.target,
       minWinChance: band.minWinChance,
       maxWinChance: band.maxWinChance,
       complexity: (body.complexity as Complexity) || "simple",
       feeType: body.feeType === "steam" ? "steam" : "csfloat",
       excludeUnstableCollections: body.excludeUnstableCollections !== false,
-      limit: Number(body.limit) || 15,
+      limit: Math.max(1, Math.min(50, finite(body.limit, 15))),
     };
 
     const schema = await fetchSchema();

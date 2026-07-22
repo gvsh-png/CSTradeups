@@ -133,13 +133,28 @@ export async function consumeScan(
   }
 
   let user = rollWeek(existing);
-  const quota = quotaFromUser(user);
-  if (!quota.canScan) {
-    return {
-      ok: false,
-      reason: `Free plan allows ${quota.weeklyScanLimit} scans per week. Upgrade to Pro for unlimited.`,
-      quota,
-    };
+  const scanLimit = weeklyScanLimit(user.plan);
+  const weekKey = user.weekKey;
+  const r = redis();
+
+  // Atomic counter avoids concurrent free-tier overshoot
+  if (scanLimit != null) {
+    const counterKey = `quota:scans:${steamId}:${weekKey}`;
+    const next = await r.incr(counterKey);
+    if (next === 1) {
+      await r.expire(counterKey, 60 * 60 * 24 * 14);
+    }
+    if (next > scanLimit) {
+      await r.decr(counterKey);
+      const quota = quotaFromUser({ ...user, weeklyScans: scanLimit });
+      return {
+        ok: false,
+        reason: `Free plan allows ${scanLimit} scans per week. Upgrade to Pro for unlimited.`,
+        quota,
+      };
+    }
+    user = await saveUser({ ...user, weeklyScans: next });
+    return { ok: true, user, quota: quotaFromUser(user) };
   }
 
   user = await saveUser({ ...user, weeklyScans: user.weeklyScans + 1 });

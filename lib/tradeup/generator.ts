@@ -12,6 +12,7 @@ import {
   floatForWear,
   getMaxInputFloat,
   getWear,
+  getWearForSkin,
   INPUT_WEAR_MIN_SPAN,
   marketHashName,
   norm,
@@ -132,7 +133,11 @@ function applyComplexity(
     return inputs.map((i) => {
       const maxFloat = getMaxInputFloat(
         { minF: i.minF, maxF: i.maxF },
-        outcomes.map((o) => ({ minF: o.outMinF, maxF: o.outMaxF })),
+        outcomes.map((o) => ({
+          minF: o.outMinF,
+          maxF: o.outMaxF,
+          weight: o.prob,
+        })),
         totalCost,
         fee,
         (wear, outMin, outMax) => {
@@ -181,7 +186,7 @@ function buildOutcomes(
         outSkin.minF,
         outSkin.maxF
       );
-      const wear = getWear(outFloat);
+      const wear = getWearForSkin(outFloat, outSkin.minF, outSkin.maxF);
       // Incomplete contract: inventing odds for missing outcomes inflates EV/win%
       if (!possibleWears(outSkin.minF, outSkin.maxF, 0.001).includes(wear)) {
         return [];
@@ -624,7 +629,8 @@ export function repriceTradeUp(
   const fee = tradeUp.fee;
 
   const inputs = tradeUp.inputs.map((input) => {
-    const price = getPrice(prices, input.name, input.wear) || input.price;
+    // Never keep a stale optimistic quote after liquidity drops to zero
+    const price = getPrice(prices, input.name, input.wear);
     return { ...input, price };
   });
 
@@ -634,7 +640,7 @@ export function repriceTradeUp(
 
   const outcomes = tradeUp.outcomes
     .map((o) => {
-      const price = getPrice(prices, o.name, o.wear) || o.price;
+      const price = getPrice(prices, o.name, o.wear);
       const profit = r2(price * (1 - fee) - totalCost);
       return { ...o, price, profit };
     })

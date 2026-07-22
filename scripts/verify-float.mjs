@@ -46,6 +46,22 @@ function possibleWears(minF, maxF, minSpan = 0.01) {
   });
 }
 
+function isWearPossible(minF, maxF, wear, minSpan = 0.01) {
+  const hit = wearIntersection(minF, maxF, wear);
+  return Boolean(hit && hit.hi - hit.lo >= minSpan - 1e-9);
+}
+
+function getWearForSkin(float, minF, maxF) {
+  const clamped = Math.max(minF, Math.min(maxF, float));
+  const wear = getWear(clamped);
+  if (isWearPossible(minF, maxF, wear, 0.001)) return wear;
+  for (let i = WEAR_RANGES.length - 1; i >= 0; i--) {
+    const name = WEAR_RANGES[i].name;
+    if (isWearPossible(minF, maxF, name, 0.001)) return name;
+  }
+  return wear;
+}
+
 let failed = 0;
 function assert(name, ok, detail = "") {
   console.log(`${ok ? "OK" : "FAIL"} ${name}${detail ? ` (${detail})` : ""}`);
@@ -153,6 +169,25 @@ function assert(name, ok, detail = "") {
   assert("Icarus never above 0.10", icarus <= 0.1 + 1e-6, `out=${icarus}`);
   assert("Chronos never above 0.40", chronos <= 0.4 + 1e-6, `out=${chronos}`);
   assert("Icarus wear MW at cap", getWear(icarus) === "Minimal Wear");
+}
+
+// Case 10: Exact maxF at a wear boundary must stay inside the skin's wears
+{
+  // Skin capped at 0.07: getWear(0.07) is MW, but skin has no MW band
+  assert(
+    "maxF 0.07 → FN via getWearForSkin",
+    getWearForSkin(0.07, 0, 0.07) === "Factory New",
+    getWearForSkin(0.07, 0, 0.07)
+  );
+  assert(
+    "plain getWear(0.07) is MW (boundary)",
+    getWear(0.07) === "Minimal Wear"
+  );
+  assert(
+    "maxF 0.15 → MW via getWearForSkin",
+    getWearForSkin(0.15, 0, 0.15) === "Minimal Wear",
+    getWearForSkin(0.15, 0, 0.15)
+  );
 }
 
 if (failed) {
