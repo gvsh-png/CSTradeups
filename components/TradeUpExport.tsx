@@ -1,5 +1,5 @@
 import type { TradeUpResult } from "@/lib/tradeup/types";
-import { RARITY_COLORS, rarityShort } from "@/lib/constants";
+import { RARITY_COLORS, rarityShort, isSouvenirSkinName, SOUVENIR_BORDER } from "@/lib/constants";
 import { proxiedImageUrl } from "@/lib/proxyImage";
 import {
   DEFAULT_CURRENCY,
@@ -248,7 +248,10 @@ export default function TradeUpExport({
           <Badge rarity={tradeUp.inputRarity} />
         </div>
         <div style={{ display: "grid", gap: 8 }}>
-          {tradeUp.inputs.map((input, i) => (
+          {tradeUp.inputs.map((input, i) => {
+            const souvenir = isSouvenirSkinName(input.name);
+            const border = souvenir ? SOUVENIR_BORDER : inputTint.border;
+            return (
             <div
               key={i}
               style={{
@@ -257,7 +260,8 @@ export default function TradeUpExport({
                 gap: 12,
                 padding: "10px 12px",
                 borderRadius: 8,
-                border: `1px solid ${inputTint.border}`,
+                border: `1px solid ${border}`,
+                boxShadow: souvenir ? `inset 0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
                 background: inputTint.bg,
               }}
             >
@@ -293,7 +297,8 @@ export default function TradeUpExport({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

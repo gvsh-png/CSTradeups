@@ -136,7 +136,14 @@ function buildOutcomes(
   );
 
   for (const slot of slots) {
+    const totalWeight = slot.outs.reduce(
+      (s, o) => s + Math.max(1, o.outcomeWeight || 1),
+      0
+    );
+    if (totalWeight <= 0) return [];
+
     for (const outSkin of slot.outs) {
+      const weight = Math.max(1, outSkin.outcomeWeight || 1);
       const outFloat = clampFloat(
         outF(avgN, outSkin.minF, outSkin.maxF),
         outSkin.minF,
@@ -156,14 +163,46 @@ function buildOutcomes(
         float: r4(outFloat),
         wear,
         price,
-        prob: (slot.count / inputTotal) * (1 / slot.outs.length),
+        prob: (slot.count / inputTotal) * (weight / totalWeight),
         outMinF: outSkin.minF,
         outMaxF: outSkin.maxF,
       });
     }
   }
 
-  return mixed;
+  // Merge identical market rows (e.g. collapsed Doppler phases already weighted)
+  const merged = new Map<string, OutcomeCalc>();
+  for (const o of mixed) {
+    const key = `${o.name}|${o.wear}|${o.float}`;
+    const prev = merged.get(key);
+    if (prev) {
+      prev.prob += o.prob;
+    } else {
+      merged.set(key, { ...o });
+    }
+  }
+
+  return [...merged.values()];
+}
+
+/** Keep only specials that have a buyable price for the float-derived wear */
+function pricedSpecialOutcomes(
+  outs: SkinData[],
+  avgN: number,
+  prices: PriceMap
+): SkinData[] {
+  return outs.filter((outSkin) => {
+    const outFloat = clampFloat(
+      outF(avgN, outSkin.minF, outSkin.maxF),
+      outSkin.minF,
+      outSkin.maxF
+    );
+    const wear = getWearForSkin(outFloat, outSkin.minF, outSkin.maxF);
+    if (!possibleWears(outSkin.minF, outSkin.maxF, 0.001).includes(wear)) {
+      return false;
+    }
+    return getPrice(prices, outSkin.name, wear) > 0;
+  });
 }
 
 function toTradeUpResult(
@@ -265,12 +304,27 @@ function bestCandidateForSkin(
   maxUnitPrice: number
 ): InputCandidate | null {
   let best: InputCandidate | null = null;
+  const isSouvenir = Boolean(
+    skin.isSouvenir || skin.name.startsWith("Souvenir ")
+  );
+  const normalName = isSouvenir
+    ? skin.name.slice("Souvenir ".length)
+    : null;
+
   // Strict span — no "Well-Worn" on a skin that only reaches 0.39
   for (const wear of possibleWears(skin.minF, skin.maxF, INPUT_WEAR_MIN_SPAN)) {
     const af = floatForWear(skin.minF, skin.maxF, wear);
     if (af == null) continue;
     const price = getPrice(prices, skin.name, wear);
     if (price <= 0 || price > maxUnitPrice) continue;
+
+    // Souvenirs are almost always ≥ their normal counterpart. A souvenir
+    // quote far below the normal book is a merge/stub ghost — skip it.
+    if (normalName) {
+      const normalPrice = getPrice(prices, normalName, wear);
+      if (normalPrice > 0 && price < normalPrice * 0.85) continue;
+    }
+
     if (!best || price < best.price) {
       best = { skin, price, wear, float: af };
     }
@@ -460,11 +514,13 @@ function generateCovertTradeUps(
   }
 
   for (const [pcid, primaries] of Object.entries(cheapIn)) {
-    const pOS = specialByCR[`${pcid}|Extraordinary`] || [];
-    if (!pOS.length) continue;
+    const rawPOS = specialByCR[`${pcid}|Extraordinary`] || [];
+    if (!rawPOS.length) continue;
 
     for (const pInp of primaries) {
       const pN = norm(pInp.float, pInp.skin.minF, pInp.skin.maxF);
+      const pOS = pricedSpecialOutcomes(rawPOS, pN, prices);
+      if (!pOS.length) continue;
 
       const singleInputs: TradeUpInput[] = [
         {
@@ -512,16 +568,19 @@ function generateCovertTradeUps(
 
       for (const [fid, flist] of Object.entries(cheapIn)) {
         if (fid === pcid) continue;
-        const fOuts = specialByCR[`${fid}|Extraordinary`] || [];
-        if (!fOuts.length) continue;
+        const rawFOuts = specialByCR[`${fid}|Extraordinary`] || [];
+        if (!rawFOuts.length) continue;
         for (const f of flist) {
           if (f.skin.name === pInp.skin.name) continue;
           if (weaponOf(f.skin.name) === weaponOf(pInp.skin.name)) continue;
+          const fN = norm(f.float, f.skin.minF, f.skin.maxF);
+          const fOuts = pricedSpecialOutcomes(rawFOuts, fN, prices);
+          if (!fOuts.length) continue;
           fillers.push({
             cid: fid,
             inp: f,
             outs: fOuts,
-            n: norm(f.float, f.skin.minF, f.skin.maxF),
+            n: fN,
           });
         }
       }

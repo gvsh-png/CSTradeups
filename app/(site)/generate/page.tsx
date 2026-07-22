@@ -83,7 +83,11 @@ export default function GeneratePage() {
 
       if (!data.results?.length) {
         setError(
-          "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
+          params.complexity === "covert"
+            ? "No knife/glove contracts matched. Widen the price range, loosen risk chance, or include more collections."
+            : params.complexity === "souvenir"
+              ? "No souvenir contracts matched. Widen the price range or loosen risk chance — souvenir inputs need real market prices."
+              : "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
         );
       } else {
         requestAnimationFrame(() => {

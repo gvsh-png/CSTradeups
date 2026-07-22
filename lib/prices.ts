@@ -222,9 +222,12 @@ export function resolveSourceConflict(
     if (saMid / spMid >= 2.5) return { price: sa, corrected: true };
   }
 
-  // Extreme disagreement without ladder support → prefer lower (ghost reject)
+  // Extreme disagreement without ladder support → trust SteamApis.
+  // Rejects Skinport suggested ghosts ($529 vs Steam $0.05) and keeps real
+  // Steam books for thin high-value souvenirs ($450 vs Skinport $0.09 stubs).
   if (hi / lo >= 5) {
-    return { price: lo, corrected: true };
+    if (sa > 0) return { price: sa, corrected: true };
+    return { price: sp, corrected: true };
   }
 
   // Mild disagreement: SteamApis (closer to Steam / TradeUpSpy)
@@ -372,18 +375,24 @@ function mergeBulkSources(
 
     // Steam-only: reject when liquid Skinport wears of the same skin are
     // an order of magnitude cheaper (AUG Colony BS Steam ~$2 vs Skinport FT ~$0.03).
+    // Skip this veto for Souvenir / ★ items — thin high-value books get false
+    // kills from sparse Skinport stubs.
     if (sa > 0) {
       const base = skinBaseName(key);
-      const spPeers: number[] = [];
-      for (const [k, p] of Object.entries(skinport || {})) {
-        if (k === key || skinBaseName(k) !== base || !(p > 0)) continue;
-        if ((skinportQty?.[k] || 0) <= 0) continue;
-        spPeers.push(p);
-      }
-      const peerMid = median(spPeers);
-      if (peerMid > 0 && sa > peerMid * 10) {
-        deadMarkets++;
-        continue;
+      const isSpecialName =
+        base.startsWith("Souvenir ") || base.startsWith("★ ");
+      if (!isSpecialName) {
+        const spPeers: number[] = [];
+        for (const [k, p] of Object.entries(skinport || {})) {
+          if (k === key || skinBaseName(k) !== base || !(p > 0)) continue;
+          if ((skinportQty?.[k] || 0) <= 0) continue;
+          spPeers.push(p);
+        }
+        const peerMid = median(spPeers);
+        if (peerMid > 0 && sa > peerMid * 10) {
+          deadMarkets++;
+          continue;
+        }
       }
       prices[key] = sa;
     }
@@ -474,12 +483,11 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
 /**
  * Daily shared price cache — all users share the same bulk price data.
  * Refreshes automatically after 24 hours on the next request.
- * v8: drop Skinport suggested ghosts; source-specific liquidity; prefer
- * lower on extreme gaps without ladder support.
+ * v9: extreme gaps trust SteamApis; keep Souvenir/★ Steam books.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v8"],
+  ["tradeup-bulk-prices-v9"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -502,5 +510,11 @@ export function getPrice(
   skinName: string,
   wear: string
 ): number {
-  return prices[`${skinName} (${wear})`] || 0;
+  const withWear = prices[`${skinName} (${wear})`] || 0;
+  if (withWear > 0) return withWear;
+  // Vanilla knives/gloves list on Steam without an exterior suffix
+  if (skinName.startsWith("★ ") && !skinName.includes(" | ")) {
+    return prices[skinName] || 0;
+  }
+  return 0;
 }
