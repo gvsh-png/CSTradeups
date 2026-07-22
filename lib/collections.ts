@@ -9,6 +9,7 @@ export const NEW_COLLECTION_MAX_AGE_DAYS = 30;
  * Auto-discovered collections get a first-seen date instead.
  */
 export const COLLECTION_RELEASE_DATES: Record<string, string> = {
+  set_ascent: "2025-03-31", // The Ascent Collection (Spring Forward)
   set_spy_tech: "2026-07-08", // Spy Tech Collection
   set_arabesque: "2026-07-08", // Arabesque Collection
 };
@@ -21,6 +22,7 @@ export const COLLECTION_RELEASE_DATES: Record<string, string> = {
 export const KNOWN_COLLECTION_BASELINE = new Set([
   "set_anubis",
   "set_arabesque",
+  "set_ascent",
   "set_assault",
   "set_aztec",
   "set_baggage",
