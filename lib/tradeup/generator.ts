@@ -3,6 +3,7 @@ import {
   RARITY_ORDER,
   STEAM_FEE,
   inputCountForMode,
+  usesAnyRisk,
   type Complexity,
 } from "../constants";
 import { getPrice } from "../prices";
@@ -347,6 +348,58 @@ function selectDiverseResults(
     const sa = riskRankScore(a.winPct, a.expectedProfit, targetWinChance);
     return sb - sa;
   });
+  return pickDiverseFromSorted(sorted, limit);
+}
+
+/**
+ * Covert / Souvenir: no risk target — round-robin across win-chance buckets
+ * so the list mixes risky and safe pools.
+ */
+function selectDiverseAnyRisk(
+  candidates: TradeUpResult[],
+  limit: number
+): TradeUpResult[] {
+  const byBucket = new Map<number, TradeUpResult[]>();
+  for (const c of candidates) {
+    const b = winChanceBucket(c.winPct);
+    const list = byBucket.get(b);
+    if (list) list.push(c);
+    else byBucket.set(b, [c]);
+  }
+
+  for (const list of byBucket.values()) {
+    list.sort((a, b) => b.expectedProfit - a.expectedProfit);
+  }
+
+  // Shuffle bucket order so each scan mixes different risk levels
+  const buckets = [...byBucket.keys()].sort((a, b) => a - b);
+  for (let i = buckets.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [buckets[i], buckets[j]] = [buckets[j], buckets[i]];
+  }
+
+  const interleaved: TradeUpResult[] = [];
+  const indices = new Map<number, number>();
+  let added = true;
+  while (added && interleaved.length < candidates.length) {
+    added = false;
+    for (const b of buckets) {
+      const list = byBucket.get(b)!;
+      const idx = indices.get(b) || 0;
+      if (idx >= list.length) continue;
+      interleaved.push(list[idx]);
+      indices.set(b, idx + 1);
+      added = true;
+    }
+  }
+
+  return pickDiverseFromSorted(interleaved, limit);
+}
+
+function pickDiverseFromSorted(
+  sorted: TradeUpResult[],
+  limit: number
+): TradeUpResult[] {
   const selected: TradeUpResult[] = [];
   const usedIds = new Set<string>();
   const usedSkins = new Set<string>();
@@ -417,6 +470,18 @@ function selectDiverseResults(
   return selected;
 }
 
+function finalizeCandidates(
+  candidates: TradeUpResult[],
+  params: GenerateParams,
+  limit: number
+): TradeUpResult[] {
+  if (usesAnyRisk(params.complexity)) {
+    return selectDiverseAnyRisk(candidates, limit);
+  }
+  const { target } = winChanceBandFromTarget(params.targetWinChance);
+  return selectDiverseResults(candidates, limit, target);
+}
+
 export async function generateTradeUps(
   skinDB: SkinData[],
   byCR: Record<string, SkinData[]>,
@@ -459,8 +524,7 @@ export async function generateTradeUps(
         )
       : candidates;
 
-  const { target } = winChanceBandFromTarget(params.targetWinChance);
-  return selectDiverseResults(filtered, limit, target);
+  return finalizeCandidates(filtered, params, limit);
 }
 
 function generateCovertTradeUps(
@@ -654,8 +718,7 @@ function generateCovertTradeUps(
     }
   }
 
-  const { target } = winChanceBandFromTarget(params.targetWinChance);
-  return selectDiverseResults(candidates, limit, target);
+  return finalizeCandidates(candidates, params, limit);
 }
 
 function generateTierTradeUps(

@@ -27,6 +27,15 @@ export function winChanceBandFromTarget(targetWin: number): {
   };
 }
 
+/** Full 0–100 band — Covert / Souvenir pick across every risk pool */
+export function anyRiskWinChanceBand(): {
+  target: number;
+  minWinChance: number;
+  maxWinChance: number;
+} {
+  return { target: 50, minWinChance: 0, maxWinChance: 100 };
+}
+
 /** @deprecated Use winChanceBandFromTarget — old Risk slider was inverted (60 risk → 40% win). */
 export function winChanceBandFromRisk(risk: number) {
   return winChanceBandFromTarget(100 - clampTargetWin(risk));
