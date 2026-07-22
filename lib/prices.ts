@@ -245,7 +245,11 @@ async function fetchSteamApisPrices(): Promise<{
   try {
     const res = await fetch(
       `https://api.steamapis.com/market/items/730?api_key=${apiKey}`,
-      { cache: "no-store" }
+      {
+        cache: "no-store",
+        // Full CS catalog is large — hard cap so generate/refresh never hang
+        signal: AbortSignal.timeout(25_000),
+      }
     );
     if (!res.ok) return null;
 
@@ -290,6 +294,7 @@ async function fetchSkinportPrices(): Promise<{
           "User-Agent": "tradeupcsgo.net/1.0",
         },
         cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
       }
     );
     if (!res.ok) return null;
@@ -462,6 +467,8 @@ function mergeBulkSources(
 /**
  * Internal fetch — called at most once per day via unstable_cache.
  * One SteamApis call + one Skinport call = 1 API request total (SteamApis).
+ * Always settles (timeouts inside fetchers) so a hung feed cannot poison
+ * the cache by aborting mid-write on every cold request.
  */
 async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
   const [steamApisResult, skinportResult] = await Promise.all([
@@ -483,11 +490,11 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
 /**
  * Daily shared price cache — all users share the same bulk price data.
  * Refreshes automatically after 24 hours on the next request.
- * v9: extreme gaps trust SteamApis; keep Souvenir/★ Steam books.
+ * v10: hard timeouts on SteamApis/Skinport so scans never hang forever.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v9"],
+  ["tradeup-bulk-prices-v10"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],

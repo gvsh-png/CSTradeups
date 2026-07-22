@@ -26,8 +26,15 @@ export default function SavedTradeUps({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tradeUp: item }),
+        signal: AbortSignal.timeout(40_000),
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data: { tradeUp?: SavedTradeUp; error?: string } = {};
+      try {
+        data = raw ? (JSON.parse(raw) as typeof data) : {};
+      } catch {
+        return;
+      }
       if (res.ok && data.tradeUp) {
         // Expire old AI analysis when prices refresh — user can request a new one
         const { insight: _old, ...refreshed } = data.tradeUp as SavedTradeUp;
@@ -38,7 +45,7 @@ export default function SavedTradeUps({
         });
       }
     } catch {
-      /* ignore */
+      /* ignore — clear spinner in finally */
     } finally {
       setRefreshingId(null);
     }
