@@ -11,6 +11,8 @@ export interface SkinData {
   isSouvenir?: boolean;
   /** Knife / glove special item */
   isSpecial?: boolean;
+  /** How many equal CS2 outcome slots this market name represents (Doppler phases) */
+  outcomeWeight?: number;
 }
 
 export interface TradeUpInput {

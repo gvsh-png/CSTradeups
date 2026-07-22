@@ -43,8 +43,11 @@ function resolveSourceConflict(
     if (saMid / spMid >= 2.5) return sa;
   }
 
-  // Extreme gap without ladder support → prefer LOWER (reject ghosts)
-  if (hi / lo >= 5) return lo;
+  // Extreme disagreement without ladder → trust SteamApis
+  if (hi / lo >= 5) {
+    if (sa > 0) return sa;
+    return sp;
+  }
   return sa;
 }
 
@@ -86,16 +89,22 @@ assert(
   70
 );
 
-// Extreme disagreement, no siblings → LOWER (CaliCamo suggested $529 vs Steam $0.05)
+// Extreme disagreement, no siblings → trust SteamApis
+// (rejects Skinport $529 ghosts vs Steam $0.05; keeps souvenir Steam books)
 assert(
-  "extreme gap prefer lower (ghost reject)",
+  "extreme gap prefer SteamApis (ghost reject)",
   resolveSourceConflict(0.05, 529.56, [], []),
   0.05
 );
 assert(
-  "extreme gap Steam high Skinport low → Skinport",
+  "extreme gap Steam high Skinport low → Steam",
   resolveSourceConflict(70, 1.27, [], []),
-  1.27
+  70
+);
+assert(
+  "souvenir Death Strike-style stub rejected",
+  resolveSourceConflict(450, 0.09, [], []),
+  450
 );
 
 // Close sources: average at any price level

@@ -121,28 +121,35 @@ export function buildSkinDatabase(
   });
 }
 
-/** Market display name for a knife/glove paint */
+/** Normalize CSFloat knife paint names onto Steam market titles */
+export function normalizeSpecialPaintName(paintName: string): string {
+  const p = (paintName || "").trim();
+  if (!p) return "Vanilla";
+  if (/^Doppler Phase [1-4]$/i.test(p)) return "Doppler";
+  if (/^Gamma Doppler Phase [1-4]$/i.test(p)) return "Gamma Doppler";
+  return p;
+}
+
+/** Market display name for a knife/glove paint (Steam hash without wear) */
 export function specialItemMarketName(
   weaponName: string,
   paintName: string,
-  type: string
+  _type: string
 ): string {
-  const isKnife = type === "Knives";
+  const paint = normalizeSpecialPaintName(paintName);
   const vanilla =
-    !paintName ||
-    paintName.toLowerCase() === "vanilla" ||
-    paintName.toLowerCase() === "—";
-  if (isKnife) {
-    if (vanilla) return `★ ${weaponName}`;
-    return `★ ${weaponName} | ${paintName}`;
-  }
-  // Gloves
-  if (vanilla) return weaponName;
-  return `${weaponName} | ${paintName}`;
+    !paint ||
+    paint.toLowerCase() === "vanilla" ||
+    paint === "—";
+  // Knives and gloves both use the ★ prefix on Steam
+  if (vanilla) return `★ ${weaponName}`;
+  return `★ ${weaponName} | ${paint}`;
 }
 
 /**
  * Knives & gloves grouped by collection — Covert→Extraordinary outcomes.
+ * Doppler phase paints collapse to one Steam name but keep slot weight so
+ * odds stay correct (4 phases → weight 4).
  */
 export function buildSpecialOutcomesByCollection(
   schema: SchemaData,
@@ -185,12 +192,16 @@ export function buildSpecialOutcomesByCollection(
         })),
         image: paint.image,
         isSpecial: true,
+        outcomeWeight: 1,
       };
 
       for (const c of validCols) {
         const key = `${c}|Extraordinary`;
         if (!byCol[key]) byCol[key] = [];
-        if (!byCol[key].some((x) => x.name === skin.name)) {
+        const existing = byCol[key].find((x) => x.name === skin.name);
+        if (existing) {
+          existing.outcomeWeight = (existing.outcomeWeight || 1) + 1;
+        } else {
           byCol[key].push(skin);
         }
       }

@@ -46,6 +46,14 @@ export function rarityStyle(rarity: string): {
   };
 }
 
+/** Souvenir accent — Steam-style gold rim on top of rarity tint */
+export const SOUVENIR_BORDER = "#e4ae39";
+export const SOUVENIR_BORDER_SOFT = "#e4ae3999";
+
+export function isSouvenirSkinName(name: string): boolean {
+  return name.startsWith("Souvenir ");
+}
+
 export const WEAR_RANGES = [
   { name: "Factory New", min: 0, max: 0.07 },
   { name: "Minimal Wear", min: 0.07, max: 0.15 },

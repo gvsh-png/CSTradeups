@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TradeUpResult } from "@/lib/tradeup/types";
-import { rarityShort, rarityStyle } from "@/lib/constants";
+import { rarityShort, rarityStyle, isSouvenirSkinName, SOUVENIR_BORDER } from "@/lib/constants";
 import type { ProgressState } from "@/hooks/useSimulatedProgress";
 import LoadingProgress from "./LoadingProgress";
 import MarketLinks from "./MarketLinks";
@@ -84,10 +84,12 @@ function SkinThumb({
   src,
   alt,
   rarity,
+  souvenir = false,
 }: {
   src?: string;
   alt: string;
   rarity: string;
+  souvenir?: boolean;
 }) {
   const style = rarityStyle(rarity);
   return src ? (
@@ -97,16 +99,18 @@ function SkinThumb({
       alt={alt}
       className="w-10 h-10 shrink-0 object-contain rounded border"
       style={{
-        borderColor: style.borderColor,
+        borderColor: souvenir ? SOUVENIR_BORDER : style.borderColor,
         backgroundColor: style.backgroundColor,
+        boxShadow: souvenir ? `0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
       }}
     />
   ) : (
     <div
       className="w-10 h-10 shrink-0 rounded border"
       style={{
-        borderColor: style.borderColor,
+        borderColor: souvenir ? SOUVENIR_BORDER : style.borderColor,
         backgroundColor: style.backgroundColor,
+        boxShadow: souvenir ? `0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
       }}
     />
   );
@@ -404,19 +408,25 @@ export default function TradeUpCard({
           <RarityBadge rarity={tradeUp.inputRarity} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {tradeUp.inputs.map((input, i) => (
+          {tradeUp.inputs.map((input, i) => {
+            const souvenir = isSouvenirSkinName(input.name);
+            return (
             <div
               key={i}
               className="flex items-center gap-2.5 rounded-md border p-2 min-w-0"
               style={{
-                borderColor: inputStyle.borderColor,
+                borderColor: souvenir ? SOUVENIR_BORDER : inputStyle.borderColor,
                 backgroundColor: inputStyle.backgroundColor,
+                boxShadow: souvenir
+                  ? `inset 0 0 0 1px ${SOUVENIR_BORDER}`
+                  : undefined,
               }}
             >
               <SkinThumb
                 src={input.image}
                 alt={input.name}
                 rarity={tradeUp.inputRarity}
+                souvenir={souvenir}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
@@ -435,7 +445,8 @@ export default function TradeUpCard({
                 </p>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
