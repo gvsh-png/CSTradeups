@@ -606,15 +606,48 @@ export async function generateTradeUps(
 }
 
 /**
- * Light cleanup only. Aggressive cross-wear clamps caused worse bugs
- * (First Class BS crushed; MW premiums destroyed). Source merge in
- * lib/prices.ts handles SteamApis vs Skinport disagreements.
+ * Drop lone cross-wear spikes without assuming FN≥MW≥FT≥WW≥BS order.
+ * Example: CaliCamo WW $529 while other wears are cents → drop WW.
+ * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
+ * stays within a normal band.
  */
 export function sanitizePrices(
   prices: PriceMap,
   _skinDB: SkinData[]
 ): PriceMap {
-  return { ...prices };
+  const out: PriceMap = { ...prices };
+  const byBase = new Map<string, string[]>();
+
+  for (const key of Object.keys(out)) {
+    const idx = key.lastIndexOf(" (");
+    const base = idx > 0 ? key.slice(0, idx) : key;
+    const list = byBase.get(base);
+    if (list) list.push(key);
+    else byBase.set(base, [key]);
+  }
+
+  for (const keys of byBase.values()) {
+    if (keys.length < 2) continue;
+    const vals = keys.map((k) => out[k]).filter((p) => p > 0);
+    if (vals.length < 2) continue;
+    const sorted = [...vals].sort((a, b) => a - b);
+    const mid =
+      sorted.length % 2 === 0
+        ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+        : sorted[Math.floor(sorted.length / 2)];
+    if (mid <= 0) continue;
+
+    for (const key of keys) {
+      const p = out[key];
+      if (!(p > 0)) continue;
+      // Spike vs peer median — ghost suggested / Steam outliers
+      if (p > mid * 12 && p > mid + 8) {
+        delete out[key];
+      }
+    }
+  }
+
+  return out;
 }
 
 /**

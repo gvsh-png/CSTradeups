@@ -43,8 +43,19 @@ function resolveSourceConflict(
     if (saMid / spMid >= 2.5) return sa;
   }
 
-  if (hi / lo >= 5) return hi;
+  // Extreme gap without ladder support → prefer LOWER (reject ghosts)
+  if (hi / lo >= 5) return lo;
   return sa;
+}
+
+/** Skinport: never use suggested_price */
+function resolveSkinportPrice(item) {
+  if (item.median_price && item.median_price > 0) return r2(item.median_price);
+  if (item.mean_price && item.mean_price > 0) return r2(item.mean_price);
+  if (item.min_price && item.min_price > 0 && (item.quantity || 0) > 0) {
+    return r2(item.min_price);
+  }
+  return 0;
 }
 
 let failed = 0;
@@ -75,10 +86,19 @@ assert(
   70
 );
 
-// Extreme disagreement, no siblings → higher (avoid fake ROI)
-assert("extreme gap prefer higher", resolveSourceConflict(1.27, 70, [], []), 70);
+// Extreme disagreement, no siblings → LOWER (CaliCamo suggested $529 vs Steam $0.05)
+assert(
+  "extreme gap prefer lower (ghost reject)",
+  resolveSourceConflict(0.05, 529.56, [], []),
+  0.05
+);
+assert(
+  "extreme gap Steam high Skinport low → Skinport",
+  resolveSourceConflict(70, 1.27, [], []),
+  1.27
+);
 
-// Close sources: average at any price level (no $30 ceiling)
+// Close sources: average at any price level
 assert("average when close", resolveSourceConflict(6.2, 5.9, [], []), 6.05);
 assert(
   "high-value close sources average",
@@ -103,30 +123,90 @@ assert(
 
 assert("median even", median([6, 57]), 31.5);
 
-/** Ghost wears with zero Steam sold and zero Skinport listings are dropped */
-function hasBuyableLiquidity(liq) {
-  return liq.steamSold7 > 0 || liq.steamSold30 > 0 || liq.skinportQty > 0;
-}
-
+// Skinport suggested ghosts
 assert(
-  "dead Steam+Skinport rejected",
-  hasBuyableLiquidity({ steamSold7: 0, steamSold30: 0, skinportQty: 0 }) ? 1 : 0,
+  "suggested-only qty0 → 0",
+  resolveSkinportPrice({
+    market_hash_name: "Negev | CaliCamo (Well-Worn)",
+    median_price: null,
+    mean_price: null,
+    min_price: null,
+    suggested_price: 529.56,
+    quantity: 0,
+  }),
   0
 );
 assert(
-  "Steam sold30 keeps item",
-  hasBuyableLiquidity({ steamSold7: 0, steamSold30: 2, skinportQty: 0 }) ? 1 : 0,
-  1
+  "suggested ignored even with qty",
+  resolveSkinportPrice({
+    market_hash_name: "X",
+    median_price: null,
+    mean_price: null,
+    min_price: null,
+    suggested_price: 99,
+    quantity: 5,
+  }),
+  0
 );
 assert(
-  "Skinport listing keeps item",
-  hasBuyableLiquidity({ steamSold7: 0, steamSold30: 0, skinportQty: 1 }) ? 1 : 0,
-  1
+  "min_price with qty kept",
+  resolveSkinportPrice({
+    market_hash_name: "Y",
+    median_price: null,
+    mean_price: null,
+    min_price: 0.04,
+    suggested_price: 50,
+    quantity: 12,
+  }),
+  0.04
 );
 assert(
-  "Steam sold7 alone keeps item",
-  hasBuyableLiquidity({ steamSold7: 1, steamSold30: 0, skinportQty: 0 }) ? 1 : 0,
-  1
+  "min_price qty0 rejected",
+  resolveSkinportPrice({
+    market_hash_name: "Z",
+    median_price: null,
+    mean_price: null,
+    min_price: 0.04,
+    suggested_price: null,
+    quantity: 0,
+  }),
+  0
+);
+assert(
+  "median preferred over suggested",
+  resolveSkinportPrice({
+    market_hash_name: "W",
+    median_price: 0.06,
+    mean_price: null,
+    min_price: 0.05,
+    suggested_price: 400,
+    quantity: 3,
+  }),
+  0.06
+);
+
+/** Per-source liquidity helpers (mirror mergeBulkSources) */
+function steamUsable(price, liq) {
+  return price > 0 && (liq.steamSold7 > 0 || liq.steamSold30 > 0) ? price : 0;
+}
+function skinportUsable(price, liq) {
+  return price > 0 && liq.skinportQty > 0 ? price : 0;
+}
+
+assert(
+  "Steam sold does NOT unlock Skinport ghost",
+  skinportUsable(529.56, { steamSold7: 5, steamSold30: 20, skinportQty: 0 }),
+  0
+);
+assert(
+  "Skinport qty unlocks Skinport",
+  skinportUsable(0.06, { steamSold7: 0, steamSold30: 0, skinportQty: 4 }),
+  0.06
+);
+assert(
+  "Steam sold unlocks Steam",
+  steamUsable(2.16, { steamSold7: 0, steamSold30: 3, skinportQty: 0 }),
+  2.16
 );
 
 if (failed) {

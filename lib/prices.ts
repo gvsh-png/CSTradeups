@@ -138,12 +138,17 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
   return { price: r2(priceUSD), corrected };
 }
 
-function resolveSkinportPrice(item: SkinportItem): number {
+/**
+ * Real Skinport book only. Never use `suggested_price` — Skinport invents
+ * it with quantity=0 (e.g. Negev | CaliCamo WW suggested $529.56).
+ */
+export function resolveSkinportPrice(item: SkinportItem): number {
   if (item.median_price && item.median_price > 0) return r2(item.median_price);
   if (item.mean_price && item.mean_price > 0) return r2(item.mean_price);
-  if (item.suggested_price && item.suggested_price > 0)
-    return r2(item.suggested_price);
-  if (item.min_price && item.min_price > 0) return r2(item.min_price);
+  // min_price only when something is actually listed
+  if (item.min_price && item.min_price > 0 && (item.quantity || 0) > 0) {
+    return r2(item.min_price);
+  }
   return 0;
 }
 
@@ -177,8 +182,8 @@ export function mergePriceCandidates(candidates: number[]): number {
  * Uses each source's own wear ladder so a consistently-wrong low SteamApis
  * book (e.g. First Class ~$1) cannot veto a consistent Skinport ladder (~$50+).
  *
- * No dollar ceiling — liquidity filtering (sold/listings) decides whether a
- * quote is usable; close sources are averaged at any price level.
+ * Extreme gaps without ladder support prefer the LOWER quote — preferring
+ * higher previously locked in Skinport suggested ghosts ($529 vs $0.05).
  */
 export function resolveSourceConflict(
   steamApis: number,
@@ -211,15 +216,15 @@ export function resolveSourceConflict(
   }
 
   // Two consistent ladders far apart → trust the higher book.
-  // Underpriced inputs create fake 600% ROI trade-ups (First Class bug).
+  // Underpriced SteamApis ladders create fake cheap inputs (First Class).
   if (saMid > 0 && spMid > 0) {
     if (spMid / saMid >= 2.5) return { price: sp, corrected: true };
     if (saMid / spMid >= 2.5) return { price: sa, corrected: true };
   }
 
-  // Extreme disagreement without usable ladders — prefer higher
+  // Extreme disagreement without ladder support → prefer lower (ghost reject)
   if (hi / lo >= 5) {
-    return { price: hi, corrected: true };
+    return { price: lo, corrected: true };
   }
 
   // Mild disagreement: SteamApis (closer to Steam / TradeUpSpy)
@@ -333,13 +338,19 @@ function mergeBulkSources(
 
   // Pass 1: agree / single-source keys — build wear context
   for (const key of allKeys) {
-    const sa = steamApis?.[key] || 0;
-    const sp = skinport?.[key] || 0;
+    const saRaw = steamApis?.[key] || 0;
+    const spRaw = skinport?.[key] || 0;
+    const liq = liquidityFor(key);
 
-    // Ghost wears: stale Steam "safe" price or Skinport suggested with
-    // zero sold and zero listings — never feed these into trade-ups.
-    if (!hasBuyableLiquidity(liquidityFor(key))) {
-      if (sa > 0 || sp > 0) deadMarkets++;
+    // Source-specific liquidity: Steam sold unlocks Steam only;
+    // Skinport quantity unlocks Skinport only. Never let Steam volume
+    // validate a Skinport suggested ghost (or vice versa).
+    const sa =
+      saRaw > 0 && (liq.steamSold7 > 0 || liq.steamSold30 > 0) ? saRaw : 0;
+    const sp = spRaw > 0 && liq.skinportQty > 0 ? spRaw : 0;
+
+    if (sa <= 0 && sp <= 0) {
+      if (saRaw > 0 || spRaw > 0) deadMarkets++;
       continue;
     }
 
@@ -356,24 +367,49 @@ function mergeBulkSources(
 
     if (sp > 0) {
       prices[key] = sp;
-    } else if (sa > 0) {
-      // Liquid Steam-only quote (sold volume already verified above)
+      continue;
+    }
+
+    // Steam-only: reject when liquid Skinport wears of the same skin are
+    // an order of magnitude cheaper (AUG Colony BS Steam ~$2 vs Skinport FT ~$0.03).
+    if (sa > 0) {
+      const base = skinBaseName(key);
+      const spPeers: number[] = [];
+      for (const [k, p] of Object.entries(skinport || {})) {
+        if (k === key || skinBaseName(k) !== base || !(p > 0)) continue;
+        if ((skinportQty?.[k] || 0) <= 0) continue;
+        spPeers.push(p);
+      }
+      const peerMid = median(spPeers);
+      if (peerMid > 0 && sa > peerMid * 10) {
+        deadMarkets++;
+        continue;
+      }
       prices[key] = sa;
     }
   }
 
-  // Pass 2: disagreements — compare each source against its own wear ladder
+  // Pass 2: disagreements — only liquid quotes on each side
   for (const key of deferred) {
-    const sa = steamApis?.[key] || 0;
-    const sp = skinport?.[key] || 0;
+    const liq = liquidityFor(key);
+    const saRaw = steamApis?.[key] || 0;
+    const spRaw = skinport?.[key] || 0;
+    const sa =
+      saRaw > 0 && (liq.steamSold7 > 0 || liq.steamSold30 > 0) ? saRaw : 0;
+    const sp = spRaw > 0 && liq.skinportQty > 0 ? spRaw : 0;
     const base = skinBaseName(key);
     const saSiblings: number[] = [];
     const spSiblings: number[] = [];
     for (const [k, p] of Object.entries(steamApis || {})) {
-      if (k !== key && skinBaseName(k) === base && p > 0) saSiblings.push(p);
+      if (k !== key && skinBaseName(k) === base && p > 0) {
+        const s = steamSold?.[k];
+        if ((s?.sold7 || 0) > 0 || (s?.sold30 || 0) > 0) saSiblings.push(p);
+      }
     }
     for (const [k, p] of Object.entries(skinport || {})) {
-      if (k !== key && skinBaseName(k) === base && p > 0) spSiblings.push(p);
+      if (k !== key && skinBaseName(k) === base && p > 0) {
+        if ((skinportQty?.[k] || 0) > 0) spSiblings.push(p);
+      }
     }
     const { price, corrected } = resolveSourceConflict(
       sa,
@@ -438,11 +474,12 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
 /**
  * Daily shared price cache — all users share the same bulk price data.
  * Refreshes automatically after 24 hours on the next request.
- * v7: liquidity gate only (no $30 Steam trust ceiling).
+ * v8: drop Skinport suggested ghosts; source-specific liquidity; prefer
+ * lower on extreme gaps without ladder support.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v7"],
+  ["tradeup-bulk-prices-v8"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
