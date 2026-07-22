@@ -58,8 +58,8 @@ function resolveSkinportPrice(item) {
   const med = item.median_price && item.median_price > 0 ? item.median_price : 0;
   const mean = item.mean_price && item.mean_price > 0 ? item.mean_price : 0;
 
-  if (min > 0 && med > min * 3) return r2(min);
-  if (min > 0 && mean > min * 3) return r2(min);
+  if (min > 0 && med > min * 2) return r2(min);
+  if (min > 0 && mean > min * 2) return r2(min);
   if (med > 0) return r2(med);
   if (mean > 0) return r2(mean);
   if (min > 0) return r2(min);
@@ -209,6 +209,18 @@ assert(
     quantity: 8,
   }),
   14.2
+);
+assert(
+  "AXIA BS median ~2.6× live min → prefer min",
+  resolveSkinportPrice({
+    market_hash_name: "Glock-18 | AXIA (Battle-Scarred)",
+    median_price: 105.16,
+    mean_price: 90,
+    min_price: 39.22,
+    suggested_price: null,
+    quantity: 11,
+  }),
+  39.22
 );
 
 /** Per-source liquidity helpers (mirror mergeBulkSources) */
