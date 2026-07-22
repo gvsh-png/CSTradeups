@@ -28,7 +28,6 @@ export default function ProfilePage() {
     return (
       <div className="mx-auto max-w-container px-4 sm:px-6 py-10 sm:py-16">
         <div className="max-w-lg mx-auto panel panel-desktop p-6 sm:p-8 text-center relative overflow-hidden">
-          <div className="absolute top-0 inset-x-0 h-0.5 bg-accent" />
           <h1 className="text-xl font-semibold tracking-tight">Profile</h1>
           <p className="mt-2 text-[13px] text-[var(--text-muted)] leading-relaxed">
             Sign in with Steam to track scan quotas, manage your plan, and keep
@@ -66,7 +65,6 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-container px-4 sm:px-6 py-5 lg:py-8 space-y-5">
       <div className="panel panel-desktop p-5 sm:p-6 relative overflow-hidden">
-        <div className="absolute top-0 inset-x-0 h-0.5 bg-accent" />
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           {user.avatar ? (
             // eslint-disable-next-line @next/next/no-img-element

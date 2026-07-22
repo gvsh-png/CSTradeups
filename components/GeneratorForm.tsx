@@ -205,8 +205,6 @@ export default function GeneratorForm({
           : "p-4 lg:p-5"
       } ${hero ? "" : "lg:sticky lg:top-16"}`}
     >
-      <div className="absolute top-0 inset-x-0 h-0.5 bg-secondary pointer-events-none" />
-
       <div
         className={`flex items-start justify-between gap-3 ${
           hero
@@ -473,7 +471,7 @@ export default function GeneratorForm({
                 </div>
               )}
               <p className="scanner-target-hint text-[10px] text-[var(--text-muted)] leading-snug">
-                Ranks Standard contracts by chance of landing this skin.
+                Prefers profitable contracts that can land this skin, then higher hit chance.
               </p>
             </div>
           )}

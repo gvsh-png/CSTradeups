@@ -77,6 +77,61 @@ const skins = [
 const hits = searchTargetableOutcomes(skins, "axia", 10);
 assert("search axia", hits.length === 1 && hits[0].name.includes("AXIA"));
 
+/** Ranking for target hunt: win% > 0 first, then hit%, then EV */
+function rankTargetHunt(a, b, target) {
+  const aWin = a.winPct > 0 ? 1 : 0;
+  const bWin = b.winPct > 0 ? 1 : 0;
+  if (bWin !== aWin) return bWin - aWin;
+  const aPos = a.expectedProfit > 0 ? 1 : 0;
+  const bPos = b.expectedProfit > 0 ? 1 : 0;
+  if (bPos !== aPos) return bPos - aPos;
+  const tb = targetHitPct(b.outcomes, target);
+  const ta = targetHitPct(a.outcomes, target);
+  if (tb !== ta) return tb - ta;
+  return b.expectedProfit - a.expectedProfit;
+}
+
+const target = "AK-47 | Rat Rod";
+const huntCandidates = [
+  {
+    winPct: 0,
+    expectedProfit: -5,
+    outcomes: [
+      { name: target, prob: 20 },
+      { name: "Other", prob: 80 },
+    ],
+  },
+  {
+    winPct: 40,
+    expectedProfit: 1.5,
+    outcomes: [
+      { name: target, prob: 10 },
+      { name: "Other", prob: 90 },
+    ],
+  },
+  {
+    winPct: 20,
+    expectedProfit: 0.5,
+    outcomes: [
+      { name: target, prob: 15 },
+      { name: "Other", prob: 85 },
+    ],
+  },
+];
+const ranked = [...huntCandidates].sort((a, b) =>
+  rankTargetHunt(a, b, target)
+);
+// Among profitable: higher target hit% first (15% over 10%), losers last
+assert(
+  "hunt ranks profitable before max-hit loser",
+  ranked[0].winPct === 20 && targetHitPct(ranked[0].outcomes, target) === 15
+);
+assert(
+  "hunt second is other profitable",
+  ranked[1].winPct === 40 && ranked[1].expectedProfit === 1.5
+);
+assert("hunt loser last", ranked[ranked.length - 1].winPct === 0);
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);

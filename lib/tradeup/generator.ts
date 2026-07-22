@@ -110,6 +110,22 @@ function calcWinLoss(
   };
 }
 
+/** EV / profit / ROI from the same display percents shown on outcome rows */
+function metricsFromDisplayOutcomes(
+  outcomes: { prob: number; price: number }[],
+  totalCost: number,
+  fee: number
+): { expectedValue: number; expectedProfit: number; roi: number } {
+  const ev = outcomes.reduce(
+    (s, o) => s + (o.prob / 100) * o.price * (1 - fee),
+    0
+  );
+  const expectedProfit = r2(ev - totalCost);
+  const roi =
+    totalCost > 0 ? r2((expectedProfit / totalCost) * 100) : 0;
+  return { expectedValue: r2(ev), expectedProfit, roi };
+}
+
 function applyComplexity(
   inputs: TradeUpInput[],
   _complexity: Complexity,
@@ -218,7 +234,9 @@ function toTradeUpResult(
   outputRarity: string,
   type: "single" | "mixed",
   fee: number,
-  prices: PriceMap
+  prices: PriceMap,
+  /** Soften price/win-band filters for Standard target-skin hunts */
+  huntTarget = false
 ): TradeUpResult | null {
   if (!outcomes.length) return null;
 
@@ -231,17 +249,21 @@ function toTradeUpResult(
   }
 
   const totalCost = r2(inputs.reduce((s, i) => s + i.price * i.count, 0));
-  const ev = outcomes.reduce(
-    (s, o) => s + o.prob * o.price * (1 - fee),
-    0
-  );
-  const profit = r2(ev - totalCost);
-  const roi = totalCost > 0 ? r2((profit / totalCost) * 100) : 0;
 
-  if (totalCost < params.minPrice || totalCost > params.maxPrice) return null;
+  // Target hunt: mid-tier skins (e.g. Rat Rod ~$4) need contract costs below
+  // the user's min budget floor — don't reject those. Still respect maxPrice.
+  const minCost = huntTarget ? 0 : params.minPrice;
+  if (totalCost < minCost || totalCost > params.maxPrice) return null;
 
   const { winPct, avgWin, avgLoss } = calcWinLoss(outcomes, totalCost, fee);
-  if (winPct < params.minWinChance || winPct > params.maxWinChance) return null;
+  // Target hunt: keep any win% — ranking prefers profitable; hard band often
+  // wiped every contract that can land the skin (0% win mono-collections).
+  if (
+    !huntTarget &&
+    (winPct < params.minWinChance || winPct > params.maxWinChance)
+  ) {
+    return null;
+  }
 
   const finalInputs = applyComplexity(
     inputs,
@@ -278,6 +300,12 @@ function toTradeUpResult(
       ? 100
       : clampWinPct(displayWin);
 
+  const { expectedValue, expectedProfit, roi } = metricsFromDisplayOutcomes(
+    tradeOutcomes,
+    totalCost,
+    fee
+  );
+
   const desc = finalInputs
     .map((i) => `${i.count}x ${i.name} (${i.wear})`)
     .join(" + ");
@@ -291,8 +319,8 @@ function toTradeUpResult(
     })),
     outcomes: tradeOutcomes,
     totalCost,
-    expectedValue: r2(ev),
-    expectedProfit: profit,
+    expectedValue,
+    expectedProfit,
     roi,
     winPct: displayWinPct,
     avgWin,
@@ -353,7 +381,8 @@ function bestCandidateForSkin(
  * Caps how many results share the same ~10% win bucket so the list isn't
  * fifteen copies of "40% win".
  *
- * When `targetOutcomeName` is set, rank primarily by chance of landing that skin.
+ * When `targetOutcomeName` is set: prefer profitable contracts that can
+ * land the skin, then higher hit chance — not max hit % with 0% win.
  */
 function selectDiverseResults(
   candidates: TradeUpResult[],
@@ -365,9 +394,19 @@ function selectDiverseResults(
 
   const sorted = [...candidates].sort((a, b) => {
     if (target) {
+      // Profitable / any-win first — max hit% with every outcome losing is useless
+      const aWin = a.winPct > 0 ? 1 : 0;
+      const bWin = b.winPct > 0 ? 1 : 0;
+      if (bWin !== aWin) return bWin - aWin;
+      const aPos = a.expectedProfit > 0 ? 1 : 0;
+      const bPos = b.expectedProfit > 0 ? 1 : 0;
+      if (bPos !== aPos) return bPos - aPos;
       const tb = targetHitPct(b.outcomes, target);
       const ta = targetHitPct(a.outcomes, target);
       if (tb !== ta) return tb - ta;
+      if (b.expectedProfit !== a.expectedProfit) {
+        return b.expectedProfit - a.expectedProfit;
+      }
     }
     const sb = riskRankScore(b.winPct, b.expectedProfit, targetWinChance);
     const sa = riskRankScore(a.winPct, a.expectedProfit, targetWinChance);
@@ -381,7 +420,7 @@ function selectDiverseResults(
   // Spread across buckets: ~2 per 10pt bin for a 15-result list
   // When hunting a specific skin, allow more per bucket so top hit-chances aren't dropped
   const maxPerWinBucket = target
-    ? Math.max(4, Math.ceil(limit / 3))
+    ? Math.max(6, Math.ceil(limit / 2))
     : Math.max(2, Math.ceil(limit / 6));
 
   const inputSkins = (t: TradeUpResult) => t.inputs.map((i) => i.name);
@@ -720,14 +759,17 @@ function generateTierTradeUps(
 ): TradeUpResult[] {
   const candidates: TradeUpResult[] = [];
   const seenKeys = new Set<string>();
-  const SKINS_PER_POOL = 4;
-  const FILLER_CAP = 10;
-  const maxUnit = params.maxPrice / Math.max(2, inputTotal / 2);
-
   const targetName =
     params.complexity === "standard" && params.targetOutcomeName?.trim()
       ? params.targetOutcomeName.trim()
       : "";
+  const hunting = Boolean(targetName);
+  // Target hunt: pull more input options + fillers so cheap mixes can undercut
+  // expensive mono-collections (Rat Rod mono often can't profit).
+  const SKINS_PER_POOL = hunting ? 8 : 4;
+  const FILLER_CAP = hunting ? 16 : 10;
+  const maxUnit = params.maxPrice / Math.max(2, inputTotal / 2);
+
   const targetPrev = targetName
     ? (() => {
         // Find target rarity from any pool that lists it
@@ -828,13 +870,16 @@ function generateTierTradeUps(
             nextR,
             "single",
             fee,
-            prices
+            prices,
+            hunting
           );
           if (result) candidates.push(result);
         }
 
+        // Skip mixed when mono can't clear ~1.2× — except target hunts, where
+        // cheap fillers are how you get under the target's outcome ceiling.
         const bestOutP = Math.max(...singleOuts.map((o) => o.price), 0);
-        if (bestOutP < pInp.price * 1.2) continue;
+        if (!hunting && bestOutP < pInp.price * 1.2) continue;
 
         const fillers: {
           cid: string;
@@ -866,8 +911,14 @@ function generateTierTradeUps(
           }
         }
 
-        // Prefer fillers that also produce the target (keeps hit chance high), then cheap
+        // Target hunt: cheapest fillers first (cut cost). Otherwise prefer
+        // co-target collections, then cheap.
         fillers.sort((a, b) => {
+          if (hunting) {
+            if (a.inp.price !== b.inp.price) return a.inp.price - b.inp.price;
+            if (a.hasTarget !== b.hasTarget) return a.hasTarget ? -1 : 1;
+            return 0;
+          }
           if (targetName && a.hasTarget !== b.hasTarget) {
             return a.hasTarget ? -1 : 1;
           }
@@ -884,10 +935,13 @@ function generateTierTradeUps(
         }
 
         for (const f1 of diverseFillers) {
-          // When hunting: prefer partitions that put more slots on the target collection
           const parts = partitions(inputTotal, 2, 1);
-          const orderedParts = targetName
-            ? [...parts].sort((a, b) => b[0] - a[0])
+          // Hunt: try low primary counts first (more cheap filler → lower cost),
+          // then higher hit% mixes. Non-hunt: keep original order.
+          const orderedParts = hunting
+            ? [...parts].sort(
+                (a, b) => a[0] - b[0] || a[1] - b[1]
+              )
             : parts;
 
           for (const sp of orderedParts) {
@@ -940,7 +994,8 @@ function generateTierTradeUps(
               nextR,
               "mixed",
               fee,
-              prices
+              prices,
+              hunting
             );
             if (result) candidates.push(result);
           }
@@ -1082,13 +1137,11 @@ export function repriceTradeUp(
     })
     .sort((a, b) => b.price - a.price);
 
-  const ev = outcomes.reduce((s, o) => {
-    const prob = o.prob / 100;
-    return s + prob * o.price * (1 - fee);
-  }, 0);
-
-  const expectedProfit = r2(ev - totalCost);
-  const roi = totalCost > 0 ? r2((expectedProfit / totalCost) * 100) : 0;
+  const { expectedValue, expectedProfit, roi } = metricsFromDisplayOutcomes(
+    outcomes,
+    totalCost,
+    fee
+  );
 
   let winPct = 0;
   let allWin = outcomes.length > 0;
@@ -1103,7 +1156,7 @@ export function repriceTradeUp(
     inputs,
     outcomes,
     totalCost,
-    expectedValue: r2(ev),
+    expectedValue,
     expectedProfit,
     roi,
     winPct,
