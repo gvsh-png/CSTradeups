@@ -11,12 +11,14 @@ import {
   clampFloat,
   f32,
   floatForWear,
+  fractionsToPercents,
   getWearForSkin,
   INPUT_WEAR_MIN_SPAN,
   marketHashName,
   norm,
   outF,
   possibleWears,
+  clampWinPct,
   r2,
   r4,
 } from "./float";
@@ -100,7 +102,8 @@ function calcWinLoss(
   }
 
   return {
-    winPct: r2(winProb * 100),
+    winPct:
+      winProb >= 1 - 1e-12 ? 100 : clampWinPct(winProb * 100),
     avgWin: r2(winProb > 0 ? winSum / winProb : 0),
     avgLoss: r2(lossProb > 0 ? lossSum / lossProb : 0),
   };
@@ -248,19 +251,31 @@ function toTradeUpResult(
     prices
   );
 
+  const displayPercents = fractionsToPercents(outcomes.map((o) => o.prob));
+
   const tradeOutcomes: TradeUpOutcome[] = outcomes
-    .map((o) => ({
+    .map((o, i) => ({
       name: o.name,
       float: o.float,
       wear: o.wear,
       price: o.price,
-      prob: r2(o.prob * 100),
+      prob: displayPercents[i] ?? 0,
       profit: r2(o.price * (1 - fee) - totalCost),
       image: getSkinImage(schema, o.name),
       outMinF: o.outMinF,
       outMaxF: o.outMaxF,
     }))
     .sort((a, b) => b.price - a.price);
+
+  // Win % from display probs so the header matches the outcome list
+  let displayWin = 0;
+  for (const o of tradeOutcomes) {
+    if (o.profit >= 0) displayWin += o.prob;
+  }
+  const displayWinPct =
+    tradeOutcomes.length > 0 && tradeOutcomes.every((o) => o.profit >= 0)
+      ? 100
+      : clampWinPct(displayWin);
 
   const desc = finalInputs
     .map((i) => `${i.count}x ${i.name} (${i.wear})`)
@@ -278,7 +293,7 @@ function toTradeUpResult(
     expectedValue: r2(ev),
     expectedProfit: profit,
     roi,
-    winPct,
+    winPct: displayWinPct,
     avgWin,
     avgLoss,
     inputRarity,
@@ -1001,10 +1016,12 @@ export function repriceTradeUp(
   const roi = totalCost > 0 ? r2((expectedProfit / totalCost) * 100) : 0;
 
   let winPct = 0;
+  let allWin = outcomes.length > 0;
   for (const o of outcomes) {
     if (o.profit >= 0) winPct += o.prob;
+    else allWin = false;
   }
-  winPct = r2(winPct);
+  winPct = allWin ? 100 : clampWinPct(winPct);
 
   return {
     ...tradeUp,

@@ -132,6 +132,35 @@ export function r4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
+/** Clamp a win-chance percent into [0, 100] at 2 decimal places. */
+export function clampWinPct(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, r2(n)));
+}
+
+/**
+ * Convert probability fractions (sum ≈ 1) into display percents that sum to
+ * exactly 100.00. Avoids 6.67×3 + 26.67×3 = 100.02 from independent r2().
+ */
+export function fractionsToPercents(fractions: number[]): number[] {
+  if (!fractions.length) return [];
+  const total = fractions.reduce((s, p) => s + (p > 0 ? p : 0), 0);
+  if (!(total > 0)) return fractions.map(() => 0);
+
+  // Hundredths of a percent (100.00% → 10000 units)
+  const exact = fractions.map((p) => ((p > 0 ? p : 0) / total) * 10000);
+  const floors = exact.map((x) => Math.floor(x + 1e-9));
+  let left = 10000 - floors.reduce((s, n) => s + n, 0);
+  const order = exact
+    .map((x, i) => ({ i, frac: x - floors[i] }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  const out = [...floors];
+  for (let k = 0; k < left; k++) {
+    out[order[k % order.length].i]++;
+  }
+  return out.map((n) => n / 100);
+}
+
 export function getMaxInputFloat(
   inSkin: { minF: number; maxF: number },
   outSkins: { minF: number; maxF: number; weight?: number }[],
