@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import {
   COMPLEXITY_OPTIONS,
-  usesAnyRisk,
   type Complexity,
 } from "@/lib/constants";
 import type { AppSettings } from "@/lib/settings";
@@ -223,15 +222,11 @@ export default function GeneratorForm({
             </div>
           </div>
 
-          <div
-            className={`rounded border border-[var(--border)] bg-[var(--bg-deep)] p-3 space-y-2 ${
-              usesAnyRisk(complexity) ? "opacity-45" : ""
-            }`}
-          >
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-3 space-y-2">
             <div className="flex justify-between items-end gap-2">
               <span className="label mb-0">Risk chance</span>
               <span className="text-lg font-mono text-accent tabular-nums leading-none">
-                {usesAnyRisk(complexity) ? "Any" : `${targetWinChance}%`}
+                {targetWinChance}%
               </span>
             </div>
             <input
@@ -241,21 +236,12 @@ export default function GeneratorForm({
               step={5}
               value={targetWinChance}
               onChange={(e) => setTargetWinChance(Number(e.target.value))}
-              disabled={usesAnyRisk(complexity)}
-              className="w-full disabled:cursor-not-allowed"
+              className="w-full"
               aria-label="Risk chance"
             />
             <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-              {usesAnyRisk(complexity) ? (
-                <span className="normal-case tracking-normal">
-                  Covert & Souvenir mix all risk pools
-                </span>
-              ) : (
-                <>
-                  <span>Riskier</span>
-                  <span>Safer</span>
-                </>
-              )}
+              <span>Riskier</span>
+              <span>Safer</span>
             </div>
           </div>
         </div>

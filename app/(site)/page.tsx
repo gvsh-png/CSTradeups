@@ -40,7 +40,7 @@ export default function HomePage() {
               {
                 step: "01",
                 title: "Configure",
-                body: "Budget and contract type — standard uses risk chance; covert and souvenir mix all pools.",
+                body: "Budget, risk chance, and contract type — standard, covert, or souvenir.",
               },
               {
                 step: "02",

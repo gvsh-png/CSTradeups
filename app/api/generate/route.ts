@@ -15,12 +15,11 @@ import {
   sanitizePrices,
 } from "@/lib/tradeup/generator";
 import { consumeScan } from "@/lib/usage/store";
-import { normalizeComplexity, usesAnyRisk } from "@/lib/constants";
+import { normalizeComplexity } from "@/lib/constants";
 import type { GenerateParams } from "@/lib/tradeup/types";
 import {
   clampTargetWin,
   winChanceBandFromTarget,
-  anyRiskWinChanceBand,
 } from "@/lib/tradeup/risk";
 
 export const dynamic = "force-dynamic";
@@ -69,22 +68,17 @@ export async function POST(request: Request) {
       return Number.isFinite(n) ? n : fallback;
     };
 
-    const complexity = normalizeComplexity(body.complexity);
-
-    // Covert / Souvenir: ignore risk slider — accept every win-chance pool
-    const band = usesAnyRisk(complexity)
-      ? anyRiskWinChanceBand()
-      : winChanceBandFromTarget(
-          clampTargetWin(
-            body.targetWinChance != null
-              ? finite(body.targetWinChance, 60)
-              : body.minWinChance != null
-                ? finite(body.minWinChance, 60)
-                : body.risk != null
-                  ? 100 - finite(body.risk, 40)
-                  : 60
-          )
-        );
+    // Slider is target win % (60 → ~60% win). Legacy `risk` was inverted.
+    const targetWinChance = clampTargetWin(
+      body.targetWinChance != null
+        ? finite(body.targetWinChance, 60)
+        : body.minWinChance != null
+          ? finite(body.minWinChance, 60)
+          : body.risk != null
+            ? 100 - finite(body.risk, 40)
+            : 60
+    );
+    const band = winChanceBandFromTarget(targetWinChance);
 
     const params: GenerateParams = {
       minPrice: finite(body.minPrice, 1),
@@ -92,7 +86,7 @@ export async function POST(request: Request) {
       targetWinChance: band.target,
       minWinChance: band.minWinChance,
       maxWinChance: band.maxWinChance,
-      complexity,
+      complexity: normalizeComplexity(body.complexity),
       feeType: body.feeType === "steam" ? "steam" : "csfloat",
       excludeUnstableCollections: body.excludeUnstableCollections !== false,
       limit: Math.max(1, Math.min(50, finite(body.limit, 15))),

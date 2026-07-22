@@ -135,14 +135,12 @@ export const COMPLEXITY_OPTIONS: {
   {
     value: "covert",
     label: "Covert",
-    description:
-      "5 Covert skins → knife or gloves. Mixes all risk pools automatically.",
+    description: "5 Covert skins → knife or gloves from those collections.",
   },
   {
     value: "souvenir",
     label: "Souvenir",
-    description:
-      "Mix souvenir and normal skins (10) → normal next-tier. Mixes all risk pools.",
+    description: "Mix souvenir and normal skins (10) → normal next-tier output.",
   },
 ];
 
@@ -154,9 +152,4 @@ export function normalizeComplexity(raw: unknown): Complexity {
     return "standard";
   }
   return "standard";
-}
-
-/** Covert / Souvenir ignore the risk slider and scan all win-chance pools */
-export function usesAnyRisk(mode: Complexity): boolean {
-  return mode === "covert" || mode === "souvenir";
 }
