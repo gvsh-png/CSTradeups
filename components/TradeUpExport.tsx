@@ -178,7 +178,7 @@ export default function TradeUpExport({
               textTransform: "uppercase",
             }}
           >
-            TradeUp<span style={{ color: COLORS.accent }}>.gen</span>
+            tradeupcsgo<span style={{ color: COLORS.accent }}>.net</span>
           </div>
         </div>
 

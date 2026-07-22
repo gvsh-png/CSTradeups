@@ -52,7 +52,7 @@ export async function GET(request: Request) {
         headers: {
           Accept: "image/png,image/webp,image/*,*/*;q=0.8",
           "User-Agent":
-            "Mozilla/5.0 (compatible; TradeUpGen/1.0; +https://github.com/gvsh-png/CSTradeups)",
+            "Mozilla/5.0 (compatible; tradeupcsgo.net/1.0)",
           Referer: "https://steamcommunity.com/",
         },
         next: { revalidate: 86400 },

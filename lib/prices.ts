@@ -284,7 +284,7 @@ async function fetchSkinportPrices(): Promise<{
       {
         headers: {
           "Accept-Encoding": "br",
-          "User-Agent": "TradeUpGen/1.0",
+          "User-Agent": "tradeupcsgo.net/1.0",
         },
         cache: "no-store",
       }
