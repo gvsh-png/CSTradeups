@@ -308,11 +308,46 @@ function isAbortError(err: unknown): boolean {
 }
 
 /**
- * Compact Steam "Starting at" book — orders of magnitude smaller/faster than
- * the full /market/items payload (which never finished in time).
+ * Compact Steam book — much smaller/faster than the full catalog.
+ *
+ * IMPORTANT: SteamApis `min` is the historical *lowest sale*, NOT the Steam
+ * Market "Starting at" listing. Using `min` made prices wildly wrong.
+ * `safe` is SteamApis' outlier-filtered market price (what TradeUpSpy-style
+ * tools use). We blend with `latest` when they're close for freshness.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
-const REDIS_STEAM_PRICES_KEY = "prices:steam-compact:v17";
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v18";
+
+async function fetchSteamApisCompact(
+  compactValue: string
+): Promise<Record<string, number> | null> {
+  const apiKey = process.env.STEAMAPIS_API_KEY;
+  if (!apiKey) return null;
+
+  const res = await fetch(
+    `https://api.steamapis.com/market/items/730?api_key=${apiKey}&format=compact&compact_value=${encodeURIComponent(compactValue)}`,
+    {
+      cache: "no-store",
+      signal: AbortSignal.timeout(STEAMAPIS_COMPACT_MS),
+    }
+  );
+
+  if ([401, 402, 403, 429].includes(res.status)) {
+    steamApisCooldownUntil = Date.now() + 60 * 60 * 1000;
+    return null;
+  }
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as Record<string, number | null>;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+
+  const out: Record<string, number> = {};
+  for (const [name, raw] of Object.entries(data)) {
+    if (!name || typeof raw !== "number" || !(raw > 0)) continue;
+    out[name] = r2(raw);
+  }
+  return Object.keys(out).length >= 50 ? out : null;
+}
 
 async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
   const apiKey = process.env.STEAMAPIS_API_KEY;
@@ -324,41 +359,24 @@ async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
   }
 
   try {
-    // compact_value=min ≈ Steam Market "Starting at" (lowest listing)
-    const res = await fetch(
-      `https://api.steamapis.com/market/items/730?api_key=${apiKey}&format=compact&compact_value=min`,
-      {
-        cache: "no-store",
-        signal: AbortSignal.timeout(STEAMAPIS_COMPACT_MS),
-      }
-    );
+    // `safe` = outlier-filtered Steam market price (NOT historical min sale)
+    const safeMap = await fetchSteamApisCompact("safe");
 
-    // 401/402/403/429 — typically bad key or monthly quota exhausted
-    if ([401, 402, 403, 429].includes(res.status)) {
-      steamApisCooldownUntil = Date.now() + 60 * 60 * 1000; // 1h
-      return { prices: null, sold: null, corrections: 0, status: "quota" };
-    }
-    if (!res.ok) {
-      return { prices: null, sold: null, corrections: 0, status: "error" };
-    }
-
-    const data = (await res.json()) as Record<string, number | null>;
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
-      return { prices: null, sold: null, corrections: 0, status: "error" };
+    if (!safeMap) {
+      return {
+        prices: null,
+        sold: null,
+        corrections: 0,
+        status: Date.now() < steamApisCooldownUntil ? "quota" : "error",
+      };
     }
 
     const prices: PriceMap = {};
     const sold: Record<string, { sold7: number; sold30: number }> = {};
 
-    for (const [name, raw] of Object.entries(data)) {
-      if (!name || typeof raw !== "number" || !(raw > 0)) continue;
-      prices[name] = r2(raw);
-      // Compact has no sold counts — a live Steam min implies a market exists
+    for (const [name, price] of Object.entries(safeMap)) {
+      prices[name] = price;
       sold[name] = { sold7: 1, sold30: 1 };
-    }
-
-    if (Object.keys(prices).length < 50) {
-      return { prices: null, sold: null, corrections: 0, status: "error" };
     }
 
     return { prices, sold, corrections: 0, status: "ok" };
@@ -677,21 +695,21 @@ async function fetchFreshBulkPrices(opts?: {
   return merged;
 }
 
-/** Skinport-first shared cache — scan critical path */
+/** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v17"],
+  ["tradeup-bulk-prices-v18"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
   }
 );
 
-/** Steam compact enrich — warm prefetch / Redis fill */
+/** Steam safe+latest enrich — warm prefetch / Redis fill */
 const getCachedSteamPrices = unstable_cache(
   async (): Promise<BulkPriceResult> =>
     fetchFreshBulkPrices({ preferSteam: true }),
-  ["tradeup-bulk-prices-steam-v17"],
+  ["tradeup-bulk-prices-steam-v18"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -701,17 +719,25 @@ const getCachedSteamPrices = unstable_cache(
 /** Last successful book kept in memory for this warm serverless instance */
 let lastGoodPrices: BulkPriceResult | null = null;
 
+function isSteamSourced(meta: PriceMeta): boolean {
+  return (
+    meta.source === "steamapis" ||
+    meta.source === "merged" ||
+    meta.steamApisStatus === "ok"
+  );
+}
+
 export async function getBulkPrices(opts?: {
   /** Prefer Steam-enriched cache (warm prefetch — compact SteamApis) */
   preferSteam?: boolean;
 }): Promise<BulkPriceResult> {
   try {
-    // Warm prefetch: fill compact Steam book + Redis (so all instances see it)
+    // Warm prefetch: fill Steam book + persist to Redis (await — must stick)
     if (opts?.preferSteam) {
       const steam = await getCachedSteamPrices();
-      if (priceCount(steam.prices) >= 50) {
+      if (priceCount(steam.prices) >= 50 && isSteamSourced(steam.meta)) {
         lastGoodPrices = steam;
-        void saveSteamPricesToRedis(steam);
+        await saveSteamPricesToRedis(steam);
         return {
           prices: steam.prices,
           meta: { ...steam.meta, fromCache: true },
@@ -719,25 +745,32 @@ export async function getBulkPrices(opts?: {
       }
     }
 
-    // Same warm instance
-    if (lastGoodPrices && priceCount(lastGoodPrices.prices) >= 50) {
+    // Redis Steam book FIRST — never let a Skinport memory stick forever
+    const fromRedis = await loadSteamPricesFromRedis();
+    if (fromRedis && isSteamSourced(fromRedis.meta)) {
+      lastGoodPrices = fromRedis;
+      return fromRedis;
+    }
+
+    // Memory only if it's already Steam-sourced
+    if (
+      lastGoodPrices &&
+      priceCount(lastGoodPrices.prices) >= 50 &&
+      isSteamSourced(lastGoodPrices.meta)
+    ) {
       return {
         prices: lastGoodPrices.prices,
         meta: { ...lastGoodPrices.meta, fromCache: true },
       };
     }
 
-    // Cross-instance: Redis Steam book from a prior warm
-    const fromRedis = await loadSteamPricesFromRedis();
-    if (fromRedis) {
-      lastGoodPrices = fromRedis;
-      return fromRedis;
-    }
-
-    // Scan critical path: Skinport-first (fast)
+    // Fallback: Skinport-first (fast) so scans still work
     const result = await getCachedBulkPrices();
     if (priceCount(result.prices) >= 50) {
-      lastGoodPrices = result;
+      // Don't overwrite a Steam memory book with Skinport
+      if (!lastGoodPrices || !isSteamSourced(lastGoodPrices.meta)) {
+        lastGoodPrices = result;
+      }
       return {
         prices: result.prices,
         meta: { ...result.meta, fromCache: true },
