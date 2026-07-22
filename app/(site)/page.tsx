@@ -11,12 +11,12 @@ export default function HomePage() {
           <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-bold tracking-tight leading-[1.05] max-w-3xl mx-auto">
             <span className="text-accent">tradeupcsgo.net</span>
             <span className="block mt-3 text-[0.68em] font-semibold text-[var(--text)]">
-              Precision trade-up engineering
+              Generate and find trade-ups easily
             </span>
           </h1>
           <p className="mt-5 sm:mt-6 text-sm sm:text-base text-[var(--text-soft)] max-w-xl mx-auto leading-relaxed">
-            Systematically find profitable CS2 trade-ups with live market data,
-            float targets, and expected-value math.
+            Set a budget, hit generate, and get real contracts with current
+            prices — no spreadsheet required.
           </p>
 
           <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -38,18 +38,18 @@ export default function HomePage() {
             {[
               {
                 step: "01",
-                title: "Configure",
-                body: "Budget, risk chance, and contract type — standard, covert, or souvenir.",
+                title: "Set your filters",
+                body: "Pick a price range, how safe you want the contract, and standard / covert / souvenir.",
               },
               {
                 step: "02",
-                title: "Scan",
-                body: "Live prices ranked by EV, liquidity, and outcome odds.",
+                title: "Run a scan",
+                body: "We pull live prices and show contracts that can actually make money.",
               },
               {
                 step: "03",
-                title: "Execute",
-                body: "Save blueprints, refresh prices, share when ready.",
+                title: "Save what you like",
+                body: "Bookmark blueprints, refresh later, or share a link with a friend.",
               },
             ].map((item, i) => (
               <div
