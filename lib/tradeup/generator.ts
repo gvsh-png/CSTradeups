@@ -865,6 +865,7 @@ function generateTierTradeUps(
 /**
  * Drop lone cross-wear spikes without assuming FN≥MW≥FT≥WW≥BS order.
  * Example: CaliCamo WW $529 while other wears are cents → drop WW.
+ * Blind Spot FT $124 while peers ~$15 → drop FT (old 12× threshold missed this).
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
@@ -897,8 +898,9 @@ export function sanitizePrices(
     for (const key of keys) {
       const p = out[key];
       if (!(p > 0)) continue;
-      // Spike vs peer median — ghost suggested / Steam outliers
-      if (p > mid * 12 && p > mid + 8) {
+      // Spike vs peer median — sale outliers / ghost medians
+      // 3.5× catches Blind Spot (~8×) while keeping mild wear ladders
+      if (p > mid * 3.5 && p > mid + 5) {
         delete out[key];
       }
     }

@@ -29,7 +29,7 @@ function sanitizePrices(prices) {
     for (const key of keys) {
       const p = out[key];
       if (!(p > 0)) continue;
-      if (p > mid * 12 && p > mid + 8) {
+      if (p > mid * 3.5 && p > mid + 5) {
         delete out[key];
       }
     }
@@ -69,6 +69,23 @@ assert(
 assert(
   "CaliCamo FT kept",
   cali["Negev | CaliCamo (Field-Tested)"] === 0.05
+);
+
+// Blind Spot — FT sale spike vs normal wear ladder (~$14)
+const blind = sanitizePrices({
+  "P90 | Blind Spot (Factory New)": 16.5,
+  "P90 | Blind Spot (Minimal Wear)": 16.4,
+  "P90 | Blind Spot (Field-Tested)": 124.38,
+  "P90 | Blind Spot (Well-Worn)": 13.7,
+  "P90 | Blind Spot (Battle-Scarred)": 12.1,
+});
+assert(
+  "Blind Spot FT spike dropped",
+  blind["P90 | Blind Spot (Field-Tested)"] === undefined
+);
+assert(
+  "Blind Spot MW kept",
+  blind["P90 | Blind Spot (Minimal Wear)"] === 16.4
 );
 
 if (failed) {

@@ -144,6 +144,20 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
     priceUSD = latest;
   }
 
+  // Longer window still spiked by a one-off sale (Blind Spot graph spike)
+  if (last30 > 0 && last90 > 0 && last30 / last90 > 2.5) {
+    priceUSD = last90;
+    corrected = true;
+  }
+  if (safe > 0 && priceUSD > safe * 3) {
+    priceUSD = safe;
+    corrected = true;
+  }
+  if (last90 > 0 && priceUSD > last90 * 3) {
+    priceUSD = last90;
+    corrected = true;
+  }
+
   if (priceUSD <= 0) return { price: 0, corrected: false };
 
   return { price: r2(priceUSD), corrected };
@@ -152,14 +166,23 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
 /**
  * Real Skinport book only. Never use `suggested_price` — Skinport invents
  * it with quantity=0 (e.g. Negev | CaliCamo WW suggested $529.56).
+ *
+ * When median/mean are inflated by a lone sale spike but listings are still
+ * cheap (P90 Blind Spot), prefer the live min listing.
  */
 export function resolveSkinportPrice(item: SkinportItem): number {
-  if (item.median_price && item.median_price > 0) return r2(item.median_price);
-  if (item.mean_price && item.mean_price > 0) return r2(item.mean_price);
-  // min_price only when something is actually listed
-  if (item.min_price && item.min_price > 0 && (item.quantity || 0) > 0) {
-    return r2(item.min_price);
-  }
+  const qty = item.quantity || 0;
+  const min = item.min_price && item.min_price > 0 && qty > 0 ? item.min_price : 0;
+  const med = item.median_price && item.median_price > 0 ? item.median_price : 0;
+  const mean = item.mean_price && item.mean_price > 0 ? item.mean_price : 0;
+
+  // Median/mean dragged up by outlier sales → trust the live book
+  if (min > 0 && med > min * 3) return r2(min);
+  if (min > 0 && mean > min * 3) return r2(min);
+
+  if (med > 0) return r2(med);
+  if (mean > 0) return r2(mean);
+  if (min > 0) return r2(min);
   return 0;
 }
 
@@ -577,11 +600,11 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
 
 /**
  * Daily shared price cache — all users share the same bulk price data.
- * v11: Skinport-first cold path, SteamApis optional boost, last-good fallback.
+ * v12: tighter cross-wear spike cut; Skinport min vs spiked median.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v11"],
+  ["tradeup-bulk-prices-v12"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
