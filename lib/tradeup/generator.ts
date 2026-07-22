@@ -182,12 +182,14 @@ function buildOutcomes(
         outSkin.maxF
       );
       const wear = getWear(outFloat);
-      // Skip wears that don't exist for this skin's caps (defensive)
+      // Incomplete contract: inventing odds for missing outcomes inflates EV/win%
       if (!possibleWears(outSkin.minF, outSkin.maxF, 0.001).includes(wear)) {
-        continue;
+        return [];
       }
       const price = getPrice(prices, outSkin.name, wear);
-      if (price <= 0) continue;
+      if (price <= 0) {
+        return [];
+      }
 
       mixed.push({
         name: outSkin.name,
@@ -201,12 +203,6 @@ function buildOutcomes(
         outMaxF: outSkin.maxF,
       });
     }
-  }
-
-  // Re-normalize probs if some outcomes were dropped for impossible wears / no price
-  const probSum = mixed.reduce((s, o) => s + o.prob, 0);
-  if (probSum > 0 && Math.abs(probSum - 1) > 1e-6) {
-    for (const o of mixed) o.prob = o.prob / probSum;
   }
 
   return mixed;
