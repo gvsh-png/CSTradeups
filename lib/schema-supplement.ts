@@ -16,6 +16,7 @@ type SupplementEntry = {
   rarity: number;
   min?: number;
   max?: number;
+  image?: string;
 };
 
 /** Full Ascent tier list — CSFloat schema gap fill. */
@@ -30,6 +31,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     rarity: 5,
     min: 0,
     max: 0.85,
+    image:
+      "https://community.akamai.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpou-6kejhz2v_Nfz5H_uO1gYW0hOPmMq_ehXtZ7dd0teXI8oThxgy3qBdvZ22lJYTGIAU5aArTqQW3l-y91p7q7cmYnSMwuiAm4SvVl0OpwUYbpXBVnmw",
   },
   // Restricted
   {
@@ -264,6 +267,7 @@ function entryToPaint(entry: SupplementEntry) {
     min: entry.min ?? 0,
     max: entry.max ?? 1,
     collections: [ASCENT_COLLECTION.key],
+    ...(entry.image ? { image: entry.image } : {}),
   };
 }
 
