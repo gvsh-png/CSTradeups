@@ -18,7 +18,7 @@ function scrollToId(id: string, block: ScrollLogicalPosition = "start") {
 export default function GeneratePage() {
   const { authConfigured, authRequired, user, refresh } = useAuth();
   const { openUpgrade, openSettings, settings } = useAppFrame();
-  const { saveTradeUp, isSaved, updateInsight, saved } = useSaved();
+  const { saveTradeUp, removeSaved, isSaved, updateInsight, saved } = useSaved();
 
   const [results, setResults] = useState<TradeUpResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -148,7 +148,11 @@ export default function GeneratePage() {
   };
 
   const handleSave = async (tradeUp: TradeUpResult) => {
-    await saveTradeUp(tradeUp, openUpgrade);
+    return saveTradeUp(tradeUp, openUpgrade);
+  };
+
+  const handleUnsave = async (id: string) => {
+    await removeSaved(id);
   };
 
   const handleInsight = (id: string, insight: string | undefined) => {
@@ -169,7 +173,7 @@ export default function GeneratePage() {
 
   return (
     <div className="w-full">
-      {/* Mobile-only title — hidden from md up so Configure Scanner is the sole header */}
+      {/* Mobile-only title — hidden from md so Configure Scanner fills the viewport */}
       <div className="md:hidden mx-auto max-w-container px-4 pt-5 pb-1">
         <h1 className="text-2xl font-bold tracking-tight text-accent">Scanner</h1>
         <p className="text-[12px] text-[var(--text-muted)] mt-1">
@@ -177,9 +181,9 @@ export default function GeneratePage() {
         </p>
       </div>
 
-      {/* Configure — panel + Generate button must fit one viewport on laptop/medium */}
-      <section className="border-b border-[var(--border)]">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-3 md:py-4 lg:py-5 animate-fade-up">
+      {/* Configure — fill viewport under nav on laptop/PC; Generate sits at bottom */}
+      <section className="border-b border-[var(--border)] md:min-h-[calc(100dvh-3rem)] md:flex md:flex-col">
+        <div className="mx-auto max-w-4xl w-full px-4 sm:px-6 py-3 md:py-4 md:flex-1 md:flex md:flex-col animate-fade-up">
           <GeneratorForm
             variant="hero"
             onGenerate={handleGenerate}
@@ -251,6 +255,7 @@ export default function GeneratePage() {
           results={results}
           loading={loading}
           onSave={handleSave}
+          onUnsave={handleUnsave}
           onInsight={handleInsight}
           isSaved={isSaved}
           targetOutcomeName={

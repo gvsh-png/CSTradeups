@@ -17,6 +17,7 @@ export default function SavedTradeUps({
   onUpdate,
 }: SavedTradeUpsProps) {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
   const refreshProgress = useSimulatedProgress(!!refreshingId, "refresh");
 
   const handleRefresh = async (item: SavedTradeUp) => {
@@ -49,6 +50,19 @@ export default function SavedTradeUps({
     } finally {
       setRefreshingId(null);
     }
+  };
+
+  const handleRemove = (id: string) => {
+    if (exitingIds.has(id)) return;
+    setExitingIds((prev) => new Set(prev).add(id));
+    window.setTimeout(() => {
+      onRemove(id);
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 280);
   };
 
   if (!items.length) {
@@ -87,27 +101,33 @@ export default function SavedTradeUps({
         {items.length} saved
       </p>
       {items.map((item) => (
-        <TradeUpCard
+        <div
           key={item.id}
-          tradeUp={item}
-          saved
-          savedAt={item.savedAt}
-          onRefresh={() => handleRefresh(item)}
-          refreshing={refreshingId === item.id}
-          refreshProgress={
-            refreshingId === item.id ? refreshProgress : undefined
+          className={
+            exitingIds.has(item.id) ? "animate-saved-exit" : undefined
           }
-          onRemove={() => onRemove(item.id)}
-          onInsight={(insight) => {
-            if (insight === undefined) {
-              const { insight: _removed, ...rest } = item;
-              onUpdate(rest as SavedTradeUp);
-            } else {
-              onUpdate({ ...item, insight });
+        >
+          <TradeUpCard
+            tradeUp={item}
+            saved
+            savedAt={item.savedAt}
+            onRefresh={() => handleRefresh(item)}
+            refreshing={refreshingId === item.id}
+            refreshProgress={
+              refreshingId === item.id ? refreshProgress : undefined
             }
-          }}
-          showShare
-        />
+            onRemove={() => handleRemove(item.id)}
+            onInsight={(insight) => {
+              if (insight === undefined) {
+                const { insight: _removed, ...rest } = item;
+                onUpdate(rest as SavedTradeUp);
+              } else {
+                onUpdate({ ...item, insight });
+              }
+            }}
+            showShare
+          />
+        </div>
       ))}
     </div>
   );

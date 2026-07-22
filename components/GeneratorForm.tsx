@@ -201,11 +201,11 @@ export default function GeneratorForm({
       onSubmit={handleSubmit}
       className={`panel panel-desktop panel-glow relative overflow-hidden ${
         hero
-          ? "scanner-hero p-3.5 sm:p-4 md:p-4 lg:p-5"
+          ? "scanner-hero flex flex-col p-3.5 sm:p-4 md:p-4 lg:p-5 md:min-h-full md:flex-1"
           : "p-4 lg:p-5"
       } ${hero ? "" : "lg:sticky lg:top-16"}`}
     >
-      <div className="absolute top-0 inset-x-0 h-0.5 bg-accent pointer-events-none" />
+      <div className="absolute top-0 inset-x-0 h-0.5 bg-secondary pointer-events-none" />
 
       <div
         className={`flex items-start justify-between gap-3 ${
@@ -253,383 +253,390 @@ export default function GeneratorForm({
         </button>
       </div>
 
-      {/* Hero: 2-col (targets | contract) then sell+exclude row — keeps Generate in view on laptop */}
-      <div className={hero ? "space-y-3 md:space-y-3.5" : "space-y-5"}>
-        <div
-          className={
-            hero
-              ? "grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
-              : "contents"
-          }
-        >
-          <div className={hero ? "space-y-3" : "space-y-4"}>
-            <div className="space-y-2">
-              <span className="label flex items-center gap-1.5">
-                Financial targets
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1.5">
-                  <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                    Min price
-                  </label>
-                  <PriceInput
-                    value={minPrice}
-                    onChange={setMinPrice}
-                    ariaLabel="Min price"
-                    min={MIN_PRICE_DISPLAY}
-                    max={MAX_PRICE_DISPLAY}
-                  />
-                </div>
-                <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1.5">
-                  <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                    Max price
-                  </label>
-                  <PriceInput
-                    value={maxPrice}
-                    onChange={setMaxPrice}
-                    ariaLabel="Max price"
-                    min={MIN_PRICE_DISPLAY}
-                    max={MAX_PRICE_DISPLAY}
-                  />
-                </div>
+      {/* Hero: 2-col then sell+exclude row; button pinned to bottom on md+ */}
+      <div
+        className={
+          hero
+            ? "flex flex-col flex-1 min-h-0 gap-3 md:gap-3.5"
+            : "contents"
+        }
+      >
+      <div
+        className={
+          hero
+            ? "grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 flex-1 min-h-0"
+            : "space-y-5"
+        }
+      >
+        <div className={hero ? "space-y-3" : "space-y-4"}>
+          <div className="space-y-2">
+            <span className="label flex items-center gap-1.5">
+              Financial targets
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1.5">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                  Min price
+                </label>
+                <PriceInput
+                  value={minPrice}
+                  onChange={setMinPrice}
+                  ariaLabel="Min price"
+                  min={MIN_PRICE_DISPLAY}
+                  max={MAX_PRICE_DISPLAY}
+                />
               </div>
-            </div>
-
-            <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2.5 sm:p-3 space-y-1.5 sm:space-y-2">
-              <div className="flex justify-between items-end gap-2">
-                <span className="label mb-0">Risk chance</span>
-                <span className="text-base sm:text-lg font-mono text-accent tabular-nums leading-none">
-                  {targetWinChance}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={targetWinChance}
-                onChange={(e) => setTargetWinChance(Number(e.target.value))}
-                className="w-full"
-                aria-label="Risk chance"
-              />
-              <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-                <span>Riskier</span>
-                <span>Safer</span>
+              <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1.5">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                  Max price
+                </label>
+                <PriceInput
+                  value={maxPrice}
+                  onChange={setMaxPrice}
+                  ariaLabel="Max price"
+                  min={MIN_PRICE_DISPLAY}
+                  max={MAX_PRICE_DISPLAY}
+                />
               </div>
             </div>
           </div>
 
-          <div className={hero ? "space-y-3" : "space-y-4"}>
-            <fieldset className="space-y-1.5 sm:space-y-2">
-              <legend className="label mb-1">Contract type</legend>
-              {COMPLEXITY_OPTIONS.map((opt) => (
-                <label
-                  key={opt.value}
-                  className={`flex items-start gap-2.5 rounded border cursor-pointer transition-colors duration-150 ${
-                    hero ? "p-1.5 sm:p-2" : "p-2.5"
-                  } ${
-                    complexity === opt.value
-                      ? "border-accent/45 bg-accent/5"
-                      : "border-[var(--border)] hover:border-[var(--surface-highest)]"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="complexity"
-                    value={opt.value}
-                    checked={complexity === opt.value}
-                    onChange={() => setComplexity(opt.value)}
-                    className="mt-0.5 shrink-0 accent-[var(--accent)]"
-                  />
-                  <div className="min-w-0">
-                    <span className="text-sm font-medium">{opt.label}</span>
-                    <p
-                      className={`text-[11px] text-[var(--text-muted)] leading-snug mt-0.5 ${
-                        hero ? "line-clamp-1" : ""
-                      }`}
-                    >
-                      {opt.description}
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2.5 sm:p-3 space-y-1.5 sm:space-y-2">
+            <div className="flex justify-between items-end gap-2">
+              <span className="label mb-0">Risk chance</span>
+              <span className="text-base sm:text-lg font-mono text-accent tabular-nums leading-none">
+                {targetWinChance}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={targetWinChance}
+              onChange={(e) => setTargetWinChance(Number(e.target.value))}
+              className="w-full"
+              aria-label="Risk chance"
+            />
+            <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+              <span>Riskier</span>
+              <span>Safer</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={hero ? "space-y-3" : "space-y-4"}>
+          <fieldset className="space-y-1.5 sm:space-y-2">
+            <legend className="label mb-1">Contract type</legend>
+            {COMPLEXITY_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex items-start gap-2.5 rounded border cursor-pointer transition-colors duration-150 ${
+                  hero ? "p-1.5 sm:p-2" : "p-2.5"
+                } ${
+                  complexity === opt.value
+                    ? "border-accent/45 bg-accent/5"
+                    : "border-[var(--border)] hover:border-[var(--surface-highest)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="complexity"
+                  value={opt.value}
+                  checked={complexity === opt.value}
+                  onChange={() => setComplexity(opt.value)}
+                  className="mt-0.5 shrink-0 accent-[var(--accent)]"
+                />
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">{opt.label}</span>
+                  <p
+                    className={`text-[11px] text-[var(--text-muted)] leading-snug mt-0.5 ${
+                      hero ? "line-clamp-1" : ""
+                    }`}
+                  >
+                    {opt.description}
+                  </p>
+                </div>
+              </label>
+            ))}
+          </fieldset>
+
+          {complexity === "standard" && (
+            <div ref={targetBoxRef} className="relative space-y-1.5">
+              <div className="flex items-end justify-between gap-2">
+                <span className="label mb-0">Target outcome</span>
+                <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                  optional · max hit chance
+                </span>
+              </div>
+              {targetSkin ? (
+                <div className="flex items-center gap-2 rounded border border-accent/40 bg-accent/5 px-2.5 py-2">
+                  {targetSkin.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={targetSkin.image}
+                      alt=""
+                      className="h-8 w-8 shrink-0 object-contain rounded border bg-[var(--bg-deep)]"
+                      style={{
+                        borderColor: rarityStyle(targetSkin.rarity).borderColor,
+                      }}
+                    />
+                  ) : (
+                    <div className="h-8 w-8 shrink-0 rounded border border-[var(--border)] bg-[var(--bg-deep)]" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">
+                      {targetSkin.name}
+                    </p>
+                    <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                      {rarityShort(targetSkin.rarity)}
+                      {targetSkin.maxHitPct > 0 && (
+                        <span className="text-accent">
+                          {" "}
+                          · up to {targetSkin.maxHitPct}%
+                        </span>
+                      )}
                     </p>
                   </div>
-                </label>
-              ))}
-            </fieldset>
-
-            {complexity === "standard" && (
-              <div ref={targetBoxRef} className="relative space-y-1.5">
-                <div className="flex items-end justify-between gap-2">
-                  <span className="label mb-0">Target outcome</span>
-                  <span className="text-[10px] font-mono text-[var(--text-muted)]">
-                    optional · max hit chance
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetSkin(null);
+                      setTargetQuery("");
+                      setTargetHits([]);
+                    }}
+                    className="shrink-0 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] hover:text-accent"
+                  >
+                    clear
+                  </button>
                 </div>
-                {targetSkin ? (
-                  <div className="flex items-center gap-2 rounded border border-accent/40 bg-accent/5 px-2.5 py-2">
-                    {targetSkin.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={targetSkin.image}
-                        alt=""
-                        className="h-8 w-8 shrink-0 object-contain rounded border bg-[var(--bg-deep)]"
-                        style={{
-                          borderColor: rarityStyle(targetSkin.rarity).borderColor,
-                        }}
-                      />
-                    ) : (
-                      <div className="h-8 w-8 shrink-0 rounded border border-[var(--border)] bg-[var(--bg-deep)]" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {targetSkin.name}
-                      </p>
-                      <p className="text-[10px] font-mono text-[var(--text-muted)]">
-                        {rarityShort(targetSkin.rarity)}
-                        {targetSkin.maxHitPct > 0 && (
-                          <span className="text-accent">
-                            {" "}
-                            · up to {targetSkin.maxHitPct}%
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTargetSkin(null);
-                        setTargetQuery("");
-                        setTargetHits([]);
-                      }}
-                      className="shrink-0 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] hover:text-accent"
-                    >
-                      clear
-                    </button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="search"
-                      value={targetQuery}
-                      onChange={(e) => {
-                        setTargetQuery(e.target.value);
-                        setTargetOpen(true);
-                      }}
-                      onFocus={() => {
-                        if (targetHits.length) setTargetOpen(true);
-                      }}
-                      placeholder="Search skin to hunt (e.g. AXIA)"
-                      className="input-field text-sm"
-                      autoComplete="off"
-                      aria-label="Target outcome skin"
-                    />
-                    {targetLoading && (
-                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--text-muted)]">
-                        …
-                      </span>
-                    )}
-                    {targetOpen && targetHits.length > 0 && (
-                      <ul className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface-raised)] shadow-lg scrollbar-thin">
-                        {targetHits.map((s) => (
-                          <li key={s.name}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTargetSkin(s);
-                                setTargetQuery(s.name);
-                                setTargetOpen(false);
-                                setTargetHits([]);
-                              }}
-                              className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent/10 transition-colors"
-                            >
-                              {s.image ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={s.image}
-                                  alt=""
-                                  className="h-7 w-7 shrink-0 object-contain"
-                                />
-                              ) : null}
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-[12px] font-medium truncate">
-                                  {s.name}
-                                </span>
-                                <span className="block text-[10px] font-mono text-[var(--text-muted)]">
-                                  {rarityShort(s.rarity)} · max {s.maxHitPct}%
-                                </span>
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-                <p className="text-[10px] text-[var(--text-muted)] leading-snug">
-                  Ranks Standard contracts by chance of landing this skin.
-                </p>
-              </div>
-            )}
-
-            {!hero && (
-              <>
-                <fieldset>
-                  <legend className="label mb-2">Sell on</legend>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["csfloat", "steam"] as const).map((fee) => (
-                      <button
-                        key={fee}
-                        type="button"
-                        onClick={() => setFeeType(fee)}
-                        className={`h-9 rounded text-xs font-medium border transition-colors duration-150 ${
-                          feeType === fee
-                            ? "border-accent/50 bg-accent/10 text-accent"
-                            : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
-                        }`}
-                      >
-                        {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 13%"}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-
-                <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-3 space-y-2">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={excludeUnstable}
-                      onChange={(e) => setExcludeUnstable(e.target.checked)}
-                      className="mt-0.5 shrink-0 accent-[var(--accent)]"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <span className="text-sm font-medium">
-                        Exclude new collections
-                      </span>
-                      <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
-                        Skip last {maxAgeDays} days
-                        {unstableCount > 0 && (
-                          <span className="text-accent">
-                            {" "}
-                            · {unstableCount} active
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </label>
-                  {unstableList.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowCollections(!showCollections)}
-                      className="text-[10px] text-[var(--text-muted)] hover:text-accent transition-colors duration-150 font-mono"
-                    >
-                      {showCollections ? "▾ hide list" : "▸ show excluded"}
-                    </button>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="search"
+                    value={targetQuery}
+                    onChange={(e) => {
+                      setTargetQuery(e.target.value);
+                      setTargetOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (targetHits.length) setTargetOpen(true);
+                    }}
+                    placeholder="Search skin to hunt (e.g. AXIA)"
+                    className="input-field text-sm"
+                    autoComplete="off"
+                    aria-label="Target outcome skin"
+                  />
+                  {targetLoading && (
+                    <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--text-muted)]">
+                      …
+                    </span>
                   )}
-                  {showCollections && (
-                    <ul className="max-h-28 overflow-y-auto scrollbar-thin space-y-1 pt-2 border-t border-[var(--border)]">
-                      {unstableList.map((c) => (
-                        <li
-                          key={c.key}
-                          className="text-[10px] text-[var(--text-muted)] font-mono truncate"
-                        >
-                          {c.name}
-                          <span className="opacity-60"> · {c.ageDays}d</span>
+                  {targetOpen && targetHits.length > 0 && (
+                    <ul className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface-raised)] shadow-lg scrollbar-thin">
+                      {targetHits.map((s) => (
+                        <li key={s.name}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetSkin(s);
+                              setTargetQuery(s.name);
+                              setTargetOpen(false);
+                              setTargetHits([]);
+                            }}
+                            className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent/10 transition-colors"
+                          >
+                            {s.image ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={s.image}
+                                alt=""
+                                className="h-7 w-7 shrink-0 object-contain"
+                              />
+                            ) : null}
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[12px] font-medium truncate">
+                                {s.name}
+                              </span>
+                              <span className="block text-[10px] font-mono text-[var(--text-muted)]">
+                                {rarityShort(s.rarity)} · max {s.maxHitPct}%
+                              </span>
+                            </span>
+                          </button>
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
-              </>
+              )}
+              <p className="text-[10px] text-[var(--text-muted)] leading-snug">
+                Ranks Standard contracts by chance of landing this skin.
+              </p>
+            </div>
+          )}
+
+          {!hero && (
+            <>
+              <fieldset>
+                <legend className="label mb-2">Sell on</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["csfloat", "steam"] as const).map((fee) => (
+                    <button
+                      key={fee}
+                      type="button"
+                      onClick={() => setFeeType(fee)}
+                      className={`h-9 rounded text-xs font-medium border transition-colors duration-150 ${
+                        feeType === fee
+                          ? "border-accent/50 bg-accent/10 text-accent"
+                          : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
+                      }`}
+                    >
+                      {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 13%"}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-3 space-y-2">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={excludeUnstable}
+                    onChange={(e) => setExcludeUnstable(e.target.checked)}
+                    className="mt-0.5 shrink-0 accent-[var(--accent)]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium">
+                      Exclude new collections
+                    </span>
+                    <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
+                      Skip last {maxAgeDays} days
+                      {unstableCount > 0 && (
+                        <span className="text-accent">
+                          {" "}
+                          · {unstableCount} active
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </label>
+                {unstableList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCollections(!showCollections)}
+                    className="text-[10px] text-[var(--text-muted)] hover:text-accent transition-colors duration-150 font-mono"
+                  >
+                    {showCollections ? "▾ hide list" : "▸ show excluded"}
+                  </button>
+                )}
+                {showCollections && (
+                  <ul className="max-h-28 overflow-y-auto scrollbar-thin space-y-1 pt-2 border-t border-[var(--border)]">
+                    {unstableList.map((c) => (
+                      <li
+                        key={c.key}
+                        className="text-[10px] text-[var(--text-muted)] font-mono truncate"
+                      >
+                        {c.name}
+                        <span className="opacity-60"> · {c.ageDays}d</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {hero && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+          <fieldset>
+            <legend className="label mb-1.5">Sell on</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(["csfloat", "steam"] as const).map((fee) => (
+                <button
+                  key={fee}
+                  type="button"
+                  onClick={() => setFeeType(fee)}
+                  className={`h-8 rounded text-xs font-medium border transition-colors duration-150 ${
+                    feeType === fee
+                      ? "border-accent/50 bg-accent/10 text-accent"
+                      : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
+                  }`}
+                >
+                  {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 13%"}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={excludeUnstable}
+                onChange={(e) => setExcludeUnstable(e.target.checked)}
+                className="mt-0.5 shrink-0 accent-[var(--accent)]"
+              />
+              <div className="min-w-0 flex-1">
+                <span className="text-sm font-medium leading-tight">
+                  Exclude new collections
+                </span>
+                <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
+                  Skip last {maxAgeDays} days
+                  {unstableCount > 0 && (
+                    <span className="text-accent">
+                      {" "}
+                      · {unstableCount} active
+                    </span>
+                  )}
+                  {unstableList.length > 0 && (
+                    <>
+                      {" · "}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setShowCollections(!showCollections);
+                        }}
+                        className="text-[10px] text-[var(--text-muted)] hover:text-accent transition-colors duration-150 font-mono"
+                      >
+                        {showCollections ? "hide" : "show excluded"}
+                      </button>
+                    </>
+                  )}
+                </p>
+              </div>
+            </label>
+            {showCollections && (
+              <ul className="max-h-16 overflow-y-auto scrollbar-thin space-y-1 pt-1.5 border-t border-[var(--border)]">
+                {unstableList.map((c) => (
+                  <li
+                    key={c.key}
+                    className="text-[10px] text-[var(--text-muted)] font-mono truncate"
+                  >
+                    {c.name}
+                    <span className="opacity-60"> · {c.ageDays}d</span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>
-
-        {hero && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-            <fieldset>
-              <legend className="label mb-1.5">Sell on</legend>
-              <div className="grid grid-cols-2 gap-2">
-                {(["csfloat", "steam"] as const).map((fee) => (
-                  <button
-                    key={fee}
-                    type="button"
-                    onClick={() => setFeeType(fee)}
-                    className={`h-8 rounded text-xs font-medium border transition-colors duration-150 ${
-                      feeType === fee
-                        ? "border-accent/50 bg-accent/10 text-accent"
-                        : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
-                    }`}
-                  >
-                    {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 13%"}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1">
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={excludeUnstable}
-                  onChange={(e) => setExcludeUnstable(e.target.checked)}
-                  className="mt-0.5 shrink-0 accent-[var(--accent)]"
-                />
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium leading-tight">
-                    Exclude new collections
-                  </span>
-                  <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
-                    Skip last {maxAgeDays} days
-                    {unstableCount > 0 && (
-                      <span className="text-accent">
-                        {" "}
-                        · {unstableCount} active
-                      </span>
-                    )}
-                    {unstableList.length > 0 && (
-                      <>
-                        {" · "}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setShowCollections(!showCollections);
-                          }}
-                          className="text-[10px] text-[var(--text-muted)] hover:text-accent transition-colors duration-150 font-mono"
-                        >
-                          {showCollections ? "hide" : "show excluded"}
-                        </button>
-                      </>
-                    )}
-                  </p>
-                </div>
-              </label>
-              {showCollections && (
-                <ul className="max-h-16 overflow-y-auto scrollbar-thin space-y-1 pt-1.5 border-t border-[var(--border)]">
-                  {unstableList.map((c) => (
-                    <li
-                      key={c.key}
-                      className="text-[10px] text-[var(--text-muted)] font-mono truncate"
-                    >
-                      {c.name}
-                      <span className="opacity-60"> · {c.ageDays}d</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       <div
         className={`border-t border-[var(--border)] ${
-          hero ? "pt-3 mt-3 md:mt-3.5" : "pt-5 mt-5"
+          hero ? "mt-auto pt-3 md:pt-3.5" : "pt-5 mt-5"
         }`}
       >
         <button
           type="submit"
           disabled={loading}
-          className={`btn-primary tracking-wide ${
-            hero ? "h-11 text-[13px] sm:text-[14px]" : "h-12 text-[14px]"
+          className={`tracking-wide ${
+            hero
+              ? "btn-secondary h-11 text-[13px] sm:text-[14px]"
+              : "btn-primary h-12 text-[14px]"
           }`}
           aria-busy={loading}
         >
@@ -676,6 +683,7 @@ export default function GeneratorForm({
             </>
           )}
         </button>
+      </div>
       </div>
     </form>
   );

@@ -65,15 +65,15 @@ function ShareContent() {
     }
   }, [tradeUp]);
 
-  const handleSave = (item?: TradeUpResult) => {
+  const handleSave = (item?: TradeUpResult): boolean => {
     const toSave = item ?? tradeUp;
-    if (!toSave) return;
+    if (!toSave) return false;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const items: SavedTradeUp[] = raw ? JSON.parse(raw) : [];
       if (items.some((s) => s.id === toSave.id)) {
         setSaved(true);
-        return;
+        return false;
       }
       localStorage.setItem(
         STORAGE_KEY,
@@ -83,6 +83,22 @@ function ShareContent() {
         ])
       );
       setSaved(true);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleUnsave = () => {
+    if (!tradeUp) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const items: SavedTradeUp[] = raw ? JSON.parse(raw) : [];
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(items.filter((s) => s.id !== tradeUp.id))
+      );
+      setSaved(false);
     } catch {
       /* ignore */
     }
@@ -157,6 +173,7 @@ function ShareContent() {
           <TradeUpCard
             tradeUp={tradeUp}
             onSave={handleSave}
+            onUnsave={handleUnsave}
             onInsight={handleInsight}
             saved={saved}
             showShare

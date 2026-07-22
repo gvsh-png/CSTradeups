@@ -30,6 +30,12 @@ const config: Config = {
           muted: "#601ef922",
           ink: "#ffffff",
         },
+        secondary: {
+          DEFAULT: "#0041c2",
+          dim: "#00359f",
+          bright: "#1a5ad4",
+          ink: "#ffffff",
+        },
         tertiary: {
           DEFAULT: "#8fa5d6",
         },
