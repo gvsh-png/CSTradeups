@@ -30,7 +30,7 @@ function resolveSourceConflict(
 
   const hi = Math.max(sa, sp);
   const lo = Math.min(sa, sp);
-  if (hi / lo <= 2) return r2((sa + sp) / 2);
+  if (hi / lo <= 2) return r2(lo);
 
   const saMid = median(steamApisSiblings.filter((p) => p > 0));
   const spMid = median(skinportSiblings.filter((p) => p > 0));
@@ -48,7 +48,7 @@ function resolveSourceConflict(
     if (sa > 0) return sa;
     return sp;
   }
-  return sa;
+  return lo;
 }
 
 /** Skinport: never use suggested_price */
@@ -73,11 +73,11 @@ function assert(name, got, expected) {
   if (!ok) failed++;
 }
 
-// Zeno MW: Steam ~$1.02, Skinport cheap ~$0.43 → keep Steam
+// Zeno MW: both books liquid — prefer cheaper buy price
 assert(
-  "Zeno MW prefer SteamApis",
+  "Zeno MW prefer cheaper liquid quote",
   resolveSourceConflict(1.02, 0.43, [1.36, 0.55, 0.4], [0.5, 0.35, 0.3]),
-  1.02
+  0.43
 );
 
 // Control Panel BS: Steam spike $57 vs SA siblings ~$8 → Skinport
@@ -112,12 +112,23 @@ assert(
   450
 );
 
-// Close sources: average at any price level
-assert("average when close", resolveSourceConflict(6.2, 5.9, [], []), 6.05);
+// Close sources: prefer lower buyable quote
+assert("min when close", resolveSourceConflict(6.2, 5.9, [], []), 5.9);
 assert(
-  "high-value close sources average",
+  "high-value close sources → lower",
   resolveSourceConflict(620, 648, [], []),
-  634
+  620
+);
+assert(
+  "mid-tier close sources → lower",
+  resolveSourceConflict(45, 38, [], []),
+  38
+);
+// Heat Treated FT pattern: Steam 7d avg ~2× Skinport listing
+assert(
+  "Steam avg vs Skinport min → cheaper book",
+  resolveSourceConflict(2.87, 1.4, [2.9, 2.8, 2.7], [1.5, 1.35, 1.42]),
+  1.4
 );
 assert(
   "high Steam-only kept when liquid",
@@ -128,11 +139,6 @@ assert(
   "high Skinport-only kept",
   resolveSourceConflict(0, 511, [], []),
   511
-);
-assert(
-  "mid-tier close sources average",
-  resolveSourceConflict(45, 38, [], []),
-  41.5
 );
 
 assert("median even", median([6, 57]), 31.5);

@@ -158,6 +158,17 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
     corrected = true;
   }
 
+  // Lowest listing ≈ what you pay — 7d/30d sale averages often run ~1.5–2× higher
+  const listingMin = p.min || 0;
+  if (
+    listingMin > 0 &&
+    (sold7 >= 2 || sold30 >= 5) &&
+    listingMin < priceUSD * 0.85
+  ) {
+    priceUSD = listingMin;
+    corrected = true;
+  }
+
   if (priceUSD <= 0) return { price: 0, corrected: false };
 
   return { price: r2(priceUSD), corrected };
@@ -237,7 +248,7 @@ export function resolveSourceConflict(
   const hi = Math.max(sa, sp);
   const lo = Math.min(sa, sp);
   if (hi / lo <= 2) {
-    return { price: r2((sa + sp) / 2), corrected: false };
+    return { price: r2(lo), corrected: false };
   }
 
   const saMid = median(steamApisSiblings.filter((p) => p > 0));
@@ -266,8 +277,8 @@ export function resolveSourceConflict(
     return { price: sp, corrected: true };
   }
 
-  // Mild disagreement: SteamApis (closer to Steam / TradeUpSpy)
-  return { price: sa, corrected: true };
+  // Mild disagreement — prefer the lower liquid book (real buy price)
+  return { price: r2(lo), corrected: true };
 }
 
 type FeedStatus =
@@ -471,7 +482,7 @@ function mergeBulkSources(
         deferred.push(key);
         continue;
       }
-      prices[key] = r2((sa + sp) / 2);
+      prices[key] = r2(lo);
       continue;
     }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
+import { buildSkinDatabase, fetchSchema, getSkinImage, groupByCollectionRarity } from "@/lib/schema";
 import {
   findSkinsBySearch,
   getTargetBlockReason,
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
       skins: skins.map((s) => ({
         name: s.name,
         rarity: s.rarity,
-        image: s.image,
+        image: s.image || getSkinImage(schema, s.name),
         maxHitPct: s.maxHitPct,
         collections: s.collections.slice(0, 4).map((c) => ({
           id: c.id,

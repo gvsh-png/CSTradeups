@@ -375,7 +375,7 @@ export default function GeneratorForm({
                   optional
                 </span>
                 <span className="text-[10px] font-mono text-[var(--text-muted)] md:hidden">
-                  optional · max hit chance
+                  optional
                 </span>
               </div>
               {targetSkin ? (
@@ -399,12 +399,6 @@ export default function GeneratorForm({
                     </p>
                     <p className="text-[10px] font-mono text-[var(--text-muted)]">
                       {rarityShort(targetSkin.rarity)}
-                      {targetSkin.maxHitPct > 0 && (
-                        <span className="text-accent">
-                          {" "}
-                          · up to {targetSkin.maxHitPct}%
-                        </span>
-                      )}
                     </p>
                   </div>
                   <button
@@ -462,15 +456,25 @@ export default function GeneratorForm({
                               <img
                                 src={s.image}
                                 alt=""
-                                className="h-7 w-7 shrink-0 object-contain"
+                                className="h-7 w-7 shrink-0 object-contain rounded border bg-[var(--bg-deep)]"
+                                style={{
+                                  borderColor: rarityStyle(s.rarity).borderColor,
+                                }}
                               />
-                            ) : null}
+                            ) : (
+                              <div
+                                className="h-7 w-7 shrink-0 rounded border bg-[var(--bg-deep)]"
+                                style={{
+                                  borderColor: rarityStyle(s.rarity).borderColor,
+                                }}
+                              />
+                            )}
                             <span className="min-w-0 flex-1">
                               <span className="block text-[12px] font-medium truncate">
                                 {s.name}
                               </span>
                               <span className="block text-[10px] font-mono text-[var(--text-muted)]">
-                                {rarityShort(s.rarity)} · max {s.maxHitPct}%
+                                {rarityShort(s.rarity)}
                               </span>
                             </span>
                           </button>
