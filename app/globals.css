@@ -14,14 +14,14 @@
   --surface-highest: #2a2e36;
   --border: #2a2e36;
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-brass: rgba(229, 168, 89, 0.22);
+  --border-brass: rgba(96, 30, 249, 0.22);
   --text: #f3f4f6;
   --text-muted: #9ca3af; /* neutral */
   --text-soft: #c4c9d1;
-  --accent: #e5a859; /* primary gold */
-  --accent-dim: #c48f45;
-  --accent-bright: #f0c57a;
-  --accent-ink: #1a1205;
+  --accent: #601ef9; /* purplish blue */
+  --accent-dim: #4c18c7;
+  --accent-bright: #7d4afb;
+  --accent-ink: #ffffff;
   --tertiary: #8fa5d6; /* periwinkle accent */
   --profit: #5ecf8e;
   --loss: #e35d5d;

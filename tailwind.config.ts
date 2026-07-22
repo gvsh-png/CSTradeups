@@ -24,11 +24,11 @@ const config: Config = {
           hover: "#2a2e36",
         },
         accent: {
-          DEFAULT: "#e5a859",
-          dim: "#c48f45",
-          bright: "#f0c57a",
-          muted: "#e5a85922",
-          ink: "#1a1205",
+          DEFAULT: "#601ef9",
+          dim: "#4c18c7",
+          bright: "#7d4afb",
+          muted: "#601ef922",
+          ink: "#ffffff",
         },
         tertiary: {
           DEFAULT: "#8fa5d6",
