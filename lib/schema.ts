@@ -1,5 +1,6 @@
 import {
   EXCLUDED_KEYWORDS,
+  isNeverTradeUpCollection,
   KNIFE_GLOVE_TYPES,
   RARITY_MAP,
   RARITY_ORDER,
@@ -36,11 +37,24 @@ const KNIFE_NAMES = [
   "Broken Fang Gloves",
 ];
 
-function isExcludedCol(name: string): boolean {
+/** Soft name-keyword bans (Anubis, timed drops, etc.) */
+function isExcludedColName(name: string): boolean {
   const nm = name.toLowerCase();
   return (
     EXCLUDED_KEYWORDS.some((k) => nm.includes(k)) || nm.includes("exclusive")
   );
+}
+
+/** Permanent + soft bans — collection key or display name */
+export function isTradeUpBannedCollection(
+  key: string,
+  name?: string
+): boolean {
+  if (isNeverTradeUpCollection(key, name)) return true;
+  if (name && isExcludedColName(name)) return true;
+  // Also match soft keywords against the key (e.g. set_timed_drops_*)
+  if (isExcludedColName(key)) return true;
+  return false;
 }
 
 export function buildSkinDatabase(
@@ -73,9 +87,11 @@ export function buildSkinDatabase(
       )
         continue;
 
-      let validCols = paint.collections.filter(
-        (c) => !isExcludedCol(colMap[c] || c)
-      );
+      let validCols = paint.collections.filter((c) => {
+        const colName = colMap[c] || c;
+        if (isTradeUpBannedCollection(c, colName)) return false;
+        return true;
+      });
 
       if (excludedCollectionKeys?.size) {
         validCols = validCols.filter((c) => !excludedCollectionKeys.has(c));

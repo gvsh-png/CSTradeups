@@ -6,6 +6,7 @@ import {
   NEW_COLLECTION_MAX_AGE_DAYS,
   resolveReleaseDateWithAI,
 } from "@/lib/collections";
+import { isNeverTradeUpCollection } from "@/lib/constants";
 import { fetchSchema } from "@/lib/schema";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +32,16 @@ export async function GET() {
       }
     }
 
-    const unstable = getUnstableCollections(schema, new Date(), NEW_COLLECTION_MAX_AGE_DAYS, discoveries);
+    const unstable = getUnstableCollections(
+      schema,
+      new Date(),
+      NEW_COLLECTION_MAX_AGE_DAYS,
+      discoveries
+    ).filter((c) => !isNeverTradeUpCollection(c.key, c.name));
+
+    // Hide permanently banned collections from custom-exclude UI
     const allCollections = (schema.collections || [])
+      .filter((c) => !isNeverTradeUpCollection(c.key, c.name))
       .map((c) => ({ key: c.key, name: c.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
 

@@ -56,6 +56,41 @@ export const WEAR_RANGES = [
 export const STEAM_FEE = 0.13;
 export const CSFLOAT_FEE = 0.02;
 
+/**
+ * Collections that can NEVER be used in CS2 trade-up contracts.
+ * Hard-banned forever — not shown in temporary / custom exclude UI.
+ * Match by exact key, key prefix, or display-name keyword.
+ */
+export const NEVER_TRADEUP_COLLECTION_KEYS = new Set([
+  "set_xpshop_wpn_01", // Limited Edition Item (Armory)
+]);
+
+/** Future Armory / XP-shop limited editions use this prefix */
+export const NEVER_TRADEUP_KEY_PREFIXES = ["set_xpshop_"] as const;
+
+export const NEVER_TRADEUP_NAME_KEYWORDS = [
+  "limited edition",
+] as const;
+
+/** True if this collection is permanently ineligible for trade-ups */
+export function isNeverTradeUpCollection(
+  key: string,
+  name?: string
+): boolean {
+  const k = (key || "").toLowerCase();
+  const n = (name || "").toLowerCase();
+  if (NEVER_TRADEUP_COLLECTION_KEYS.has(key) || NEVER_TRADEUP_COLLECTION_KEYS.has(k)) {
+    return true;
+  }
+  if (NEVER_TRADEUP_KEY_PREFIXES.some((p) => k.startsWith(p))) return true;
+  if (n && NEVER_TRADEUP_NAME_KEYWORDS.some((w) => n.includes(w))) return true;
+  return false;
+}
+
+/**
+ * Soft keyword bans on collection *names* (always skipped in generation).
+ * Separate from NEVER_TRADEUP — these may still appear in settings UI.
+ */
 export const EXCLUDED_KEYWORDS = [
   "armory",
   "armoury",
