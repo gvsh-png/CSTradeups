@@ -34,6 +34,11 @@ export default function GeneratePage() {
     }
   }, []);
 
+  // Warm the shared price cache before the user hits Scan (cold SteamApis is slow)
+  useEffect(() => {
+    void fetch("/api/prices?warm=1").catch(() => {});
+  }, []);
+
   // After generate click: jump to the loading panel once it mounts
   useEffect(() => {
     if (!loading) return;

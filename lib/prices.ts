@@ -307,6 +307,9 @@ function isAbortError(err: unknown): boolean {
   );
 }
 
+/** Steam catalog is huge — hard-cap so cold scans don't hit the client 85s timeout */
+const STEAMAPIS_FETCH_MS = 18_000;
+
 async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
   const apiKey = process.env.STEAMAPIS_API_KEY;
   if (!apiKey) {
@@ -321,8 +324,7 @@ async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
       `https://api.steamapis.com/market/items/730?api_key=${apiKey}`,
       {
         cache: "no-store",
-        // Full catalog is large — allow longer when we actually wait for it
-        signal: AbortSignal.timeout(35_000),
+        signal: AbortSignal.timeout(STEAMAPIS_FETCH_MS),
       }
     );
 
@@ -574,16 +576,21 @@ function mergeBulkSources(
 }
 
 /**
- * Steam-first cold path: always fetch SteamApis when available (matches
- * steamcommunity.com/market "Starting at"). Skinport fills gaps + liquidity.
+ * Steam-first when SteamApis answers in time; Skinport always runs so a
+ * slow/failed Steam catalog never blocks the scan (empty cache → timeout).
  */
 async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
+  const skinportPromise = fetchSkinportPrices();
+  const steamPromise = fetchSteamApisPrices();
+
+  // Prefer Skinport finishing first — if Steam is still downloading, don't
+  // wait past its own AbortSignal; Promise.all is fine with short Steam cap.
   const [steamApisResult, skinportResult] = await Promise.all([
-    fetchSteamApisPrices(),
-    fetchSkinportPrices(),
+    steamPromise,
+    skinportPromise,
   ]);
 
-  return mergeBulkSources(
+  const merged = mergeBulkSources(
     steamApisResult.prices,
     skinportResult.prices,
     steamApisResult.corrections,
@@ -594,15 +601,36 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
       skinportStatus: skinportResult.status,
     }
   );
+
+  // Usable Skinport-only book beats an empty merge after Steam timeout
+  if (
+    priceCount(merged.prices) < 50 &&
+    skinportResult.prices &&
+    Object.keys(skinportResult.prices).length >= 50
+  ) {
+    return mergeBulkSources(
+      null,
+      skinportResult.prices,
+      0,
+      null,
+      skinportResult.quantity,
+      {
+        steamApisStatus: steamApisResult.status,
+        skinportStatus: skinportResult.status,
+      }
+    );
+  }
+
+  return merged;
 }
 
 /**
  * Daily shared price cache — all users share the same bulk price data.
- * v14: Steam-first (Starting at), not Skinport-blended.
+ * v15: short SteamApis cap + Skinport fallback so cold scans don't 85s-timeout.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v14"],
+  ["tradeup-bulk-prices-v15"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
