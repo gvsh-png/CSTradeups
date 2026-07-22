@@ -8,7 +8,6 @@ export default function HomePage() {
         <div className="pointer-events-none absolute -top-20 left-1/2 h-64 w-[28rem] -translate-x-1/2 rounded-full bg-accent/[0.06] blur-3xl" />
 
         <div className="relative mx-auto max-w-container px-4 sm:px-6 py-16 sm:py-22 lg:py-28 text-center animate-fade-up">
-          <p className="label mb-4 text-accent">CS2 contract scanner</p>
           <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-bold tracking-tight leading-[1.05] max-w-3xl mx-auto">
             <span className="text-accent">tradeupcsgo.net</span>
             <span className="block mt-3 text-[0.68em] font-semibold text-[var(--text)]">
