@@ -166,17 +166,17 @@ export default function GeneratePage() {
 
   return (
     <div className="w-full">
-      {/* Mobile title — Stitch Scanner header */}
-      <div className="lg:hidden mx-auto max-w-container px-4 pt-5 pb-1">
+      {/* Mobile-only title — hidden from md up so Configure Scanner is the sole header */}
+      <div className="md:hidden mx-auto max-w-container px-4 pt-5 pb-1">
         <h1 className="text-2xl font-bold tracking-tight text-accent">Scanner</h1>
         <p className="text-[12px] text-[var(--text-muted)] mt-1">
           Configure filters and generate trade-up blueprints.
         </p>
       </div>
 
-      {/* Configure — full-width centered hero (Stitch desktop dark) */}
+      {/* Configure — panel + Generate button must fit one viewport on laptop/medium */}
       <section className="border-b border-[var(--border)]">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-5 lg:py-12 xl:py-14 animate-fade-up">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-3 md:py-4 lg:py-5 animate-fade-up">
           <GeneratorForm
             variant="hero"
             onGenerate={handleGenerate}
