@@ -49,8 +49,8 @@ export default function GeneratePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params),
-        // Under Vercel maxDuration — clear timeout instead of hanging forever
-        signal: AbortSignal.timeout(55_000),
+        // Align with server maxDuration 90 — cold price cache needs headroom
+        signal: AbortSignal.timeout(85_000),
       });
 
       const raw = await res.text();
@@ -111,7 +111,7 @@ export default function GeneratePage() {
           err.name === "AbortError" ||
           /aborted|timeout/i.test(err.message));
       const msg = timedOut
-        ? "Scan timed out — price feeds were slow. Try again in a moment."
+        ? "Scan timed out while loading market prices. Wait a few seconds and try again — the first scan after a cache refresh is slowest."
         : err instanceof Error
           ? err.message
           : "Something went wrong";
