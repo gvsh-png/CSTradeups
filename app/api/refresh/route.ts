@@ -6,7 +6,7 @@ import { buildSkinDatabase, fetchSchema } from "@/lib/schema";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 45;
+export const maxDuration = 60;
 
 /** Refresh prices on an existing trade-up and recalculate EV / profit */
 export async function POST(request: Request) {

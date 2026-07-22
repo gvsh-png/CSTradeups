@@ -15,6 +15,17 @@ export interface PriceMeta {
   corrections: number;
   /** Dropped because Steam sold=0 and Skinport quantity=0 */
   deadMarkets: number;
+  /** SteamApis feed outcome — quota means monthly API limit hit */
+  steamApisStatus?:
+    | "ok"
+    | "missing_key"
+    | "quota"
+    | "timeout"
+    | "error"
+    | "skipped";
+  skinportStatus?: "ok" | "timeout" | "error";
+  /** True when serving last-known-good prices after a failed refresh */
+  staleFallback?: boolean;
 }
 
 interface SteamApisItem {
@@ -234,27 +245,71 @@ export function resolveSourceConflict(
   return { price: sa, corrected: true };
 }
 
-async function fetchSteamApisPrices(): Promise<{
-  prices: PriceMap;
-  sold: Record<string, { sold7: number; sold30: number }>;
+type FeedStatus =
+  | "ok"
+  | "missing_key"
+  | "quota"
+  | "timeout"
+  | "error"
+  | "skipped";
+
+type SteamApisFetch = {
+  prices: PriceMap | null;
+  sold: Record<string, { sold7: number; sold30: number }> | null;
   corrections: number;
-} | null> {
+  status: FeedStatus;
+};
+
+type SkinportFetch = {
+  prices: PriceMap | null;
+  quantity: Record<string, number> | null;
+  status: "ok" | "timeout" | "error";
+};
+
+/** Skip SteamApis for a while after quota / auth failures (per warm instance) */
+let steamApisCooldownUntil = 0;
+
+function isAbortError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.name === "TimeoutError" ||
+      err.name === "AbortError" ||
+      /aborted|timeout/i.test(err.message))
+  );
+}
+
+async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
   const apiKey = process.env.STEAMAPIS_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    return { prices: null, sold: null, corrections: 0, status: "missing_key" };
+  }
+  if (Date.now() < steamApisCooldownUntil) {
+    return { prices: null, sold: null, corrections: 0, status: "skipped" };
+  }
 
   try {
     const res = await fetch(
       `https://api.steamapis.com/market/items/730?api_key=${apiKey}`,
       {
         cache: "no-store",
-        // Full CS catalog is large — hard cap so generate/refresh never hang
-        signal: AbortSignal.timeout(25_000),
+        // Full catalog is large — allow longer when we actually wait for it
+        signal: AbortSignal.timeout(35_000),
       }
     );
-    if (!res.ok) return null;
+
+    // 401/402/403/429 — typically bad key or monthly quota exhausted
+    if ([401, 402, 403, 429].includes(res.status)) {
+      steamApisCooldownUntil = Date.now() + 60 * 60 * 1000; // 1h
+      return { prices: null, sold: null, corrections: 0, status: "quota" };
+    }
+    if (!res.ok) {
+      return { prices: null, sold: null, corrections: 0, status: "error" };
+    }
 
     const data = await res.json();
-    if (!data?.data) return null;
+    if (!data?.data) {
+      return { prices: null, sold: null, corrections: 0, status: "error" };
+    }
 
     const prices: PriceMap = {};
     const sold: Record<string, { sold7: number; sold30: number }> = {};
@@ -275,16 +330,18 @@ async function fetchSteamApisPrices(): Promise<{
       }
     }
 
-    return { prices, sold, corrections };
-  } catch {
-    return null;
+    return { prices, sold, corrections, status: "ok" };
+  } catch (err) {
+    return {
+      prices: null,
+      sold: null,
+      corrections: 0,
+      status: isAbortError(err) ? "timeout" : "error",
+    };
   }
 }
 
-async function fetchSkinportPrices(): Promise<{
-  prices: PriceMap;
-  quantity: Record<string, number>;
-} | null> {
+async function fetchSkinportPricesOnce(): Promise<SkinportFetch> {
   try {
     const res = await fetch(
       "https://api.skinport.com/v1/items?app_id=730&currency=USD&tradable=0",
@@ -294,13 +351,15 @@ async function fetchSkinportPrices(): Promise<{
           "User-Agent": "tradeupcsgo.net/1.0",
         },
         cache: "no-store",
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(15_000),
       }
     );
-    if (!res.ok) return null;
+    if (!res.ok) return { prices: null, quantity: null, status: "error" };
 
     const data = (await res.json()) as SkinportItem[];
-    if (!Array.isArray(data)) return null;
+    if (!Array.isArray(data)) {
+      return { prices: null, quantity: null, status: "error" };
+    }
 
     const prices: PriceMap = {};
     const quantity: Record<string, number> = {};
@@ -310,10 +369,24 @@ async function fetchSkinportPrices(): Promise<{
       if (price > 0) prices[item.market_hash_name] = price;
     }
 
-    return { prices, quantity };
-  } catch {
-    return null;
+    return { prices, quantity, status: "ok" };
+  } catch (err) {
+    return {
+      prices: null,
+      quantity: null,
+      status: isAbortError(err) ? "timeout" : "error",
+    };
   }
+}
+
+async function fetchSkinportPrices(): Promise<SkinportFetch> {
+  const first = await fetchSkinportPricesOnce();
+  if (first.status === "ok" && first.prices && Object.keys(first.prices).length > 50) {
+    return first;
+  }
+  // One quick retry — Skinport occasionally resets mid-transfer
+  await new Promise((r) => setTimeout(r, 400));
+  return fetchSkinportPricesOnce();
 }
 
 function skinBaseName(marketHashName: string): string {
@@ -326,7 +399,11 @@ function mergeBulkSources(
   skinport: PriceMap | null,
   steamApisCorrections: number,
   steamSold: Record<string, { sold7: number; sold30: number }> | null = null,
-  skinportQty: Record<string, number> | null = null
+  skinportQty: Record<string, number> | null = null,
+  feedStatus: {
+    steamApisStatus: FeedStatus;
+    skinportStatus: "ok" | "timeout" | "error";
+  } = { steamApisStatus: "error", skinportStatus: "error" }
 ): BulkPriceResult {
   const prices: PriceMap = {};
   const allKeys = new Set([
@@ -460,56 +537,118 @@ function mergeBulkSources(
       skinportCount: Object.keys(skinport || {}).length,
       corrections: steamApisCorrections + mergeCorrections,
       deadMarkets,
+      steamApisStatus: feedStatus.steamApisStatus,
+      skinportStatus: feedStatus.skinportStatus,
     },
   };
 }
 
 /**
- * Internal fetch — called at most once per day via unstable_cache.
- * One SteamApis call + one Skinport call = 1 API request total (SteamApis).
- * Always settles (timeouts inside fetchers) so a hung feed cannot poison
- * the cache by aborting mid-write on every cold request.
+ * Skinport-first cold path: if Skinport returns a usable book, skip SteamApis
+ * for this cache fill (saves quota + ~20–35s). SteamApis only runs when
+ * Skinport is thin/failed.
  */
 async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
-  const [steamApisResult, skinportResult] = await Promise.all([
-    fetchSteamApisPrices(),
-    fetchSkinportPrices(),
-  ]);
+  const skinportResult = await fetchSkinportPrices();
+  const skinCount = Object.keys(skinportResult.prices || {}).length;
 
-  const result = mergeBulkSources(
-    steamApisResult?.prices ?? null,
-    skinportResult?.prices ?? null,
-    steamApisResult?.corrections ?? 0,
-    steamApisResult?.sold ?? null,
-    skinportResult?.quantity ?? null
+  const steamApisResult: SteamApisFetch =
+    skinportResult.status === "ok" && skinCount >= 100
+      ? {
+          prices: null,
+          sold: null,
+          corrections: 0,
+          status: "skipped",
+        }
+      : await fetchSteamApisPrices();
+
+  return mergeBulkSources(
+    steamApisResult.prices,
+    skinportResult.prices,
+    steamApisResult.corrections,
+    steamApisResult.sold,
+    skinportResult.quantity,
+    {
+      steamApisStatus: steamApisResult.status,
+      skinportStatus: skinportResult.status,
+    }
   );
-
-  return result;
 }
 
 /**
  * Daily shared price cache — all users share the same bulk price data.
- * Refreshes automatically after 24 hours on the next request.
- * v10: hard timeouts on SteamApis/Skinport so scans never hang forever.
+ * v11: Skinport-first cold path, SteamApis optional boost, last-good fallback.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v10"],
+  ["tradeup-bulk-prices-v11"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
   }
 );
 
+/** Last successful book kept in memory for this warm serverless instance */
+let lastGoodPrices: BulkPriceResult | null = null;
+
+function priceCount(prices: PriceMap): number {
+  return Object.values(prices).filter((p) => p > 0).length;
+}
+
 export async function getBulkPrices(): Promise<BulkPriceResult> {
-  const result = await getCachedBulkPrices();
-  return {
-    prices: result.prices,
-    meta: {
-      ...result.meta,
-      fromCache: true,
-    },
-  };
+  try {
+    const result = await getCachedBulkPrices();
+    if (priceCount(result.prices) >= 50) {
+      lastGoodPrices = result;
+      return {
+        prices: result.prices,
+        meta: { ...result.meta, fromCache: true },
+      };
+    }
+    // Fresh fetch was empty (quota + Skinport down) — reuse last good book
+    if (lastGoodPrices && priceCount(lastGoodPrices.prices) >= 50) {
+      return {
+        prices: lastGoodPrices.prices,
+        meta: {
+          ...lastGoodPrices.meta,
+          fromCache: true,
+          staleFallback: true,
+          steamApisStatus: result.meta.steamApisStatus,
+          skinportStatus: result.meta.skinportStatus,
+        },
+      };
+    }
+    return {
+      prices: result.prices,
+      meta: { ...result.meta, fromCache: true },
+    };
+  } catch {
+    if (lastGoodPrices && priceCount(lastGoodPrices.prices) >= 50) {
+      return {
+        prices: lastGoodPrices.prices,
+        meta: {
+          ...lastGoodPrices.meta,
+          fromCache: true,
+          staleFallback: true,
+        },
+      };
+    }
+    throw new Error("Price feeds unavailable");
+  }
+}
+
+/** Human-readable reason when price book is too thin to scan */
+export function pricesUnavailableMessage(meta: PriceMeta): string {
+  if (meta.skinportStatus === "timeout" || meta.steamApisStatus === "timeout") {
+    return "Price feeds timed out before enough market data loaded. Try again in a moment.";
+  }
+  if (meta.steamApisStatus === "quota" && meta.skinportStatus !== "ok") {
+    return "SteamApis rejected the request and Skinport also failed. Check your SteamApis key, then retry.";
+  }
+  if (meta.steamApisStatus === "missing_key" && meta.skinportStatus !== "ok") {
+    return "Skinport prices failed and no STEAMAPIS_API_KEY is set. Retry in a minute.";
+  }
+  return "Market price feeds are unavailable right now. Try again in a minute.";
 }
 
 export function getPrice(

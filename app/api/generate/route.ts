@@ -7,7 +7,7 @@ import {
 } from "@/lib/collections";
 import { authConfigured, authRequired } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
-import { getBulkPrices } from "@/lib/prices";
+import { getBulkPrices, pricesUnavailableMessage } from "@/lib/prices";
 import { buildSkinDatabaseForMode, buildSpecialOutcomesByCollection, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
   generateTradeUps,
@@ -23,7 +23,7 @@ import {
 } from "@/lib/tradeup/risk";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 export async function POST(request: Request) {
   try {
@@ -92,7 +92,11 @@ export async function POST(request: Request) {
       limit: Math.max(1, Math.min(50, finite(body.limit, 15))),
     };
 
-    const schema = await fetchSchema();
+    // Schema + prices in parallel — sequential cold path was blowing the client timeout
+    const [schema, bulkResult] = await Promise.all([
+      fetchSchema(),
+      getBulkPrices(),
+    ]);
     await loadDiscoveries();
     const discoveries = discoverNewCollections(schema);
 
@@ -117,21 +121,22 @@ export async function POST(request: Request) {
         ? buildSpecialOutcomesByCollection(schema, excludedKeys)
         : {};
 
-    const { prices: bulk, meta: priceMeta } = await getBulkPrices();
+    const { prices: bulk, meta: priceMeta } = bulkResult;
     const prices = sanitizePrices(bulk, skinDB);
 
     const priceCount = Object.values(prices).filter((p) => p > 0).length;
     if (priceCount < 50) {
       return NextResponse.json(
         {
-          error:
-            "Market price feeds are unavailable right now. Try again in a minute.",
+          error: pricesUnavailableMessage(priceMeta),
           code: "PRICES_UNAVAILABLE",
           meta: {
             pricesLoaded: priceCount,
             priceSource: priceMeta.source,
             steamApisPrices: priceMeta.steamApisCount,
             skinportPrices: priceMeta.skinportCount,
+            steamApisStatus: priceMeta.steamApisStatus,
+            skinportStatus: priceMeta.skinportStatus,
           },
         },
         { status: 503 }
@@ -158,8 +163,11 @@ export async function POST(request: Request) {
         priceCorrections: priceMeta.corrections,
         steamApisPrices: priceMeta.steamApisCount,
         skinportPrices: priceMeta.skinportCount,
+        steamApisStatus: priceMeta.steamApisStatus,
+        skinportStatus: priceMeta.skinportStatus,
         pricesCachedAt: priceMeta.fetchedAt,
         pricesCachedUntil: priceMeta.cachedUntil,
+        staleFallback: priceMeta.staleFallback || false,
         excludedCollections: excludedKeys.size,
         newCollectionMaxAgeDays: params.excludeUnstableCollections
           ? NEW_COLLECTION_MAX_AGE_DAYS
