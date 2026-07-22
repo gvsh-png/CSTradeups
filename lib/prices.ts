@@ -91,10 +91,9 @@ export function median(nums: number[]): number {
 }
 
 /**
- * Pick Steam Market price from SteamApis data.
- * Prefer `min` (Steam "Starting at" / lowest listing) when the market is liquid —
- * that is what users see on steamcommunity.com/market.
- * Fall back to recent sale averages when min is missing or absurd.
+ * Pick price from full SteamApis item payload (legacy path).
+ * Note: `prices.min` is historical lowest *sale*, not live Steam listing.
+ * Prefer safe / safe_ts windows over min.
  */
 export function resolveSteamApisPrice(item: SteamApisItem): {
   price: number;
