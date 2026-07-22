@@ -100,13 +100,27 @@ body::after {
       0 16px 40px -28px rgba(0, 0, 0, 0.8);
   }
 
-  /* Short laptop viewports: keep Configure Scanner + Generate in one screen */
-  @media (min-width: 768px) and (max-height: 820px) {
+  /* Laptop/desktop: denser Configure Scanner — same fields, less vertical space */
+  @media (min-width: 768px) {
     .scanner-hero {
       padding: 0.75rem 1rem !important;
     }
     .scanner-hero-sub {
       display: none;
+    }
+    .scanner-hero .input-field {
+      height: 2.25rem;
+      font-size: 0.8125rem;
+    }
+    .scanner-hero .scanner-target-hint {
+      display: none;
+    }
+  }
+
+  /* Short laptop viewports: tighten further */
+  @media (min-width: 768px) and (max-height: 820px) {
+    .scanner-hero {
+      padding: 0.625rem 0.875rem !important;
     }
   }
 

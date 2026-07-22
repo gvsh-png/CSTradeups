@@ -181,9 +181,9 @@ export default function GeneratePage() {
         </p>
       </div>
 
-      {/* Configure — fill viewport under nav on laptop/PC; Generate sits at bottom */}
-      <section className="border-b border-[var(--border)] md:min-h-[calc(100dvh-3rem)] md:flex md:flex-col">
-        <div className="mx-auto max-w-4xl w-full px-4 sm:px-6 py-3 md:py-4 md:flex-1 md:flex md:flex-col animate-fade-up">
+      {/* Configure — compact panel on laptop/PC, full form visible without scroll */}
+      <section className="border-b border-[var(--border)]">
+        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-3 md:py-3 animate-fade-up">
           <GeneratorForm
             variant="hero"
             onGenerate={handleGenerate}
