@@ -30,25 +30,32 @@ function resolveSourceConflict(
 
   const hi = Math.max(sa, sp);
   const lo = Math.min(sa, sp);
-  if (hi / lo <= 2) return r2(lo);
-
   const saMid = median(steamApisSiblings.filter((p) => p > 0));
   const spMid = median(skinportSiblings.filter((p) => p > 0));
 
   if (sa === hi && saMid > 0 && sa > saMid * 2.5) return sp;
-  if (sp === hi && spMid > 0 && sp > spMid * 2.5) return sa;
+  if (saMid > 0 && spMid > 0 && spMid / saMid >= 2.5) return sp;
+  if (hi / lo >= 5 && sa > 0) return sa;
+  return sa;
+}
 
-  if (saMid > 0 && spMid > 0) {
-    if (spMid / saMid >= 2.5) return sp;
-    if (saMid / spMid >= 2.5) return sa;
+function resolveSteamApisPrice(item) {
+  const p = item.prices;
+  if (!p) return 0;
+  const ts = p.safe_ts || {};
+  const last7 = ts.last_7d || 0;
+  const last30 = ts.last_30d || 0;
+  const safe = p.safe || 0;
+  const latest = p.latest || 0;
+  const listingMin = p.min || 0;
+  const sold7 = p.sold?.last_7d || 0;
+  const sold30 = p.sold?.last_30d || 0;
+  const liquid = sold7 > 0 || sold30 > 0;
+  if (listingMin > 0 && liquid) {
+    const anchor = last7 || last30 || safe || latest;
+    if (!anchor || listingMin >= anchor * 0.4) return r2(listingMin);
   }
-
-  // Extreme disagreement without ladder → trust SteamApis
-  if (hi / lo >= 5) {
-    if (sa > 0) return sa;
-    return sp;
-  }
-  return lo;
+  return r2(last7 || last30 || safe || latest || listingMin || 0);
 }
 
 /** Skinport: never use suggested_price */
@@ -73,11 +80,11 @@ function assert(name, got, expected) {
   if (!ok) failed++;
 }
 
-// Zeno MW: both books liquid — prefer cheaper buy price
+// Zeno MW: Steam Market is source of truth
 assert(
-  "Zeno MW prefer cheaper liquid quote",
+  "Zeno MW prefer Steam",
   resolveSourceConflict(1.02, 0.43, [1.36, 0.55, 0.4], [0.5, 0.35, 0.3]),
-  0.43
+  1.02
 );
 
 // Control Panel BS: Steam spike $57 vs SA siblings ~$8 → Skinport
@@ -112,23 +119,35 @@ assert(
   450
 );
 
-// Close sources: prefer lower buyable quote
-assert("min when close", resolveSourceConflict(6.2, 5.9, [], []), 5.9);
+// Close sources: prefer Steam
+assert("Steam when close", resolveSourceConflict(6.2, 5.9, [], []), 6.2);
 assert(
-  "high-value close sources → lower",
+  "high-value close sources → Steam",
   resolveSourceConflict(620, 648, [], []),
   620
 );
 assert(
-  "mid-tier close sources → lower",
+  "mid-tier close sources → Steam",
   resolveSourceConflict(45, 38, [], []),
-  38
+  45
 );
-// Heat Treated FT pattern: Steam 7d avg ~2× Skinport listing
 assert(
-  "Steam avg vs Skinport min → cheaper book",
-  resolveSourceConflict(2.87, 1.4, [2.9, 2.8, 2.7], [1.5, 1.35, 1.42]),
-  1.4
+  "Acid Etched / Skinport cheaper → still Steam",
+  resolveSourceConflict(0.4, 0.37, [0.42, 0.38], [0.35, 0.36]),
+  0.4
+);
+assert(
+  "Steam min (Starting at) preferred",
+  resolveSteamApisPrice({
+    prices: {
+      min: 0.37,
+      latest: 0.42,
+      safe: 0.4,
+      safe_ts: { last_7d: 0.41, last_30d: 0.4 },
+      sold: { last_7d: 20, last_30d: 80 },
+    },
+  }),
+  0.37
 );
 assert(
   "high Steam-only kept when liquid",

@@ -17,7 +17,7 @@ export default function CurrencySelect() {
         onChange={(e) => setCode(e.target.value as CurrencyCode)}
         className="h-full max-w-[4.5rem] sm:max-w-[5.5rem] appearance-none bg-transparent pr-4 text-[11px] font-mono text-[var(--text)] outline-none cursor-pointer"
         aria-label="Display currency"
-        title="Display currency (prices convert from USD market data)"
+        title="Display currency (Steam USD prices, live FX conversion)"
       >
         {CURRENCIES.map((c) => (
           <option key={c.code} value={c.code} className="bg-[var(--surface)]">

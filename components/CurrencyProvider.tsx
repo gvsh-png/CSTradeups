@@ -20,6 +20,8 @@ import {
   type CurrencyDef,
 } from "@/lib/currency";
 
+type Rates = Partial<Record<CurrencyCode, number>>;
+
 type CurrencyContextValue = {
   code: CurrencyCode;
   currency: CurrencyDef;
@@ -37,6 +39,7 @@ const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [code, setCodeState] = useState<CurrencyCode>(DEFAULT_CURRENCY);
+  const [rates, setRates] = useState<Rates | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -52,6 +55,23 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
+  // Live FX so €/kr match Steam wallet display (not a stale static table)
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/fx")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !d?.rates || typeof d.rates !== "object") return;
+        setRates(d.rates as Rates);
+      })
+      .catch(() => {
+        /* keep static fallbacks */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const setCode = useCallback((next: CurrencyCode) => {
     setCodeState(next);
     try {
@@ -62,18 +82,20 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const currency = useMemo(() => getCurrency(code), [code]);
+  const rateOpts = rates || undefined;
 
   const value = useMemo<CurrencyContextValue>(
     () => ({
       code,
       currency,
       setCode,
-      money: (amountUsd, opts) => formatMoney(amountUsd, code, opts),
-      fromUsd: (n) => fromUsd(n, code),
-      toUsd: (n) => toUsd(n, code),
+      money: (amountUsd, opts) =>
+        formatMoney(amountUsd, code, { ...opts, rates: rateOpts }),
+      fromUsd: (n) => fromUsd(n, code, rateOpts),
+      toUsd: (n) => toUsd(n, code, rateOpts),
       symbol: currency.symbol,
     }),
-    [code, currency, setCode]
+    [code, currency, setCode, rateOpts]
   );
 
   // Avoid hydration mismatch flashing wrong currency

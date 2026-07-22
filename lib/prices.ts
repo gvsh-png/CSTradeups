@@ -91,8 +91,10 @@ export function median(nums: number[]): number {
 }
 
 /**
- * Pick the best price from SteamApis data, rejecting outlier sales.
- * Uses recent average sale prices, NOT lowest listings.
+ * Pick Steam Market price from SteamApis data.
+ * Prefer `min` (Steam "Starting at" / lowest listing) when the market is liquid —
+ * that is what users see on steamcommunity.com/market.
+ * Fall back to recent sale averages when min is missing or absurd.
  */
 export function resolveSteamApisPrice(item: SteamApisItem): {
   price: number;
@@ -109,20 +111,33 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
   const safe = p.safe || 0;
   const sold7 = p.sold?.last_7d || 0;
   const sold30 = p.sold?.last_30d || 0;
+  const listingMin = p.min || 0;
+  const liquid = sold7 > 0 || sold30 > 0;
 
   let priceUSD = 0;
   let corrected = false;
 
+  // Steam Market "Starting at" — primary when liquid and not a ghost stub
+  if (listingMin > 0 && liquid) {
+    const anchor = last7 || last30 || safe || latest || last90;
+    // Reject absurd undercuts (<40% of recent market) — keep min otherwise
+    if (!anchor || listingMin >= anchor * 0.4) {
+      return {
+        price: r2(listingMin),
+        corrected: Boolean(anchor && listingMin < anchor * 0.95),
+      };
+    }
+  }
+
   // Thin / unstable markets: trust longer windows over a spiked 7d print
   if (p.unstable || (sold7 > 0 && sold30 > 0 && sold7 < 3 && sold30 >= 10)) {
-    priceUSD = last30 || last90 || safe || last7 || latest;
+    priceUSD = last30 || last90 || safe || last7 || latest || listingMin;
     corrected = Boolean(last7 && priceUSD !== last7);
   } else if (last7 > 0 && last30 > 0) {
     const ratio = last7 / last30;
     if (ratio >= 0.55 && ratio <= 1.8) {
       priceUSD = last7;
     } else {
-      // Prefer the more stable 30d when 7d spiked or collapsed
       priceUSD = last30;
       corrected = true;
     }
@@ -140,11 +155,12 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
     priceUSD = safe;
   } else if (last90 > 0) {
     priceUSD = last90;
-  } else {
+  } else if (latest > 0) {
     priceUSD = latest;
+  } else {
+    priceUSD = listingMin;
   }
 
-  // Longer window still spiked by a one-off sale (Blind Spot graph spike)
   if (last30 > 0 && last90 > 0 && last30 / last90 > 2.5) {
     priceUSD = last90;
     corrected = true;
@@ -155,17 +171,6 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
   }
   if (last90 > 0 && priceUSD > last90 * 3) {
     priceUSD = last90;
-    corrected = true;
-  }
-
-  // Lowest listing ≈ what you pay — 7d/30d sale averages often run ~1.5–2× higher
-  const listingMin = p.min || 0;
-  if (
-    listingMin > 0 &&
-    (sold7 >= 2 || sold30 >= 5) &&
-    listingMin < priceUSD * 0.85
-  ) {
-    priceUSD = listingMin;
     corrected = true;
   }
 
@@ -226,11 +231,10 @@ export function mergePriceCandidates(candidates: number[]): number {
 /**
  * Resolve SteamApis vs Skinport when they disagree.
  *
- * Uses each source's own wear ladder so a consistently-wrong low SteamApis
- * book (e.g. First Class ~$1) cannot veto a consistent Skinport ladder (~$50+).
- *
- * Extreme gaps without ladder support prefer the LOWER quote — preferring
- * higher previously locked in Skinport suggested ghosts ($529 vs $0.05).
+ * Steam Market is the source of truth — prefer SteamApis whenever liquid.
+ * Skinport only wins when Steam is a clear solo spike vs its own wear ladder,
+ * or when Steam's whole ladder is stuck far below a consistent Skinport book
+ * (First Class underpricing).
  */
 export function resolveSourceConflict(
   steamApis: number,
@@ -247,38 +251,27 @@ export function resolveSourceConflict(
 
   const hi = Math.max(sa, sp);
   const lo = Math.min(sa, sp);
-  if (hi / lo <= 2) {
-    return { price: r2(lo), corrected: false };
-  }
 
   const saMid = median(steamApisSiblings.filter((p) => p > 0));
   const spMid = median(skinportSiblings.filter((p) => p > 0));
 
-  // Solo spike vs that source's own siblings → take the other source
+  // Solo Steam spike vs siblings → Skinport (rare)
   if (sa === hi && saMid > 0 && sa > saMid * 2.5) {
     return { price: sp, corrected: true };
   }
-  if (sp === hi && spMid > 0 && sp > spMid * 2.5) {
-    return { price: sa, corrected: true };
-  }
 
-  // Two consistent ladders far apart → trust the higher book.
-  // Underpriced SteamApis ladders create fake cheap inputs (First Class).
-  if (saMid > 0 && spMid > 0) {
-    if (spMid / saMid >= 2.5) return { price: sp, corrected: true };
-    if (saMid / spMid >= 2.5) return { price: sa, corrected: true };
-  }
-
-  // Extreme disagreement without ladder support → trust SteamApis.
-  // Rejects Skinport suggested ghosts ($529 vs Steam $0.05) and keeps real
-  // Steam books for thin high-value souvenirs ($450 vs Skinport $0.09 stubs).
-  if (hi / lo >= 5) {
-    if (sa > 0) return { price: sa, corrected: true };
+  // Steam ladder stuck far below Skinport → Skinport (First Class)
+  if (saMid > 0 && spMid > 0 && spMid / saMid >= 2.5) {
     return { price: sp, corrected: true };
   }
 
-  // Mild disagreement — prefer the lower liquid book (real buy price)
-  return { price: r2(lo), corrected: true };
+  // Extreme Skinport ghost vs Steam → Steam
+  if (hi / lo >= 5 && sa > 0) {
+    return { price: sa, corrected: true };
+  }
+
+  // Default: Steam Market price
+  return { price: sa, corrected: sa !== sp };
 }
 
 type FeedStatus =
@@ -482,7 +475,8 @@ function mergeBulkSources(
         deferred.push(key);
         continue;
       }
-      prices[key] = r2(lo);
+      // Steam-aligned: prefer SteamApis over Skinport when close
+      prices[key] = sa;
       continue;
     }
 
@@ -580,23 +574,14 @@ function mergeBulkSources(
 }
 
 /**
- * Skinport-first cold path: if Skinport returns a usable book, skip SteamApis
- * for this cache fill (saves quota + ~20–35s). SteamApis only runs when
- * Skinport is thin/failed.
+ * Steam-first cold path: always fetch SteamApis when available (matches
+ * steamcommunity.com/market "Starting at"). Skinport fills gaps + liquidity.
  */
 async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
-  const skinportResult = await fetchSkinportPrices();
-  const skinCount = Object.keys(skinportResult.prices || {}).length;
-
-  const steamApisResult: SteamApisFetch =
-    skinportResult.status === "ok" && skinCount >= 100
-      ? {
-          prices: null,
-          sold: null,
-          corrections: 0,
-          status: "skipped",
-        }
-      : await fetchSteamApisPrices();
+  const [steamApisResult, skinportResult] = await Promise.all([
+    fetchSteamApisPrices(),
+    fetchSkinportPrices(),
+  ]);
 
   return mergeBulkSources(
     steamApisResult.prices,
@@ -613,11 +598,11 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
 
 /**
  * Daily shared price cache — all users share the same bulk price data.
- * v12: tighter cross-wear spike cut; Skinport min vs spiked median.
+ * v14: Steam-first (Starting at), not Skinport-blended.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v13"],
+  ["tradeup-bulk-prices-v14"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
