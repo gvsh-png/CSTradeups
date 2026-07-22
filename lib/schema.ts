@@ -7,6 +7,7 @@ import {
   type Complexity,
 } from "./constants";
 import type { SchemaData, SkinData } from "./tradeup/types";
+import { mergeSchemaSupplement } from "./schema-supplement";
 
 /** Soft name-keyword bans (Anubis, timed drops, etc.) */
 function isExcludedColName(name: string): boolean {
@@ -252,7 +253,7 @@ export async function fetchSchema(): Promise<SchemaData> {
   });
 
   if (!res.ok) throw new Error(`Schema fetch failed: ${res.status}`);
-  const data = (await res.json()) as SchemaData;
+  const data = mergeSchemaSupplement((await res.json()) as SchemaData);
   schemaCache = { data, fetchedAt: Date.now() };
   return data;
 }
