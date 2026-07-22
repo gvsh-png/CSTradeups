@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useAuth } from "./AuthProvider";
 
 type Props = {
@@ -21,25 +22,35 @@ export default function AuthMenu({ onUpgrade }: Props) {
 
   if (loading) {
     return (
-      <div className="h-8 w-20 rounded-md border border-[var(--border)] bg-[var(--surface)] animate-pulse" />
+      <div className="h-8 w-20 rounded border border-[var(--border-subtle)] bg-[var(--surface)] animate-pulse" />
     );
   }
 
   if (!authConfigured) {
-    return null;
+    return (
+      <Link
+        href="/profile"
+        className="hidden sm:inline-flex h-8 items-center rounded border border-[var(--border-subtle)] px-2.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--text)]"
+      >
+        Profile
+      </Link>
+    );
   }
 
   if (!user) {
     return (
       <a
         href="/api/auth/steam"
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[11px] font-medium text-[var(--text)] hover:border-accent/40 hover:text-accent transition-colors duration-150"
+        className="inline-flex h-8 items-center gap-1.5 rounded border border-accent/40 bg-[var(--accent-dim)] px-2.5 text-[11px] font-semibold text-[var(--accent-ink)] hover:brightness-110 transition-all"
       >
         <SteamMark />
-        Sign in
+        <span className="hidden sm:inline">Sign in with Steam</span>
+        <span className="sm:hidden">Steam</span>
       </a>
     );
   }
+
+  const paid = user.plan === "starter" || user.plan === "pro";
 
   return (
     <div className="flex items-center gap-1.5">
@@ -47,22 +58,26 @@ export default function AuthMenu({ onUpgrade }: Props) {
         <button
           type="button"
           onClick={onUpgrade}
-          className="hidden sm:inline-flex h-8 items-center rounded-md border border-accent/30 bg-accent/10 px-2.5 text-[10px] font-mono text-accent hover:bg-accent/15 transition-colors duration-150"
+          className="hidden sm:inline-flex h-8 items-center rounded border border-accent/30 bg-accent/10 px-2.5 text-[10px] font-mono text-accent hover:bg-accent/15 transition-colors"
           title="Weekly scan + save limits"
         >
           {quota.weeklyScansRemaining ?? 0}/{quota.weeklyScanLimit} scans
         </button>
       )}
+      {user.plan === "starter" && (
+        <span className="hidden sm:inline-flex h-8 items-center rounded border border-accent/30 bg-accent/10 px-2 text-[10px] font-mono text-accent">
+          Starter
+        </span>
+      )}
       {user.plan === "pro" && (
-        <span className="hidden sm:inline-flex h-8 items-center rounded-md border border-[var(--profit)]/30 bg-[var(--profit)]/10 px-2 text-[10px] font-mono text-[var(--profit)]">
+        <span className="hidden sm:inline-flex h-8 items-center rounded border border-[var(--profit)]/30 bg-[var(--profit)]/10 px-2 text-[10px] font-mono text-[var(--profit)]">
           Pro
         </span>
       )}
       <div className="relative group">
-        <button
-          type="button"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface)] pl-1 pr-2 text-[11px] max-w-[140px]"
-          aria-haspopup="menu"
+        <Link
+          href="/profile"
+          className="inline-flex h-8 items-center gap-1.5 rounded border border-[var(--border-subtle)] bg-[var(--surface)] pl-1 pr-2 text-[11px] max-w-[148px] hover:border-accent/30 transition-colors"
         >
           {user.avatar ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -74,27 +89,39 @@ export default function AuthMenu({ onUpgrade }: Props) {
               height={24}
             />
           ) : (
-            <span className="h-6 w-6 rounded bg-[var(--border)]" />
+            <span className="h-6 w-6 rounded bg-[var(--border-subtle)]" />
           )}
           <span className="truncate font-medium">{user.name}</span>
-        </button>
-        <div className="absolute right-0 top-full z-50 mt-1 hidden min-w-[180px] rounded-md border border-[var(--border)] bg-[var(--surface-raised)] p-1 shadow-lg group-hover:block group-focus-within:block">
+        </Link>
+        <div className="absolute right-0 top-full z-50 mt-1 hidden min-w-[190px] rounded border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-1 shadow-lg group-hover:block group-focus-within:block">
           <p className="px-2 py-1.5 text-[10px] font-mono text-[var(--text-muted)]">
             {user.planLabel}
             {quota?.weeklyScanLimit != null && (
               <> · {quota.weeklyScans}/{quota.weeklyScanLimit} scans</>
             )}
           </p>
-          {user.plan === "free" && stripeConfigured && (
+          <Link
+            href="/profile"
+            className="block w-full rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+          >
+            Profile
+          </Link>
+          <Link
+            href="/subscription"
+            className="block w-full rounded px-2 py-1.5 text-left text-[11px] text-accent hover:bg-accent/10"
+          >
+            {paid ? "Manage subscription" : "Upgrade"}
+          </Link>
+          {!paid && stripeConfigured && (
             <button
               type="button"
               className="w-full rounded px-2 py-1.5 text-left text-[11px] text-accent hover:bg-accent/10"
               onClick={onUpgrade}
             >
-              Upgrade to Pro
+              Quick upgrade
             </button>
           )}
-          {user.plan === "pro" && stripeConfigured && (
+          {paid && stripeConfigured && (
             <button
               type="button"
               className="w-full rounded px-2 py-1.5 text-left text-[11px] text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
@@ -108,7 +135,7 @@ export default function AuthMenu({ onUpgrade }: Props) {
                 }
               }}
             >
-              Manage billing
+              Billing portal
             </button>
           )}
           <button

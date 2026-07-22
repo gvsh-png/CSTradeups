@@ -9,8 +9,17 @@ import { getUser, quotaFromUser, upsertUser } from "@/lib/usage/store";
 import {
   FREE_MAX_SAVED,
   FREE_WEEKLY_SCANS,
+  STARTER_MAX_SAVED,
+  STARTER_WEEKLY_SCANS,
   PLAN_LABELS,
 } from "@/lib/billing/plans";
+
+const LIMITS_PAYLOAD = {
+  freeWeeklyScans: FREE_WEEKLY_SCANS,
+  freeMaxSaved: FREE_MAX_SAVED,
+  starterWeeklyScans: STARTER_WEEKLY_SCANS,
+  starterMaxSaved: STARTER_MAX_SAVED,
+};
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +35,7 @@ export async function GET() {
       stripeConfigured: stripeConfigured(),
       user: null,
       quota: null,
-      limits: {
-        freeWeeklyScans: FREE_WEEKLY_SCANS,
-        freeMaxSaved: FREE_MAX_SAVED,
-      },
+      limits: LIMITS_PAYLOAD,
     });
   }
 
@@ -41,10 +47,7 @@ export async function GET() {
       stripeConfigured: stripeConfigured(),
       user: null,
       quota: null,
-      limits: {
-        freeWeeklyScans: FREE_WEEKLY_SCANS,
-        freeMaxSaved: FREE_MAX_SAVED,
-      },
+      limits: LIMITS_PAYLOAD,
     });
   }
 
@@ -73,10 +76,7 @@ export async function GET() {
         planLabel: PLAN_LABELS[user.plan],
       },
       quota: quotaFromUser(user),
-      limits: {
-        freeWeeklyScans: FREE_WEEKLY_SCANS,
-        freeMaxSaved: FREE_MAX_SAVED,
-      },
+      limits: LIMITS_PAYLOAD,
     });
     const cookie = sessionCookieOptions(token);
     res.cookies.set(cookie.name, cookie.value, cookie);
@@ -95,9 +95,6 @@ export async function GET() {
       planLabel: PLAN_LABELS[user.plan],
     },
     quota: quotaFromUser(user),
-    limits: {
-      freeWeeklyScans: FREE_WEEKLY_SCANS,
-      freeMaxSaved: FREE_MAX_SAVED,
-    },
+    limits: LIMITS_PAYLOAD,
   });
 }

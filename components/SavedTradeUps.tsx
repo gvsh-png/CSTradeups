@@ -47,7 +47,7 @@ export default function SavedTradeUps({
   if (!items.length) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-12 h-12 rounded-md border border-[var(--border)] flex items-center justify-center mb-4">
+        <div className="w-12 h-12 rounded border border-[var(--border-subtle)] flex items-center justify-center mb-4">
           <svg
             className="w-5 h-5 text-[var(--text-muted)]"
             fill="none"
@@ -63,10 +63,13 @@ export default function SavedTradeUps({
           </svg>
         </div>
         <h3 className="text-sm font-medium mb-1">No saved contracts</h3>
-        <p className="text-[11px] text-[var(--text-muted)] max-w-[240px] leading-relaxed">
+        <p className="text-[11px] text-[var(--text-muted)] max-w-[240px] leading-relaxed mb-4">
           Save trade-ups from scan results to track contracts you want to
           execute.
         </p>
+        <a href="/generate" className="btn-accent-outline">
+          Open scanner
+        </a>
       </div>
     );
   }

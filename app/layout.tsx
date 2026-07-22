@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TradeUp Gen — CS2 Trade-Up Finder",
+  title: "CSTradeups — CS2 Trade-Up Scanner",
   description:
     "Find profitable CS2 trade-up contracts with live market prices, float analysis, and expected value calculations.",
 };

@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { authConfigured, appBaseUrl, stripeConfigured } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
-import { getStripe, stripePriceId } from "@/lib/billing/stripe";
+import { getStripe, stripePriceIdForPlan } from "@/lib/billing/stripe";
+import type { PlanId } from "@/lib/billing/plans";
 import { getUser, linkStripeCustomer } from "@/lib/usage/store";
 
 export const dynamic = "force-dynamic";
 
-/** Create Stripe Checkout session for Pro */
-export async function POST() {
+function parsePlan(raw: unknown): Exclude<PlanId, "free"> {
+  return raw === "starter" ? "starter" : "pro";
+}
+
+/** Create Stripe Checkout session for Starter ($3) or Pro ($8) monthly */
+export async function POST(request: Request) {
   if (!authConfigured()) {
     return NextResponse.json({ error: "Auth not configured" }, { status: 503 });
   }
@@ -28,8 +33,25 @@ export async function POST() {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  if (user.plan === "pro") {
-    return NextResponse.json({ error: "Already on Pro" }, { status: 400 });
+  let body: { plan?: string } = {};
+  try {
+    body = (await request.json()) as { plan?: string };
+  } catch {
+    /* empty body ok — default pro */
+  }
+  const plan = parsePlan(body.plan);
+
+  if (user.plan === plan) {
+    return NextResponse.json(
+      { error: `Already on ${plan === "starter" ? "Starter" : "Pro"}` },
+      { status: 400 }
+    );
+  }
+  if (user.plan === "pro" && plan === "starter") {
+    return NextResponse.json(
+      { error: "Already on Pro — manage billing to change plans." },
+      { status: 400 }
+    );
   }
 
   const stripe = getStripe();
@@ -47,12 +69,12 @@ export async function POST() {
   const checkout = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
-    line_items: [{ price: stripePriceId(), quantity: 1 }],
-    success_url: `${appBaseUrl()}/?billing=success`,
-    cancel_url: `${appBaseUrl()}/?billing=cancel`,
-    metadata: { steamId: user.steamId },
+    line_items: [{ price: stripePriceIdForPlan(plan), quantity: 1 }],
+    success_url: `${appBaseUrl()}/subscription?billing=success`,
+    cancel_url: `${appBaseUrl()}/subscription?billing=cancel`,
+    metadata: { steamId: user.steamId, plan },
     subscription_data: {
-      metadata: { steamId: user.steamId },
+      metadata: { steamId: user.steamId, plan },
     },
   });
 

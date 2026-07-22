@@ -129,8 +129,9 @@ export default function GeneratorForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="panel panel-desktop p-4 lg:p-5 space-y-5 lg:sticky lg:top-[4.75rem]"
+      className="panel panel-desktop p-4 lg:p-5 space-y-5 lg:sticky lg:top-[4.75rem] relative overflow-hidden"
     >
+      <div className="absolute top-0 inset-x-0 h-0.5 bg-accent pointer-events-none" />
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-tight lg:text-[15px]">
@@ -146,7 +147,7 @@ export default function GeneratorForm({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="shrink-0 h-8 px-2.5 rounded-md border border-[var(--border)] text-[10px] font-mono text-[var(--text-muted)] hover:text-accent hover:border-accent/30 transition-colors"
+          className="shrink-0 h-8 px-2.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] hover:text-accent hover:border-accent/30 transition-colors"
           title="Settings"
         >
           settings

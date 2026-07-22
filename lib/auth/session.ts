@@ -47,7 +47,12 @@ export async function readSessionToken(
       steamId: payload.steamId,
       name: typeof payload.name === "string" ? payload.name : "Steam User",
       avatar: typeof payload.avatar === "string" ? payload.avatar : undefined,
-      plan: payload.plan === "pro" ? "pro" : "free",
+      plan:
+        payload.plan === "pro"
+          ? "pro"
+          : payload.plan === "starter"
+            ? "starter"
+            : "free",
     };
   } catch {
     return null;

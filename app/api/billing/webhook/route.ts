@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripeConfigured } from "@/lib/auth/config";
-import { getStripe } from "@/lib/billing/stripe";
+import { getStripe, planFromStripePriceId } from "@/lib/billing/stripe";
+import type { PlanId } from "@/lib/billing/plans";
 import {
   findByStripeCustomer,
   linkStripeCustomer,
@@ -14,13 +15,18 @@ async function resolveSteamId(
   customerId: string | undefined,
   metadataSteamId?: string | null
 ): Promise<string | null> {
-  // Prefer the linked customer record — never let client metadata override it
   if (customerId) {
     const user = await findByStripeCustomer(customerId);
     if (user?.steamId) return user.steamId;
   }
-  // First checkout only: metadata set server-side in /api/billing/checkout
   return metadataSteamId || null;
+}
+
+function planFromSubscription(sub: Stripe.Subscription): PlanId {
+  const metaPlan = sub.metadata?.plan;
+  if (metaPlan === "starter" || metaPlan === "pro") return metaPlan;
+  const priceId = sub.items.data[0]?.price?.id;
+  return planFromStripePriceId(priceId);
 }
 
 export async function POST(request: Request) {
@@ -63,9 +69,22 @@ export async function POST(request: Request) {
           customerId,
           session.metadata?.steamId
         );
+        const planMeta = session.metadata?.plan;
+        let plan: PlanId =
+          planMeta === "starter" || planMeta === "pro" ? planMeta : "pro";
+
+        if (subscriptionId) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            plan = planFromSubscription(sub);
+          } catch {
+            /* keep metadata plan */
+          }
+        }
+
         if (steamId && customerId) {
           await linkStripeCustomer(steamId, customerId);
-          await setPlan(steamId, "pro", {
+          await setPlan(steamId, plan, {
             customerId,
             subscriptionId: subscriptionId ?? undefined,
           });
@@ -84,7 +103,7 @@ export async function POST(request: Request) {
           event.type === "customer.subscription.updated" &&
           (sub.status === "active" || sub.status === "trialing");
 
-        await setPlan(steamId, active ? "pro" : "free", {
+        await setPlan(steamId, active ? planFromSubscription(sub) : "free", {
           customerId,
           subscriptionId: active ? sub.id : null,
         });

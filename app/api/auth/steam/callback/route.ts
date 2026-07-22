@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 /** Steam OpenID callback — verify, upsert user, set session cookie */
 export async function GET(request: Request) {
   if (!authConfigured()) {
-    return NextResponse.redirect(`${appBaseUrl()}/?auth=not_configured`);
+    return NextResponse.redirect(`${appBaseUrl()}/profile?auth=not_configured`);
   }
 
   try {
@@ -27,12 +27,12 @@ export async function GET(request: Request) {
       plan: user.plan,
     });
 
-    const res = NextResponse.redirect(`${appBaseUrl()}/?auth=ok`);
+    const res = NextResponse.redirect(`${appBaseUrl()}/profile?auth=ok`);
     const cookie = sessionCookieOptions(token);
     res.cookies.set(cookie.name, cookie.value, cookie);
     return res;
   } catch (err) {
     console.error("Steam auth callback failed:", err);
-    return NextResponse.redirect(`${appBaseUrl()}/?auth=failed`);
+    return NextResponse.redirect(`${appBaseUrl()}/profile?auth=failed`);
   }
 }

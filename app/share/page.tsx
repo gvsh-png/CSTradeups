@@ -1,11 +1,11 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import Header from "@/components/Header";
 import TradeUpCard from "@/components/TradeUpCard";
-import { CurrencyProvider } from "@/components/CurrencyProvider";
-import CurrencySelect from "@/components/CurrencySelect";
+import AppProviders from "@/components/AppProviders";
+import AppFrame from "@/components/AppFrame";
 import { decodeTradeUpShare, hydrateTradeUpImages } from "@/lib/share";
 import { STORAGE_KEY } from "@/lib/constants";
 import type { SavedTradeUp, TradeUpResult } from "@/lib/tradeup/types";
@@ -35,7 +35,7 @@ function ShareContent() {
       const decoded = decodeTradeUpShare(encoded);
       if (!decoded) {
         setError(
-          "This share link is invalid or was truncated. Copy it again from TradeUp Gen."
+          "This share link is invalid or was truncated. Copy it again from CSTradeups."
         );
         setLoading(false);
         return;
@@ -47,7 +47,7 @@ function ShareContent() {
       setLoading(false);
     }
 
-    load();
+    void load();
     return () => {
       cancelled = true;
     };
@@ -118,16 +118,16 @@ function ShareContent() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-3xl px-4 sm:px-6 py-5 lg:py-8 space-y-4">
       {error && (
         <div className="panel p-6 text-center space-y-3">
           <p className="text-sm text-[var(--loss)]">{error}</p>
-          <a
-            href="/"
+          <Link
+            href="/generate"
             className="inline-block text-xs font-mono text-accent hover:underline"
           >
-            ← Back to scanner
-          </a>
+            ← Open scanner
+          </Link>
         </div>
       )}
 
@@ -149,9 +149,9 @@ function ShareContent() {
                 {tradeUp.outputRarity.replace(/ Grade$/, "")}
               </h1>
             </div>
-            <a href="/" className="btn-ghost shrink-0">
+            <Link href="/generate" className="btn-ghost shrink-0">
               New scan
-            </a>
+            </Link>
           </div>
 
           <TradeUpCard
@@ -169,33 +169,18 @@ function ShareContent() {
 
 export default function SharePage() {
   return (
-    <CurrencyProvider>
-      <div className="min-h-dvh flex flex-col relative">
-        <Header
-          activeTab="generate"
-          onTabChange={(t) => {
-            window.location.href = t === "saved" ? "/?tab=saved" : "/";
-          }}
-          savedCount={0}
-          currencySlot={<CurrencySelect />}
-        />
-
-        <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-5 lg:py-8 relative z-10">
-          <Suspense
-            fallback={
-              <div className="panel p-8 text-center text-[var(--text-muted)] text-sm font-mono">
-                Loading…
-              </div>
-            }
-          >
-            <ShareContent />
-          </Suspense>
-        </main>
-
-        <footer className="border-t border-[var(--border)] py-3 text-center text-[10px] font-mono text-[var(--text-muted)] relative z-10">
-          market data · cached 24h
-        </footer>
-      </div>
-    </CurrencyProvider>
+    <AppProviders>
+      <AppFrame>
+        <Suspense
+          fallback={
+            <div className="panel mx-auto max-w-3xl m-6 p-8 text-center text-[var(--text-muted)] text-sm font-mono">
+              Loading…
+            </div>
+          }
+        >
+          <ShareContent />
+        </Suspense>
+      </AppFrame>
+    </AppProviders>
   );
 }

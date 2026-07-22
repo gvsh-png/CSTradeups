@@ -9,17 +9,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { PlanId } from "@/lib/billing/plans";
 
 export type AuthUser = {
   steamId: string;
   name: string;
   avatar?: string;
-  plan: "free" | "pro";
+  plan: PlanId;
   planLabel: string;
 };
 
 export type Quota = {
-  plan: "free" | "pro";
+  plan: PlanId;
   weeklyScans: number;
   weeklyScanLimit: number | null;
   weeklyScansRemaining: number | null;
@@ -36,10 +37,15 @@ type AuthState = {
   stripeConfigured: boolean;
   user: AuthUser | null;
   quota: Quota | null;
-  limits: { freeWeeklyScans: number; freeMaxSaved: number };
+  limits: {
+    freeWeeklyScans: number;
+    freeMaxSaved: number;
+    starterWeeklyScans: number;
+    starterMaxSaved: number;
+  };
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
-  startCheckout: () => Promise<void>;
+  startCheckout: (plan?: Exclude<PlanId, "free">) => Promise<void>;
   openPortal: () => Promise<void>;
   claimSave: () => Promise<{ ok: boolean; error?: string }>;
   releaseSave: () => Promise<void>;
@@ -48,7 +54,12 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-const defaultLimits = { freeWeeklyScans: 5, freeMaxSaved: 1 };
+const defaultLimits = {
+  freeWeeklyScans: 5,
+  freeMaxSaved: 1,
+  starterWeeklyScans: 40,
+  starterMaxSaved: 15,
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
@@ -68,7 +79,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStripeConfigured(Boolean(data.stripeConfigured));
       setUser(data.user ?? null);
       setQuota(data.quota ?? null);
-      if (data.limits) setLimits(data.limits);
+      if (data.limits) {
+        setLimits({
+          ...defaultLimits,
+          ...data.limits,
+        });
+      }
     } catch {
       /* ignore */
     } finally {
@@ -87,12 +103,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [refresh]);
 
-  const startCheckout = useCallback(async () => {
-    const res = await fetch("/api/billing/checkout", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Checkout failed");
-    if (data.url) window.location.href = data.url;
-  }, []);
+  const startCheckout = useCallback(
+    async (plan: Exclude<PlanId, "free"> = "pro") => {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Checkout failed");
+      if (data.url) window.location.href = data.url;
+    },
+    []
+  );
 
   const openPortal = useCallback(async () => {
     const res = await fetch("/api/billing/portal", { method: "POST" });

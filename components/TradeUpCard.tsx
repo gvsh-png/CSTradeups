@@ -232,11 +232,12 @@ export default function TradeUpCard({
   return (
     <article
       ref={cardRef}
-      className="panel overflow-hidden lg:transition-shadow lg:hover:shadow-[0_12px_40px_-24px_rgba(0,0,0,0.7)]"
+      className="panel panel-desktop overflow-hidden relative lg:transition-shadow lg:hover:shadow-[0_12px_40px_-24px_rgba(0,0,0,0.7)]"
       aria-busy={refreshing}
     >
+      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-accent/45 to-transparent pointer-events-none z-10" />
       {refreshing && refreshProgress && (
-        <div className="px-4 pt-3 pb-2 border-b border-[var(--border)] bg-accent/5">
+        <div className="px-4 pt-3 pb-2 border-b border-[var(--border-subtle)] bg-accent/5">
           <LoadingProgress
             progress={refreshProgress}
             title="Refreshing prices"
