@@ -101,7 +101,7 @@ export default function AppShell({
                 </svg>
               </span>
               <span className="font-bold tracking-tight text-accent text-[15px] sm:text-base">
-                CSTradeups
+                tradeupcsgo.net
               </span>
             </Link>
 

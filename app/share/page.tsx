@@ -35,7 +35,7 @@ function ShareContent() {
       const decoded = decodeTradeUpShare(encoded);
       if (!decoded) {
         setError(
-          "This share link is invalid or was truncated. Copy it again from CSTradeups."
+          "This share link is invalid or was truncated. Copy it again from tradeupcsgo.net."
         );
         setLoading(false);
         return;

@@ -224,7 +224,7 @@ export default function GeneratorForm({
 
           <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-3 space-y-2">
             <div className="flex justify-between items-end gap-2">
-              <span className="label mb-0">Target win</span>
+              <span className="label mb-0">Risk chance</span>
               <span className="text-lg font-mono text-accent tabular-nums leading-none">
                 {targetWinChance}%
               </span>
@@ -237,7 +237,7 @@ export default function GeneratorForm({
               value={targetWinChance}
               onChange={(e) => setTargetWinChance(Number(e.target.value))}
               className="w-full"
-              aria-label="Target win chance"
+              aria-label="Risk chance"
             />
             <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
               <span>Riskier</span>

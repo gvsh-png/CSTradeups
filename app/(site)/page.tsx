@@ -10,7 +10,7 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-container px-4 sm:px-6 py-16 sm:py-22 lg:py-28 text-center animate-fade-up">
           <p className="label mb-4 text-accent">CS2 contract scanner</p>
           <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-bold tracking-tight leading-[1.05] max-w-3xl mx-auto">
-            <span className="text-accent">CSTradeups</span>
+            <span className="text-accent">tradeupcsgo.net</span>
             <span className="block mt-3 text-[0.68em] font-semibold text-[var(--text)]">
               Precision trade-up engineering
             </span>
@@ -40,7 +40,7 @@ export default function HomePage() {
               {
                 step: "01",
                 title: "Configure",
-                body: "Budget, target win, and complexity — wear-only or exact floats.",
+                body: "Budget, risk chance, and complexity — wear-only or exact floats.",
               },
               {
                 step: "02",
@@ -72,7 +72,7 @@ export default function HomePage() {
       </section>
 
       <footer className="border-t border-[var(--border)] py-4 text-center text-[10px] font-mono text-[var(--text-muted)]">
-        CSTradeups · market data cached 24h
+        tradeupcsgo.net · market data cached 24h
       </footer>
     </div>
   );

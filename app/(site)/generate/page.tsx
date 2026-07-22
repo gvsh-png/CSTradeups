@@ -65,7 +65,7 @@ export default function GeneratePage() {
 
       if (!data.results?.length) {
         setError(
-          "No contracts matched. Try adjusting target win, widening price range, or changing collection filters."
+          "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
         );
       } else {
         // Scroll to results on mobile after scan

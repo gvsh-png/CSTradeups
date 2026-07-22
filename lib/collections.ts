@@ -272,7 +272,7 @@ export async function resolveReleaseDateWithAI(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://tradeup-gen.vercel.app",
-        "X-Title": "TradeUp Gen",
+        "X-Title": "tradeupcsgo.net",
       },
       body: JSON.stringify({
         model,
