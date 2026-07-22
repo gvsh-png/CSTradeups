@@ -13,7 +13,7 @@ const COLORS = {
   border: "#2f3742",
   text: "#e8eaed",
   mute: "#8b93a0",
-  accent: "#601ef9",
+  accent: "#0041c2",
   secondary: "#0041c2",
   profit: "#5ecf8e",
   loss: "#e35d5d",
