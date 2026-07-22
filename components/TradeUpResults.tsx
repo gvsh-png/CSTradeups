@@ -24,7 +24,12 @@ export default function TradeUpResults({
 
   if (loading) {
     return (
-      <div aria-busy="true" aria-live="polite">
+      <div
+        id="scan-loading"
+        className="scroll-mt-20 sm:scroll-mt-24"
+        aria-busy="true"
+        aria-live="polite"
+      >
         <LoadingProgress
           progress={progress}
           title="Computing Outcomes"
@@ -65,7 +70,8 @@ export default function TradeUpResults({
       {results.map((tradeUp, i) => (
         <div
           key={tradeUp.id}
-          className="animate-fade-up"
+          id={i === 0 ? "first-tradeup" : undefined}
+          className={`animate-fade-up ${i === 0 ? "scroll-mt-20 sm:scroll-mt-24" : ""}`}
           style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
         >
           <TradeUpCard

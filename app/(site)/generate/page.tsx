@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 import type { Complexity } from "@/lib/constants";
 import GeneratorForm from "@/components/GeneratorForm";
@@ -8,6 +8,12 @@ import TradeUpResults from "@/components/TradeUpResults";
 import { useAuth } from "@/components/AuthProvider";
 import { useAppFrame } from "@/components/AppFrame";
 import { useSaved } from "@/components/SavedProvider";
+
+function scrollToId(id: string, block: ScrollLogicalPosition = "start") {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block });
+}
 
 export default function GeneratePage() {
   const { authConfigured, authRequired, user, refresh } = useAuth();
@@ -18,6 +24,8 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<Record<string, unknown> | null>(null);
+  /** Scroll to first blueprint once after this scan finishes */
+  const scrollToFirstRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -25,6 +33,21 @@ export default function GeneratePage() {
       setError("Steam sign-in failed. Try again.");
     }
   }, []);
+
+  // After generate click: jump to the loading panel once it mounts
+  useEffect(() => {
+    if (!loading) return;
+    const t = window.setTimeout(() => scrollToId("scan-loading"), 50);
+    return () => window.clearTimeout(t);
+  }, [loading]);
+
+  // When the first blueprint paints: pin its top under the sticky nav
+  useEffect(() => {
+    if (loading || !results.length || !scrollToFirstRef.current) return;
+    scrollToFirstRef.current = false;
+    const t = window.setTimeout(() => scrollToId("first-tradeup"), 80);
+    return () => window.clearTimeout(t);
+  }, [loading, results]);
 
   const handleGenerate = async (params: {
     minPrice: number;
@@ -40,6 +63,7 @@ export default function GeneratePage() {
       return;
     }
 
+    scrollToFirstRef.current = true;
     setLoading(true);
     setError(null);
     setResults([]);
@@ -97,12 +121,6 @@ export default function GeneratePage() {
               ? "No souvenir contracts matched. Widen the price range or loosen risk chance — souvenir inputs need real market prices."
               : "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
         );
-      } else {
-        requestAnimationFrame(() => {
-          document
-            .getElementById("results-feed")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
       }
     } catch (err) {
       const timedOut =
