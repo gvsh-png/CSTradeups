@@ -10,7 +10,11 @@ import { useCurrency } from "./CurrencyProvider";
 
 interface TradeUpCardProps {
   tradeUp: TradeUpResult;
-  onSave?: (tradeUp: TradeUpResult) => void | Promise<void>;
+  onSave?: (
+    tradeUp: TradeUpResult
+  ) => boolean | void | Promise<boolean | void>;
+  /** Unfavorite from the bookmark when already saved (generate / share) */
+  onUnsave?: () => void | Promise<void>;
   onInsight?: (insight: string | undefined) => void;
   saved?: boolean;
   onRefresh?: () => void;
@@ -28,6 +32,7 @@ function IconBtn({
   title,
   active,
   danger,
+  className = "",
   children,
 }: {
   onClick?: () => void;
@@ -35,6 +40,7 @@ function IconBtn({
   title: string;
   active?: boolean;
   danger?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -43,13 +49,14 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={title}
       className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors duration-150 disabled:opacity-40 ${
         danger
           ? "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--loss)] hover:border-[var(--loss)]/40"
           : active
             ? "border-[var(--profit)]/30 text-[var(--profit)]"
             : "border-[var(--border)] text-[var(--text-muted)] hover:text-accent hover:border-accent/30"
-      }`}
+      } ${className}`}
     >
       {children}
     </button>
@@ -99,19 +106,17 @@ function SkinThumb({
     <img
       src={src}
       alt={alt}
-      className="w-10 h-10 shrink-0 object-contain rounded border"
+      className="w-10 h-10 shrink-0 object-contain rounded border-2 bg-[var(--bg-deep)]"
       style={{
         borderColor: souvenir ? SOUVENIR_BORDER : style.borderColor,
-        backgroundColor: style.backgroundColor,
         boxShadow: souvenir ? `0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
       }}
     />
   ) : (
     <div
-      className="w-10 h-10 shrink-0 rounded border"
+      className="w-10 h-10 shrink-0 rounded border-2 bg-[var(--bg-deep)]"
       style={{
         borderColor: souvenir ? SOUVENIR_BORDER : style.borderColor,
-        backgroundColor: style.backgroundColor,
         boxShadow: souvenir ? `0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
       }}
     />
@@ -119,7 +124,7 @@ function SkinThumb({
 }
 
 function RarityBadge({ rarity }: { rarity: string }) {
-  const style = rarityStyle(rarity);
+  const style = rarityStyle(rarity, { fill: true });
   return (
     <span
       className="text-[9px] font-mono font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border"
@@ -134,6 +139,7 @@ function RarityBadge({ rarity }: { rarity: string }) {
 export default function TradeUpCard({
   tradeUp,
   onSave,
+  onUnsave,
   onInsight,
   saved = false,
   onRefresh,
@@ -150,6 +156,10 @@ export default function TradeUpCard({
   const [insightLoading, setInsightLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pngLoading, setPngLoading] = useState(false);
+  const [bookmarkFlash, setBookmarkFlash] = useState<"saved" | "removed" | null>(
+    null
+  );
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const fetchedRef = useRef(Boolean(tradeUp.insight));
 
@@ -166,6 +176,29 @@ export default function TradeUpCard({
 
   const profitColor =
     tradeUp.expectedProfit >= 0 ? "var(--profit)" : "var(--loss)";
+
+  const flashBookmark = (kind: "saved" | "removed") => {
+    setBookmarkFlash(kind);
+    window.setTimeout(() => setBookmarkFlash(null), 1800);
+  };
+
+  const handleBookmark = async () => {
+    if (bookmarkBusy) return;
+    setBookmarkBusy(true);
+    try {
+      if (saved && onUnsave) {
+        await onUnsave();
+        flashBookmark("removed");
+        return;
+      }
+      if (onSave) {
+        const ok = await onSave(withInsight());
+        if (ok !== false) flashBookmark("saved");
+      }
+    } finally {
+      setBookmarkBusy(false);
+    }
+  };
 
   const handleShare = async () => {
     const { buildShareUrl } = await import("@/lib/share");
@@ -358,12 +391,25 @@ export default function TradeUpCard({
               </IconBtn>
             </>
           )}
-          {onSave && (
+          {(onSave || onUnsave) && (
             <IconBtn
-              onClick={() => onSave(withInsight())}
-              disabled={saved}
+              onClick={() => void handleBookmark()}
+              disabled={bookmarkBusy || (saved && !onUnsave)}
               active={saved}
-              title={saved ? "Saved" : "Save"}
+              title={
+                saved
+                  ? onUnsave
+                    ? "Remove from saved"
+                    : "Saved"
+                  : "Save"
+              }
+              className={
+                bookmarkFlash === "removed"
+                  ? "animate-bookmark-unsave"
+                  : bookmarkFlash === "saved"
+                    ? "animate-bookmark-save"
+                    : ""
+              }
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -399,8 +445,20 @@ export default function TradeUpCard({
           )}
           </div>
         </div>
-        {copied && (
-          <span className="text-[10px] font-mono text-accent">Link copied</span>
+        {(copied || bookmarkFlash) && (
+          <span
+            className={`text-[10px] font-mono animate-feedback-in ${
+              bookmarkFlash === "removed"
+                ? "text-[var(--loss)]"
+                : "text-accent"
+            }`}
+          >
+            {copied
+              ? "Link copied"
+              : bookmarkFlash === "removed"
+                ? "Removed from saved"
+                : "Saved"}
+          </span>
         )}
       </div>
 
@@ -415,10 +473,9 @@ export default function TradeUpCard({
             return (
             <div
               key={i}
-              className="flex items-center gap-2.5 rounded-md border p-2 min-w-0"
+              className="flex items-center gap-2.5 rounded-md border bg-transparent p-2 min-w-0"
               style={{
                 borderColor: souvenir ? SOUVENIR_BORDER : inputStyle.borderColor,
-                backgroundColor: inputStyle.backgroundColor,
                 boxShadow: souvenir
                   ? `inset 0 0 0 1px ${SOUVENIR_BORDER}`
                   : undefined,
@@ -469,7 +526,7 @@ export default function TradeUpCard({
           <Stat
             label="ROI"
             value={`${tradeUp.roi}%`}
-            color="var(--accent)"
+            color="var(--secondary)"
             title="Expected profit ÷ cost. 100% win chance can still be modest ROI if most outcomes only profit a little."
           />
           <Stat label="Cost" value={money(tradeUp.totalCost)} />
@@ -496,10 +553,9 @@ export default function TradeUpCard({
             {tradeUp.outcomes.map((outcome, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 p-2 rounded-md border min-w-0"
+                className="flex items-center gap-2.5 p-2 rounded-md border bg-transparent min-w-0"
                 style={{
                   borderColor: outputStyle.borderColor,
-                  backgroundColor: outputStyle.backgroundColor,
                 }}
               >
                 <SkinThumb
@@ -541,7 +597,7 @@ export default function TradeUpCard({
                 type="button"
                 onClick={() => fetchInsight(false)}
                 disabled={insightLoading}
-                className="w-full mt-1 py-2.5 text-[11px] font-mono uppercase tracking-wider text-accent hover:bg-accent/10 transition-colors duration-150 disabled:opacity-40 border border-accent/40 rounded"
+                className="w-full mt-1 py-2.5 text-[11px] font-mono uppercase tracking-wider text-secondary hover:bg-secondary/10 transition-colors duration-150 disabled:opacity-40 border border-secondary/50 rounded"
               >
                 {insightLoading ? "Loading…" : "Get AI analysis"}
               </button>

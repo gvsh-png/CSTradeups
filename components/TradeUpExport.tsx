@@ -14,16 +14,18 @@ const COLORS = {
   text: "#e8eaed",
   mute: "#8b93a0",
   accent: "#601ef9",
+  secondary: "#0041c2",
   profit: "#5ecf8e",
   loss: "#e35d5d",
+  deep: "#0b0e11",
 };
 
 function rarityTint(rarity: string) {
   const color = RARITY_COLORS[rarity] || COLORS.mute;
   return {
     color,
-    border: `${color}88`,
-    bg: `${color}22`,
+    border: color,
+    bg: "transparent",
   };
 }
 
@@ -38,8 +40,8 @@ function Thumb({ src, alt, rarity }: { src?: string; alt: string; rarity: string
         height: 44,
         flexShrink: 0,
         borderRadius: 6,
-        border: `1px solid ${tint.border}`,
-        background: tint.bg,
+        border: `2px solid ${tint.border}`,
+        background: COLORS.deep,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -76,7 +78,7 @@ function Badge({ rarity }: { rarity: string }) {
         padding: "3px 7px",
         borderRadius: 5,
         border: `1px solid ${tint.border}`,
-        background: tint.bg,
+        background: `${tint.color}18`,
         color: tint.color,
       }}
     >
@@ -219,7 +221,7 @@ export default function TradeUpExport({
         <Stat
           label="Return"
           value={`${tradeUp.roi}%`}
-          color={profitColor}
+          color={COLORS.secondary}
         />
         <Stat label="Cost" value={money(tradeUp.totalCost)} />
       </div>
@@ -262,7 +264,7 @@ export default function TradeUpExport({
                 borderRadius: 8,
                 border: `1px solid ${border}`,
                 boxShadow: souvenir ? `inset 0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
-                background: inputTint.bg,
+                background: "transparent",
               }}
             >
               <Thumb
@@ -336,7 +338,7 @@ export default function TradeUpExport({
                 padding: "10px 12px",
                 borderRadius: 8,
                 border: `1px solid ${outputTint.border}`,
-                background: outputTint.bg,
+                background: "transparent",
               }}
             >
               <Thumb

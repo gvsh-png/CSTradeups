@@ -32,16 +32,19 @@ export function rarityShort(rarity: string): string {
   return rarity.replace(/ Grade$/, "");
 }
 
-/** Inline styles for rarity-tinted surfaces: colored border + soft fill */
-export function rarityStyle(rarity: string): {
+/** Inline styles for rarity: solid border; optional soft fill for badges only */
+export function rarityStyle(
+  rarity: string,
+  opts?: { fill?: boolean }
+): {
   borderColor: string;
   backgroundColor: string;
   color: string;
 } {
   const color = RARITY_COLORS[rarity] || "#8b93a0";
   return {
-    borderColor: `${color}66`,
-    backgroundColor: `${color}18`,
+    borderColor: color,
+    backgroundColor: opts?.fill ? `${color}18` : "transparent",
     color,
   };
 }
