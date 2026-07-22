@@ -67,13 +67,15 @@ function Stat({
   label,
   value,
   color,
+  title,
 }: {
   label: string;
   value: string;
   color?: string;
+  title?: string;
 }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" title={title}>
       <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1 truncate">
         {label}
       </p>
@@ -513,13 +515,20 @@ export default function TradeUpCard({
             label="Win chance"
             value={`${tradeUp.winPct}%`}
             color={tradeUp.winPct >= 50 ? "var(--profit)" : "var(--accent)"}
+            title="Chance any outcome profits after sell fees"
           />
           <Stat
             label="Avg profit"
             value={money(tradeUp.expectedProfit, { signed: true })}
             color={profitColor}
+            title="Expected profit per contract (probability-weighted)"
           />
-          <Stat label="ROI" value={`${tradeUp.roi}%`} color="var(--secondary)" />
+          <Stat
+            label="ROI"
+            value={`${tradeUp.roi}%`}
+            color="var(--secondary)"
+            title="Expected profit ÷ cost. 100% win chance can still be modest ROI if most outcomes only profit a little."
+          />
           <Stat label="Cost" value={money(tradeUp.totalCost)} />
         </div>
       </div>
