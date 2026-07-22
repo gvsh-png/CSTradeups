@@ -476,7 +476,8 @@ function generateCovertTradeUps(
   const candidates: TradeUpResult[] = [];
   const seenKeys = new Set<string>();
   const SKINS_PER_POOL = 4;
-  const FILLER_CAP = 10;
+  const FILLER_CAP = 8;
+  const CANDIDATE_CAP = 1800;
   const maxUnit = params.maxPrice / Math.max(2, inputTotal - 1);
   const inR = "Covert";
   const nextR = "Extraordinary";
@@ -559,6 +560,8 @@ function generateCovertTradeUps(
         if (result) candidates.push(result);
       }
 
+      if (candidates.length >= CANDIDATE_CAP) break;
+
       const fillers: {
         cid: string;
         inp: InputCandidate;
@@ -596,7 +599,9 @@ function generateCovertTradeUps(
       }
 
       for (const f1 of diverseFillers) {
+        if (candidates.length >= CANDIDATE_CAP) break;
         for (const sp of partitions(inputTotal, 2, 1)) {
+          if (candidates.length >= CANDIDATE_CAP) break;
           const inputs: TradeUpInput[] = [
             {
               name: pInp.skin.name,
@@ -652,6 +657,7 @@ function generateCovertTradeUps(
         }
       }
     }
+    if (candidates.length >= CANDIDATE_CAP) break;
   }
 
   const { target } = winChanceBandFromTarget(params.targetWinChance);

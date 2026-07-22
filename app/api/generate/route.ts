@@ -121,6 +121,22 @@ export async function POST(request: Request) {
     const prices = sanitizePrices(bulk, skinDB);
 
     const priceCount = Object.values(prices).filter((p) => p > 0).length;
+    if (priceCount < 50) {
+      return NextResponse.json(
+        {
+          error:
+            "Market price feeds are unavailable right now. Try again in a minute.",
+          code: "PRICES_UNAVAILABLE",
+          meta: {
+            pricesLoaded: priceCount,
+            priceSource: priceMeta.source,
+            steamApisPrices: priceMeta.steamApisCount,
+            skinportPrices: priceMeta.skinportCount,
+          },
+        },
+        { status: 503 }
+      );
+    }
 
     const rawResults = await generateTradeUps(
       skinDB,

@@ -49,6 +49,8 @@ export default function GeneratePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params),
+        // Under Vercel maxDuration — clear timeout instead of hanging forever
+        signal: AbortSignal.timeout(55_000),
       });
 
       const raw = await res.text();
@@ -74,6 +76,12 @@ export default function GeneratePage() {
         if (data.code === "AUTH_REQUIRED" || data.code === "SCAN_LIMIT") {
           openUpgrade(data.error);
         }
+        if (data.code === "PRICES_UNAVAILABLE") {
+          throw new Error(
+            data.error ||
+              "Market price feeds are unavailable right now. Try again in a minute."
+          );
+        }
         throw new Error(data.error || "Generation failed");
       }
 
@@ -97,7 +105,16 @@ export default function GeneratePage() {
         });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
+      const timedOut =
+        err instanceof Error &&
+        (err.name === "TimeoutError" ||
+          err.name === "AbortError" ||
+          /aborted|timeout/i.test(err.message));
+      const msg = timedOut
+        ? "Scan timed out — price feeds were slow. Try again in a moment."
+        : err instanceof Error
+          ? err.message
+          : "Something went wrong";
       // Never surface raw JSON.parse noise
       setError(
         msg.includes("JSON.parse") || msg.includes("Unexpected token")

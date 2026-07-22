@@ -6,6 +6,7 @@ import { buildSkinDatabase, fetchSchema } from "@/lib/schema";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 45;
 
 /** Refresh prices on an existing trade-up and recalculate EV / profit */
 export async function POST(request: Request) {
@@ -17,6 +18,17 @@ export async function POST(request: Request) {
     }
 
     const { prices: bulk, meta } = await getBulkPrices();
+    const priceCount = Object.values(bulk).filter((p) => p > 0).length;
+    if (priceCount < 50) {
+      return NextResponse.json(
+        {
+          error:
+            "Market price feeds are unavailable right now. Try again in a minute.",
+          code: "PRICES_UNAVAILABLE",
+        },
+        { status: 503 }
+      );
+    }
 
     // Same light sanitize as /api/generate so both paths stay in sync
     let prices = bulk;

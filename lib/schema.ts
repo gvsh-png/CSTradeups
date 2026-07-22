@@ -248,6 +248,7 @@ export async function fetchSchema(): Promise<SchemaData> {
 
   const res = await fetch("https://csfloat.com/api/v1/schema", {
     next: { revalidate: 86400 },
+    signal: AbortSignal.timeout(20_000),
   });
 
   if (!res.ok) throw new Error(`Schema fetch failed: ${res.status}`);
