@@ -290,10 +290,6 @@ export default function TradeUpExport({
                   }}
                 >
                   {input.wear} · {money(input.price)}
-                  {tradeUp.complexity !== "simple" &&
-                  input.maxFloat != null
-                    ? ` · ≤${input.maxFloat.toFixed(4)}`
-                    : ""}
                 </div>
               </div>
             </div>

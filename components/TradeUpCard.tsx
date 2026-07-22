@@ -432,10 +432,6 @@ export default function TradeUpCard({
                 </div>
                 <p className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5 truncate">
                   {input.wear} · {money(input.price)}
-                  {tradeUp.complexity !== "simple" &&
-                    input.maxFloat != null && (
-                      <span> · ≤{input.maxFloat.toFixed(4)}</span>
-                    )}
                 </p>
               </div>
             </div>

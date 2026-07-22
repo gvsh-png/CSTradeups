@@ -40,7 +40,7 @@ export default function HomePage() {
               {
                 step: "01",
                 title: "Configure",
-                body: "Budget, risk chance, and complexity — wear-only or exact floats.",
+                body: "Budget, risk chance, and contract type — standard, covert, or souvenir.",
               },
               {
                 step: "02",

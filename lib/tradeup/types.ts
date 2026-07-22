@@ -7,6 +7,10 @@ export interface SkinData {
   rarity: string;
   collections: { id: string; name: string }[];
   image?: string;
+  /** Souvenir market listing (Souvenir Weapon | Paint) */
+  isSouvenir?: boolean;
+  /** Knife / glove special item */
+  isSpecial?: boolean;
 }
 
 export interface TradeUpInput {
@@ -86,6 +90,8 @@ export interface SchemaWeapon {
       max?: number;
       collections?: string[];
       image?: string;
+      /** Present when this paint exists as a Souvenir drop */
+      souvenir?: boolean;
     }
   >;
 }

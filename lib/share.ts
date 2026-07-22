@@ -46,7 +46,7 @@ interface SharePayloadV1 extends Omit<SharePayload, "v"> {
   outs: (SharePayload["outs"][number] & { img?: string })[];
 }
 
-type ComplexityCompact = "s" | "m" | "p";
+type ComplexityCompact = "s" | "c" | "v" | "m" | "p";
 
 const MAX_INSIGHT_CHARS = 500;
 
@@ -63,10 +63,10 @@ function toCompact(tradeUp: TradeUpResult): SharePayload {
     inR: tradeUp.inputRarity,
     outR: tradeUp.outputRarity,
     c:
-      tradeUp.complexity === "precise"
-        ? "p"
-        : tradeUp.complexity === "moderate"
-          ? "m"
+      tradeUp.complexity === "covert"
+        ? "c"
+        : tradeUp.complexity === "souvenir"
+          ? "v"
           : "s",
     fee: tradeUp.fee,
     desc: tradeUp.description,
@@ -98,7 +98,11 @@ function toCompact(tradeUp: TradeUpResult): SharePayload {
 
 function fromCompact(p: SharePayload | SharePayloadV1): TradeUpResult {
   const complexity =
-    p.c === "p" ? "precise" : p.c === "m" ? "moderate" : "simple";
+    p.c === "c"
+      ? "covert"
+      : p.c === "v"
+        ? "souvenir"
+        : "standard";
   return {
     id: p.id,
     type: p.t === "m" ? "mixed" : "single",
