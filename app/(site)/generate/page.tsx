@@ -121,7 +121,7 @@ export default function GeneratePage() {
             : params.complexity === "souvenir"
               ? "No souvenir contracts matched. Widen the price range or loosen risk chance — souvenir inputs need real market prices."
               : params.targetOutcomeName
-                ? `No contracts found that can land ${params.targetOutcomeName}. Widen price range, loosen risk chance, or pick another target.`
+                ? `No contracts found that can land ${params.targetOutcomeName}. Raise max price, turn off “Exclude new collections”, or pick a higher-value target — some mid-tier skins have no profitable path at current market prices.`
                 : "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
         );
       }

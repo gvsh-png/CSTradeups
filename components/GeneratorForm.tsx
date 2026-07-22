@@ -473,7 +473,7 @@ export default function GeneratorForm({
                 </div>
               )}
               <p className="scanner-target-hint text-[10px] text-[var(--text-muted)] leading-snug">
-                Ranks Standard contracts by chance of landing this skin.
+                Prefers profitable contracts that can land this skin, then higher hit chance.
               </p>
             </div>
           )}
