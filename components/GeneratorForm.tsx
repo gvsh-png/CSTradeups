@@ -88,7 +88,7 @@ export default function GeneratorForm({
   const [minPrice, setMinPrice] = useState(5);
   const [maxPrice, setMaxPrice] = useState(200);
   const [targetWinChance, setTargetWinChance] = useState(60);
-  const [complexity, setComplexity] = useState<Complexity>("simple");
+  const [complexity, setComplexity] = useState<Complexity>("standard");
   const [feeType, setFeeType] = useState<"steam" | "csfloat">("csfloat");
   const [excludeUnstable, setExcludeUnstable] = useState(true);
   const [unstableCount, setUnstableCount] = useState(0);
@@ -248,7 +248,7 @@ export default function GeneratorForm({
 
         <div className="space-y-4">
           <fieldset className="space-y-2">
-            <legend className="label mb-1">Complexity</legend>
+            <legend className="label mb-1">Contract type</legend>
             {COMPLEXITY_OPTIONS.map((opt) => (
               <label
                 key={opt.value}

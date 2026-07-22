@@ -23,7 +23,7 @@ const tradeUp = {
   type: "single",
   inputRarity: "Mil-Spec Grade",
   outputRarity: "Restricted",
-  complexity: "simple",
+  complexity: "standard",
   fee: 0.02,
   description: "10x SSG 08 | Zeno (Minimal Wear)",
   generatedAt: "2026-07-21T00:00:00.000Z",

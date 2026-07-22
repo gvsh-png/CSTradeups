@@ -14,6 +14,7 @@ export const RARITY_MAP: Record<number, string> = {
   4: "Restricted",
   5: "Classified",
   6: "Covert",
+  7: "Extraordinary",
 };
 
 export const RARITY_COLORS: Record<string, string> = {
@@ -105,7 +106,13 @@ export const KNIFE_GLOVE_TYPES = ["Knives", "Gloves"];
 
 export const STORAGE_KEY = "tradeup-gen-saved";
 
-export type Complexity = "simple" | "moderate" | "precise";
+/** Contract mode — replaces old float-complexity toggles */
+export type Complexity = "standard" | "covert" | "souvenir";
+
+/** Inputs required for the contract */
+export function inputCountForMode(mode: Complexity): number {
+  return mode === "covert" ? 5 : 10;
+}
 
 export const COMPLEXITY_OPTIONS: {
   value: Complexity;
@@ -113,18 +120,28 @@ export const COMPLEXITY_OPTIONS: {
   description: string;
 }[] = [
   {
-    value: "simple",
-    label: "Simple",
-    description: "Wear tier only (e.g. Field-Tested). No specific float targets.",
+    value: "standard",
+    label: "Standard",
+    description: "Classic 10-skin trade-up to the next rarity tier.",
   },
   {
-    value: "moderate",
-    label: "Moderate",
-    description: "Max float cap per input. Good balance of ease and control.",
+    value: "covert",
+    label: "Covert",
+    description: "5 Covert skins → knife or gloves from those collections.",
   },
   {
-    value: "precise",
-    label: "Precise",
-    description: "Exact float ranges per skin. Harder to source inputs.",
+    value: "souvenir",
+    label: "Souvenir",
+    description: "Mix souvenir and normal skins (10) → normal next-tier output.",
   },
 ];
+
+/** Map legacy share/API values onto current modes */
+export function normalizeComplexity(raw: unknown): Complexity {
+  if (raw === "covert" || raw === "souvenir" || raw === "standard") return raw;
+  // Old float-complexity names → standard contracts
+  if (raw === "simple" || raw === "moderate" || raw === "precise") {
+    return "standard";
+  }
+  return "standard";
+}

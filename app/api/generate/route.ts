@@ -8,14 +8,14 @@ import {
 import { authConfigured, authRequired } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getBulkPrices } from "@/lib/prices";
-import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
+import { buildSkinDatabaseForMode, buildSpecialOutcomesByCollection, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
   generateTradeUps,
   repriceTradeUp,
   sanitizePrices,
 } from "@/lib/tradeup/generator";
 import { consumeScan } from "@/lib/usage/store";
-import type { Complexity } from "@/lib/constants";
+import { normalizeComplexity } from "@/lib/constants";
 import type { GenerateParams } from "@/lib/tradeup/types";
 import {
   clampTargetWin,
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       targetWinChance: band.target,
       minWinChance: band.minWinChance,
       maxWinChance: band.maxWinChance,
-      complexity: (body.complexity as Complexity) || "simple",
+      complexity: normalizeComplexity(body.complexity),
       feeType: body.feeType === "steam" ? "steam" : "csfloat",
       excludeUnstableCollections: body.excludeUnstableCollections !== false,
       limit: Math.max(1, Math.min(50, finite(body.limit, 15))),
@@ -106,8 +106,16 @@ export async function POST(request: Request) {
         )
       : new Set(customExcluded);
 
-    const skinDB = buildSkinDatabase(schema, excludedKeys);
+    const skinDB = buildSkinDatabaseForMode(
+      schema,
+      params.complexity,
+      excludedKeys
+    );
     const byCR = groupByCollectionRarity(skinDB);
+    const specialByCR =
+      params.complexity === "covert"
+        ? buildSpecialOutcomesByCollection(schema, excludedKeys)
+        : {};
 
     const { prices: bulk, meta: priceMeta } = await getBulkPrices();
     const prices = sanitizePrices(bulk, skinDB);
@@ -119,7 +127,8 @@ export async function POST(request: Request) {
       byCR,
       prices,
       schema,
-      params
+      params,
+      specialByCR
     );
 
     const results = rawResults.map((t) => repriceTradeUp(t, prices));

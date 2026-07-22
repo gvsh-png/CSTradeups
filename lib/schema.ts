@@ -4,38 +4,9 @@ import {
   KNIFE_GLOVE_TYPES,
   RARITY_MAP,
   RARITY_ORDER,
+  type Complexity,
 } from "./constants";
 import type { SchemaData, SkinData } from "./tradeup/types";
-
-const KNIFE_NAMES = [
-  "★",
-  "Karambit",
-  "Bayonet",
-  "Flip Knife",
-  "Gut Knife",
-  "Huntsman Knife",
-  "Butterfly Knife",
-  "Falchion Knife",
-  "Shadow Daggers",
-  "Bowie Knife",
-  "Navaja Knife",
-  "Stiletto Knife",
-  "Talon Knife",
-  "Ursus Knife",
-  "Classic Knife",
-  "Paracord Knife",
-  "Survival Knife",
-  "Nomad Knife",
-  "Skeleton Knife",
-  "Kukri Knife",
-  "Sport Gloves",
-  "Specialist Gloves",
-  "Driver Gloves",
-  "Hand Wraps",
-  "Moto Gloves",
-  "Hydra Gloves",
-  "Broken Fang Gloves",
-];
 
 /** Soft name-keyword bans (Anubis, timed drops, etc.) */
 function isExcludedColName(name: string): boolean {
@@ -52,14 +23,37 @@ export function isTradeUpBannedCollection(
 ): boolean {
   if (isNeverTradeUpCollection(key, name)) return true;
   if (name && isExcludedColName(name)) return true;
-  // Also match soft keywords against the key (e.g. set_timed_drops_*)
   if (isExcludedColName(key)) return true;
   return false;
 }
 
+export type SkinDbOptions = {
+  /** Include Souvenir Weapon | Paint rows (souvenir mode) */
+  includeSouvenir?: boolean;
+};
+
+function filterCollections(
+  cols: string[],
+  colMap: Record<string, string>,
+  excludedCollectionKeys?: Set<string>
+): string[] {
+  let valid = cols.filter((c) => {
+    const colName = colMap[c] || c;
+    return !isTradeUpBannedCollection(c, colName);
+  });
+  if (excludedCollectionKeys?.size) {
+    valid = valid.filter((c) => !excludedCollectionKeys.has(c));
+  }
+  return valid;
+}
+
+/**
+ * Weapon skins for standard / souvenir trade-ups (excludes knives & gloves).
+ */
 export function buildSkinDatabase(
   schema: SchemaData,
-  excludedCollectionKeys?: Set<string>
+  excludedCollectionKeys?: Set<string>,
+  options: SkinDbOptions = {}
 ): SkinData[] {
   const colMap: Record<string, string> = {};
   for (const c of schema.collections || []) {
@@ -67,6 +61,7 @@ export function buildSkinDatabase(
   }
 
   const skinDB: SkinData[] = [];
+  const includeSouvenir = Boolean(options.includeSouvenir);
 
   for (const weapon of Object.values(schema.weapons || {})) {
     const wType = weapon.type || "Unknown";
@@ -80,36 +75,41 @@ export function buildSkinDatabase(
         continue;
 
       const fullName = `${weapon.name} | ${paint.name}`;
-      if (
-        fullName.includes("★") ||
-        fullName.includes("Souvenir") ||
-        KNIFE_NAMES.some((k) => fullName.startsWith(k))
-      )
-        continue;
+      if (fullName.includes("★")) continue;
 
-      let validCols = paint.collections.filter((c) => {
-        const colName = colMap[c] || c;
-        if (isTradeUpBannedCollection(c, colName)) return false;
-        return true;
-      });
-
-      if (excludedCollectionKeys?.size) {
-        validCols = validCols.filter((c) => !excludedCollectionKeys.has(c));
-      }
-
+      const validCols = filterCollections(
+        paint.collections,
+        colMap,
+        excludedCollectionKeys
+      );
       if (!validCols.length) continue;
+
+      const cols = validCols.map((c) => ({
+        id: c,
+        name: colMap[c] || c,
+      }));
 
       skinDB.push({
         name: fullName,
         minF: paint.min ?? 0,
         maxF: paint.max ?? 1,
         rarity,
-        collections: validCols.map((c) => ({
-          id: c,
-          name: colMap[c] || c,
-        })),
+        collections: cols,
         image: paint.image,
+        isSouvenir: false,
       });
+
+      if (includeSouvenir && paint.souvenir) {
+        skinDB.push({
+          name: `Souvenir ${fullName}`,
+          minF: paint.min ?? 0,
+          maxF: paint.max ?? 1,
+          rarity,
+          collections: cols,
+          image: paint.image,
+          isSouvenir: true,
+        });
+      }
     }
   }
 
@@ -119,6 +119,85 @@ export function buildSkinDatabase(
     seen.add(s.name);
     return true;
   });
+}
+
+/** Market display name for a knife/glove paint */
+export function specialItemMarketName(
+  weaponName: string,
+  paintName: string,
+  type: string
+): string {
+  const isKnife = type === "Knives";
+  const vanilla =
+    !paintName ||
+    paintName.toLowerCase() === "vanilla" ||
+    paintName.toLowerCase() === "—";
+  if (isKnife) {
+    if (vanilla) return `★ ${weaponName}`;
+    return `★ ${weaponName} | ${paintName}`;
+  }
+  // Gloves
+  if (vanilla) return weaponName;
+  return `${weaponName} | ${paintName}`;
+}
+
+/**
+ * Knives & gloves grouped by collection — Covert→Extraordinary outcomes.
+ */
+export function buildSpecialOutcomesByCollection(
+  schema: SchemaData,
+  excludedCollectionKeys?: Set<string>
+): Record<string, SkinData[]> {
+  const colMap: Record<string, string> = {};
+  for (const c of schema.collections || []) {
+    colMap[c.key] = c.name;
+  }
+
+  const byCol: Record<string, SkinData[]> = {};
+
+  for (const weapon of Object.values(schema.weapons || {})) {
+    const wType = weapon.type || "";
+    if (!KNIFE_GLOVE_TYPES.includes(wType)) continue;
+
+    for (const paint of Object.values(weapon.paints || {})) {
+      if (!paint.collections?.length) continue;
+      const validCols = filterCollections(
+        paint.collections,
+        colMap,
+        excludedCollectionKeys
+      );
+      if (!validCols.length) continue;
+
+      const name = specialItemMarketName(
+        weapon.name,
+        paint.name || "Vanilla",
+        wType
+      );
+
+      const skin: SkinData = {
+        name,
+        minF: paint.min ?? 0.06,
+        maxF: paint.max ?? 0.8,
+        rarity: "Extraordinary",
+        collections: validCols.map((c) => ({
+          id: c,
+          name: colMap[c] || c,
+        })),
+        image: paint.image,
+        isSpecial: true,
+      };
+
+      for (const c of validCols) {
+        const key = `${c}|Extraordinary`;
+        if (!byCol[key]) byCol[key] = [];
+        if (!byCol[key].some((x) => x.name === skin.name)) {
+          byCol[key].push(skin);
+        }
+      }
+    }
+  }
+
+  return byCol;
 }
 
 export function groupByCollectionRarity(
@@ -135,6 +214,17 @@ export function groupByCollectionRarity(
     }
   }
   return byCR;
+}
+
+/** Build input DB for the selected contract mode */
+export function buildSkinDatabaseForMode(
+  schema: SchemaData,
+  mode: Complexity,
+  excludedCollectionKeys?: Set<string>
+): SkinData[] {
+  return buildSkinDatabase(schema, excludedCollectionKeys, {
+    includeSouvenir: mode === "souvenir",
+  });
 }
 
 let schemaCache: { data: SchemaData; fetchedAt: number } | null = null;
@@ -159,13 +249,25 @@ export function getSkinImage(
   schema: SchemaData,
   skinName: string
 ): string | undefined {
-  const [weaponName, paintName] = skinName.split(" | ");
-  if (!weaponName || !paintName) return undefined;
+  let name = skinName;
+  if (name.startsWith("Souvenir ")) name = name.slice("Souvenir ".length);
+  if (name.startsWith("★ ")) name = name.slice(2);
+
+  const pipe = name.indexOf(" | ");
+  const weaponName = pipe >= 0 ? name.slice(0, pipe) : name;
+  const paintName = pipe >= 0 ? name.slice(pipe + 3) : "Vanilla";
 
   for (const weapon of Object.values(schema.weapons || {})) {
     if (weapon.name !== weaponName) continue;
     for (const paint of Object.values(weapon.paints || {})) {
-      if (paint.name === paintName) return paint.image;
+      const pn = paint.name || "Vanilla";
+      if (
+        pn === paintName ||
+        (paintName === "Vanilla" &&
+          (!paint.name || paint.name.toLowerCase() === "vanilla"))
+      ) {
+        return paint.image;
+      }
     }
   }
   return undefined;
