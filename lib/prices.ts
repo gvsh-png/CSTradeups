@@ -307,8 +307,8 @@ function isAbortError(err: unknown): boolean {
   );
 }
 
-/** Steam catalog is huge — hard-cap so cold scans don't hit the client 85s timeout */
-const STEAMAPIS_FETCH_MS = 18_000;
+/** Steam catalog is huge — only used when Skinport fails (scan path must stay fast) */
+const STEAMAPIS_FETCH_MS = 12_000;
 
 async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
   const apiKey = process.env.STEAMAPIS_API_KEY;
@@ -576,20 +576,40 @@ function mergeBulkSources(
 }
 
 /**
- * Steam-first when SteamApis answers in time; Skinport always runs so a
- * slow/failed Steam catalog never blocks the scan (empty cache → timeout).
+ * Cold path must finish in a few seconds — never wait on the full SteamApis
+ * catalog during a user scan (that was blowing the 85s client abort).
+ *
+ * Skinport-first: if Skinport returns a usable book, cache that immediately.
+ * SteamApis only runs when Skinport is thin/failed (fallback), or via the
+ * optional enrich path used by /api/prices?warm=1&steam=1.
  */
-async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
-  const skinportPromise = fetchSkinportPrices();
-  const steamPromise = fetchSteamApisPrices();
+async function fetchFreshBulkPrices(opts?: {
+  preferSteam?: boolean;
+}): Promise<BulkPriceResult> {
+  const preferSteam = Boolean(opts?.preferSteam);
+  const skinportResult = await fetchSkinportPrices();
+  const skinCount = Object.keys(skinportResult.prices || {}).length;
 
-  // Prefer Skinport finishing first — if Steam is still downloading, don't
-  // wait past its own AbortSignal; Promise.all is fine with short Steam cap.
-  const [steamApisResult, skinportResult] = await Promise.all([
-    steamPromise,
-    skinportPromise,
-  ]);
+  if (
+    !preferSteam &&
+    skinportResult.status === "ok" &&
+    skinCount >= 100
+  ) {
+    return mergeBulkSources(
+      null,
+      skinportResult.prices,
+      0,
+      null,
+      skinportResult.quantity,
+      {
+        steamApisStatus: "skipped",
+        skinportStatus: skinportResult.status,
+      }
+    );
+  }
 
+  // Prefer Steam merge when warming, or Skinport failed
+  const steamApisResult = await fetchSteamApisPrices();
   const merged = mergeBulkSources(
     steamApisResult.prices,
     skinportResult.prices,
@@ -602,11 +622,10 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
     }
   );
 
-  // Usable Skinport-only book beats an empty merge after Steam timeout
   if (
     priceCount(merged.prices) < 50 &&
     skinportResult.prices &&
-    Object.keys(skinportResult.prices).length >= 50
+    skinCount >= 50
   ) {
     return mergeBulkSources(
       null,
@@ -626,11 +645,22 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
 
 /**
  * Daily shared price cache — all users share the same bulk price data.
- * v15: short SteamApis cap + Skinport fallback so cold scans don't 85s-timeout.
+ * v16: Skinport-first cold path (Steam optional enrich) — scans must not hang.
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v15"],
+  ["tradeup-bulk-prices-v16"],
+  {
+    revalidate: PRICE_CACHE_TTL,
+    tags: ["prices"],
+  }
+);
+
+/** Slower Steam-enriched book — only used by warm prefetch, not scan critical path */
+const getCachedSteamPrices = unstable_cache(
+  async (): Promise<BulkPriceResult> =>
+    fetchFreshBulkPrices({ preferSteam: true }),
+  ["tradeup-bulk-prices-steam-v16"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -644,8 +674,32 @@ function priceCount(prices: PriceMap): number {
   return Object.values(prices).filter((p) => p > 0).length;
 }
 
-export async function getBulkPrices(): Promise<BulkPriceResult> {
+export async function getBulkPrices(opts?: {
+  /** Prefer Steam-enriched cache (warm prefetch only — slower) */
+  preferSteam?: boolean;
+}): Promise<BulkPriceResult> {
   try {
+    // Warm prefetch: fill Steam-enriched book (may take ~12s)
+    if (opts?.preferSteam) {
+      const steam = await getCachedSteamPrices();
+      if (priceCount(steam.prices) >= 50) {
+        lastGoodPrices = steam;
+        return {
+          prices: steam.prices,
+          meta: { ...steam.meta, fromCache: true },
+        };
+      }
+    }
+
+    // Same warm instance — reuse immediately (no network)
+    if (lastGoodPrices && priceCount(lastGoodPrices.prices) >= 50) {
+      return {
+        prices: lastGoodPrices.prices,
+        meta: { ...lastGoodPrices.meta, fromCache: true },
+      };
+    }
+
+    // Scan critical path: Skinport-first shared cache (fast)
     const result = await getCachedBulkPrices();
     if (priceCount(result.prices) >= 50) {
       lastGoodPrices = result;
@@ -654,7 +708,6 @@ export async function getBulkPrices(): Promise<BulkPriceResult> {
         meta: { ...result.meta, fromCache: true },
       };
     }
-    // Fresh fetch was empty (quota + Skinport down) — reuse last good book
     if (lastGoodPrices && priceCount(lastGoodPrices.prices) >= 50) {
       return {
         prices: lastGoodPrices.prices,

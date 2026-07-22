@@ -8,11 +8,12 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const warmOnly = searchParams.get("warm") === "1";
+    const preferSteam = searchParams.get("steam") === "1";
 
-    const { prices, meta } = await getBulkPrices();
+    const { prices, meta } = await getBulkPrices({ preferSteam });
     const count = Object.keys(prices).length;
 
-    // Prefetch from /generate — don't ship the full book to the browser
+    // Prefetch from scanner — don't ship the full book to the browser
     if (warmOnly) {
       return NextResponse.json({ ok: count >= 50, count, meta });
     }

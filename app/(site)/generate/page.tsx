@@ -34,9 +34,14 @@ export default function GeneratePage() {
     }
   }, []);
 
-  // Warm the shared price cache before the user hits Scan (cold SteamApis is slow)
+  // Warm price cache before Scan: Skinport-first (fast), then Steam enrich (optional)
   useEffect(() => {
-    void fetch("/api/prices?warm=1").catch(() => {});
+    void fetch("/api/prices?warm=1")
+      .catch(() => {})
+      .finally(() => {
+        // Background Steam enrich — must not block the first scan
+        void fetch("/api/prices?warm=1&steam=1").catch(() => {});
+      });
   }, []);
 
   // After generate click: jump to the loading panel once it mounts
@@ -79,7 +84,7 @@ export default function GeneratePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params),
-        // Align with server maxDuration 90 — cold price cache needs headroom
+        // Prices are Skinport-first (fast); headroom left for generation
         signal: AbortSignal.timeout(85_000),
       });
 
