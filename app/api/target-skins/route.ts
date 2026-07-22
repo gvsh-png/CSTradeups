@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
-import {
-  discoverNewCollections,
-  getUnstableCollectionKeySet,
-  loadDiscoveries,
-  NEW_COLLECTION_MAX_AGE_DAYS,
-} from "@/lib/collections";
 import { buildSkinDatabase, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
+  findSkinsBySearch,
+  getTargetBlockReason,
   listTargetableOutcomes,
   searchTargetableOutcomes,
 } from "@/lib/tradeup/targets";
@@ -33,20 +29,22 @@ export async function GET(request: Request) {
     }
 
     const schema = await fetchSchema();
-    await loadDiscoveries();
-    const discoveries = discoverNewCollections(schema);
-    const excludedKeys = getUnstableCollectionKeySet(
-      schema,
-      new Date(),
-      NEW_COLLECTION_MAX_AGE_DAYS,
-      discoveries,
-      []
-    );
-
-    const skinDB = buildSkinDatabase(schema, excludedKeys);
+    // Target search lists all hunt-eligible outcomes — do not apply the
+    // "exclude new collections" filter here (that's for generation only).
+    const skinDB = buildSkinDatabase(schema);
     const byCR = groupByCollectionRarity(skinDB);
     const all = listTargetableOutcomes(skinDB, byCR);
     const skins = searchTargetableOutcomes(all, q, limit);
+
+    let hint: string | undefined;
+    let matchedName: string | undefined;
+    if (q.length >= 2 && skins.length === 0) {
+      const near = findSkinsBySearch(skinDB, q, 1)[0];
+      if (near) {
+        matchedName = near.name;
+        hint = getTargetBlockReason(near, byCR) ?? undefined;
+      }
+    }
 
     return NextResponse.json({
       skins: skins.map((s) => ({
@@ -61,6 +59,7 @@ export async function GET(request: Request) {
         })),
       })),
       count: skins.length,
+      ...(hint ? { hint, matchedName } : {}),
     });
   } catch (error) {
     return NextResponse.json(

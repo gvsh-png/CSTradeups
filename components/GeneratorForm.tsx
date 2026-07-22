@@ -112,6 +112,7 @@ export default function GeneratorForm({
   const [targetHits, setTargetHits] = useState<TargetSkinOption[]>([]);
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetLoading, setTargetLoading] = useState(false);
+  const [targetHint, setTargetHint] = useState<string | null>(null);
   const targetBoxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,6 +135,7 @@ export default function GeneratorForm({
       setTargetQuery("");
       setTargetHits([]);
       setTargetOpen(false);
+      setTargetHint(null);
     }
   }, [complexity]);
 
@@ -142,11 +144,13 @@ export default function GeneratorForm({
     if (complexity !== "standard") return;
     if (targetSkin && targetQuery === targetSkin.name) {
       setTargetHits([]);
+      setTargetHint(null);
       return;
     }
     const q = targetQuery.trim();
     if (q.length < 2) {
       setTargetHits([]);
+      setTargetHint(null);
       setTargetLoading(false);
       return;
     }
@@ -156,9 +160,13 @@ export default function GeneratorForm({
         .then((r) => r.json())
         .then((d) => {
           setTargetHits(Array.isArray(d.skins) ? d.skins : []);
+          setTargetHint(typeof d.hint === "string" ? d.hint : null);
           setTargetOpen(true);
         })
-        .catch(() => setTargetHits([]))
+        .catch(() => {
+          setTargetHits([]);
+          setTargetHint(null);
+        })
         .finally(() => setTargetLoading(false));
     }, 220);
     return () => window.clearTimeout(t);
@@ -405,6 +413,7 @@ export default function GeneratorForm({
                       setTargetSkin(null);
                       setTargetQuery("");
                       setTargetHits([]);
+                      setTargetHint(null);
                     }}
                     className="shrink-0 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] hover:text-accent"
                   >
@@ -444,6 +453,7 @@ export default function GeneratorForm({
                               setTargetQuery(s.name);
                               setTargetOpen(false);
                               setTargetHits([]);
+                              setTargetHint(null);
                             }}
                             className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent/10 transition-colors"
                           >
@@ -468,6 +478,14 @@ export default function GeneratorForm({
                       ))}
                     </ul>
                   )}
+                  {targetOpen &&
+                    !targetLoading &&
+                    targetHits.length === 0 &&
+                    targetHint && (
+                      <p className="mt-1.5 rounded border border-[var(--border)] bg-[var(--bg-deep)] px-2.5 py-2 text-[11px] text-[var(--text-muted)] leading-snug">
+                        {targetHint}
+                      </p>
+                    )}
                 </div>
               )}
               <p className="scanner-target-hint text-[10px] text-[var(--text-muted)] leading-snug">

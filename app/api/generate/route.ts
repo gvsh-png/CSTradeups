@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  discoverNewCollections,
   getUnstableCollectionKeySet,
-  loadDiscoveries,
   NEW_COLLECTION_MAX_AGE_DAYS,
 } from "@/lib/collections";
 import { authConfigured, authRequired } from "@/lib/auth/config";
@@ -102,15 +100,13 @@ export async function POST(request: Request) {
       fetchSchema(),
       getBulkPrices(),
     ]);
-    await loadDiscoveries();
-    const discoveries = discoverNewCollections(schema);
 
     const excludedKeys = params.excludeUnstableCollections
       ? getUnstableCollectionKeySet(
           schema,
           new Date(),
           NEW_COLLECTION_MAX_AGE_DAYS,
-          discoveries,
+          {},
           customExcluded
         )
       : new Set(customExcluded);
