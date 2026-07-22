@@ -53,11 +53,16 @@ function resolveSourceConflict(
 
 /** Skinport: never use suggested_price */
 function resolveSkinportPrice(item) {
-  if (item.median_price && item.median_price > 0) return r2(item.median_price);
-  if (item.mean_price && item.mean_price > 0) return r2(item.mean_price);
-  if (item.min_price && item.min_price > 0 && (item.quantity || 0) > 0) {
-    return r2(item.min_price);
-  }
+  const qty = item.quantity || 0;
+  const min = item.min_price && item.min_price > 0 && qty > 0 ? item.min_price : 0;
+  const med = item.median_price && item.median_price > 0 ? item.median_price : 0;
+  const mean = item.mean_price && item.mean_price > 0 ? item.mean_price : 0;
+
+  if (min > 0 && med > min * 3) return r2(min);
+  if (min > 0 && mean > min * 3) return r2(min);
+  if (med > 0) return r2(med);
+  if (mean > 0) return r2(mean);
+  if (min > 0) return r2(min);
   return 0;
 }
 
@@ -192,6 +197,18 @@ assert(
     quantity: 3,
   }),
   0.06
+);
+assert(
+  "Blind Spot spiked median → live min",
+  resolveSkinportPrice({
+    market_hash_name: "P90 | Blind Spot (Field-Tested)",
+    median_price: 124.38,
+    mean_price: 80,
+    min_price: 14.2,
+    suggested_price: null,
+    quantity: 8,
+  }),
+  14.2
 );
 
 /** Per-source liquidity helpers (mirror mergeBulkSources) */
