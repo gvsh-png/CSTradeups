@@ -5,19 +5,26 @@ import type { SchemaData } from "./tradeup/types";
 export const NEW_COLLECTION_MAX_AGE_DAYS = 30;
 
 /**
- * Known release dates (ISO). Used when we know the real launch date.
- * Auto-discovered collections get a first-seen date instead.
+ * The only collections treated as "new" for the exclude-unstable toggle.
+ * Everything else (including Ascent) is stable regardless of baseline gaps.
+ */
+export const NEW_COLLECTION_KEYS = new Set([
+  "set_arabesque",
+  "set_spy_tech",
+]);
+
+/**
+ * Known release dates (ISO) for collections in NEW_COLLECTION_KEYS.
  */
 export const COLLECTION_RELEASE_DATES: Record<string, string> = {
-  set_ascent: "2025-03-31", // The Ascent Collection (Spring Forward)
   set_spy_tech: "2026-07-08", // Spy Tech Collection
   set_arabesque: "2026-07-08", // Arabesque Collection
 };
 
 /**
  * Snapshot of every collection key known as of this deploy.
- * Any key that appears in the live schema but is NOT in this set
- * is treated as newly added and excluded for 30 days from first sighting.
+ * Used for schema drift detection only — not for unstable exclusion
+ * (see NEW_COLLECTION_KEYS).
  */
 export const KNOWN_COLLECTION_BASELINE = new Set([
   "set_anubis",
@@ -153,10 +160,11 @@ export function isUnstableCollectionKey(
   key: string,
   now = new Date(),
   maxAgeDays = NEW_COLLECTION_MAX_AGE_DAYS,
-  discoveries: DiscoveryMap = discoveryMemory
+  _discoveries: DiscoveryMap = discoveryMemory
 ): boolean {
-  const info = getEffectiveReleaseDate(key, discoveries);
-  if (!info) return false;
+  if (!NEW_COLLECTION_KEYS.has(key)) return false;
+  const info = getEffectiveReleaseDate(key);
+  if (!info) return true;
   const age = daysBetween(info.date, now);
   return age >= 0 && age < maxAgeDays;
 }
@@ -188,22 +196,16 @@ export function getUnstableCollections(
   schema: SchemaData,
   now = new Date(),
   maxAgeDays = NEW_COLLECTION_MAX_AGE_DAYS,
-  discoveries: DiscoveryMap = discoveryMemory
+  _discoveries: DiscoveryMap = discoveryMemory
 ): UnstableCollection[] {
   const colMap = new Map(
     (schema.collections || []).map((c) => [c.key, c.name])
   );
 
-  const keys = new Set([
-    ...Object.keys(COLLECTION_RELEASE_DATES),
-    ...Object.keys(discoveries),
-    ...(schema.collections || []).map((c) => c.key),
-  ]);
-
   const results: UnstableCollection[] = [];
 
-  for (const key of keys) {
-    const info = getEffectiveReleaseDate(key, discoveries);
+  for (const key of NEW_COLLECTION_KEYS) {
+    const info = getEffectiveReleaseDate(key);
     if (!info) continue;
     const ageDays = daysBetween(info.date, now);
     if (ageDays < 0 || ageDays >= maxAgeDays) continue;
@@ -224,25 +226,13 @@ export function getUnstableCollectionKeySet(
   schema: SchemaData,
   now = new Date(),
   maxAgeDays = NEW_COLLECTION_MAX_AGE_DAYS,
-  discoveries: DiscoveryMap = discoveryMemory,
+  _discoveries: DiscoveryMap = discoveryMemory,
   extraExcluded: string[] = []
 ): Set<string> {
   const keys = new Set<string>();
 
-  for (const c of schema.collections || []) {
-    if (isUnstableCollectionKey(c.key, now, maxAgeDays, discoveries)) {
-      keys.add(c.key);
-    }
-  }
-
-  for (const key of Object.keys(COLLECTION_RELEASE_DATES)) {
-    if (isUnstableCollectionKey(key, now, maxAgeDays, discoveries)) {
-      keys.add(key);
-    }
-  }
-
-  for (const key of Object.keys(discoveries)) {
-    if (isUnstableCollectionKey(key, now, maxAgeDays, discoveries)) {
+  for (const key of NEW_COLLECTION_KEYS) {
+    if (isUnstableCollectionKey(key, now, maxAgeDays)) {
       keys.add(key);
     }
   }
