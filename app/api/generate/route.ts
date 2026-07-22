@@ -90,6 +90,11 @@ export async function POST(request: Request) {
       feeType: body.feeType === "steam" ? "steam" : "csfloat",
       excludeUnstableCollections: body.excludeUnstableCollections !== false,
       limit: Math.max(1, Math.min(50, finite(body.limit, 15))),
+      targetOutcomeName:
+        typeof body.targetOutcomeName === "string" &&
+        body.targetOutcomeName.trim()
+          ? body.targetOutcomeName.trim()
+          : undefined,
     };
 
     // Schema + prices in parallel — sequential cold path was blowing the client timeout
@@ -172,6 +177,7 @@ export async function POST(request: Request) {
         newCollectionMaxAgeDays: params.excludeUnstableCollections
           ? NEW_COLLECTION_MAX_AGE_DAYS
           : 0,
+        targetOutcomeName: params.targetOutcomeName || null,
         params,
         generatedAt: new Date().toISOString(),
         quota: quotaMeta,

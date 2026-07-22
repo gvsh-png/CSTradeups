@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   COMPLEXITY_OPTIONS,
+  rarityShort,
+  rarityStyle,
   type Complexity,
 } from "@/lib/constants";
 import type { AppSettings } from "@/lib/settings";
@@ -13,6 +15,13 @@ import {
 import { useSimulatedProgress } from "@/hooks/useSimulatedProgress";
 import { useCurrency } from "./CurrencyProvider";
 
+type TargetSkinOption = {
+  name: string;
+  rarity: string;
+  image?: string;
+  maxHitPct: number;
+};
+
 interface GeneratorFormProps {
   onGenerate: (params: {
     minPrice: number;
@@ -22,6 +31,7 @@ interface GeneratorFormProps {
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
     customExcludedCollections: string[];
+    targetOutcomeName?: string;
   }) => void;
   loading: boolean;
   settings: AppSettings;
@@ -97,6 +107,12 @@ export default function GeneratorForm({
     { key: string; name: string; releaseDate: string; ageDays: number }[]
   >([]);
   const [maxAgeDays, setMaxAgeDays] = useState(30);
+  const [targetQuery, setTargetQuery] = useState("");
+  const [targetSkin, setTargetSkin] = useState<TargetSkinOption | null>(null);
+  const [targetHits, setTargetHits] = useState<TargetSkinOption[]>([]);
+  const [targetOpen, setTargetOpen] = useState(false);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const targetBoxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/collections")
@@ -111,6 +127,53 @@ export default function GeneratorForm({
       .catch(() => {});
   }, []);
 
+  // Clear target when leaving Standard mode
+  useEffect(() => {
+    if (complexity !== "standard") {
+      setTargetSkin(null);
+      setTargetQuery("");
+      setTargetHits([]);
+      setTargetOpen(false);
+    }
+  }, [complexity]);
+
+  // Debounced target skin search
+  useEffect(() => {
+    if (complexity !== "standard") return;
+    if (targetSkin && targetQuery === targetSkin.name) {
+      setTargetHits([]);
+      return;
+    }
+    const q = targetQuery.trim();
+    if (q.length < 2) {
+      setTargetHits([]);
+      setTargetLoading(false);
+      return;
+    }
+    setTargetLoading(true);
+    const t = window.setTimeout(() => {
+      fetch(`/api/target-skins?q=${encodeURIComponent(q)}&limit=20`)
+        .then((r) => r.json())
+        .then((d) => {
+          setTargetHits(Array.isArray(d.skins) ? d.skins : []);
+          setTargetOpen(true);
+        })
+        .catch(() => setTargetHits([]))
+        .finally(() => setTargetLoading(false));
+    }, 220);
+    return () => window.clearTimeout(t);
+  }, [targetQuery, complexity, targetSkin]);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!targetBoxRef.current?.contains(e.target as Node)) {
+        setTargetOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const min = Math.max(MIN_PRICE_DISPLAY, minPrice || MIN_PRICE_DISPLAY);
@@ -123,6 +186,10 @@ export default function GeneratorForm({
       feeType,
       excludeUnstableCollections: excludeUnstable,
       customExcludedCollections: settings.customExcludedCollections,
+      targetOutcomeName:
+        complexity === "standard" && targetSkin?.name
+          ? targetSkin.name
+          : undefined,
     });
   };
 
@@ -287,6 +354,120 @@ export default function GeneratorForm({
                 </label>
               ))}
             </fieldset>
+
+            {complexity === "standard" && (
+              <div ref={targetBoxRef} className="relative space-y-1.5">
+                <div className="flex items-end justify-between gap-2">
+                  <span className="label mb-0">Target outcome</span>
+                  <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                    optional · max hit chance
+                  </span>
+                </div>
+                {targetSkin ? (
+                  <div className="flex items-center gap-2 rounded border border-accent/40 bg-accent/5 px-2.5 py-2">
+                    {targetSkin.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={targetSkin.image}
+                        alt=""
+                        className="h-8 w-8 shrink-0 object-contain rounded border bg-[var(--bg-deep)]"
+                        style={{
+                          borderColor: rarityStyle(targetSkin.rarity).borderColor,
+                        }}
+                      />
+                    ) : (
+                      <div className="h-8 w-8 shrink-0 rounded border border-[var(--border)] bg-[var(--bg-deep)]" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">
+                        {targetSkin.name}
+                      </p>
+                      <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                        {rarityShort(targetSkin.rarity)}
+                        {targetSkin.maxHitPct > 0 && (
+                          <span className="text-accent">
+                            {" "}
+                            · up to {targetSkin.maxHitPct}%
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTargetSkin(null);
+                        setTargetQuery("");
+                        setTargetHits([]);
+                      }}
+                      className="shrink-0 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] hover:text-accent"
+                    >
+                      clear
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="search"
+                      value={targetQuery}
+                      onChange={(e) => {
+                        setTargetQuery(e.target.value);
+                        setTargetOpen(true);
+                      }}
+                      onFocus={() => {
+                        if (targetHits.length) setTargetOpen(true);
+                      }}
+                      placeholder="Search skin to hunt (e.g. AXIA)"
+                      className="input-field text-sm"
+                      autoComplete="off"
+                      aria-label="Target outcome skin"
+                    />
+                    {targetLoading && (
+                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--text-muted)]">
+                        …
+                      </span>
+                    )}
+                    {targetOpen && targetHits.length > 0 && (
+                      <ul className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface-raised)] shadow-lg scrollbar-thin">
+                        {targetHits.map((s) => (
+                          <li key={s.name}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetSkin(s);
+                                setTargetQuery(s.name);
+                                setTargetOpen(false);
+                                setTargetHits([]);
+                              }}
+                              className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-accent/10 transition-colors"
+                            >
+                              {s.image ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={s.image}
+                                  alt=""
+                                  className="h-7 w-7 shrink-0 object-contain"
+                                />
+                              ) : null}
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-[12px] font-medium truncate">
+                                  {s.name}
+                                </span>
+                                <span className="block text-[10px] font-mono text-[var(--text-muted)]">
+                                  {rarityShort(s.rarity)} · max {s.maxHitPct}%
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                <p className="text-[10px] text-[var(--text-muted)] leading-snug">
+                  Ranks Standard contracts by chance of landing this skin.
+                </p>
+              </div>
+            )}
 
             {!hero && (
               <>
