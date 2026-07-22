@@ -20,7 +20,6 @@ export default function GeneratePage() {
   const [meta, setMeta] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
-    // Clear auth failure toast from query if present
     const params = new URLSearchParams(window.location.search);
     if (params.get("auth") === "failed") {
       setError("Steam sign-in failed. Try again.");
@@ -68,6 +67,13 @@ export default function GeneratePage() {
         setError(
           "No contracts matched. Try adjusting target win, widening price range, or changing collection filters."
         );
+      } else {
+        // Scroll to results on mobile after scan
+        requestAnimationFrame(() => {
+          document
+            .getElementById("results-feed")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -97,83 +103,83 @@ export default function GeneratePage() {
   };
 
   return (
-    <div className="mx-auto max-w-container px-4 sm:px-6 py-5 lg:py-8">
-      <div className="mb-5 lg:mb-6 lg:hidden">
-        <h1 className="text-xl font-semibold tracking-tight">Configure scanner</h1>
+    <div className="w-full">
+      {/* Mobile title — Stitch Scanner header */}
+      <div className="lg:hidden mx-auto max-w-container px-4 pt-5 pb-1">
+        <h1 className="text-2xl font-bold tracking-tight text-accent">Scanner</h1>
         <p className="text-[12px] text-[var(--text-muted)] mt-1">
-          Set parameters to find high-EV trade-ups.
+          Configure filters and generate trade-up blueprints.
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-5 lg:gap-7 xl:gap-10">
-        <aside className="w-full lg:w-[22rem] xl:w-[24rem] lg:shrink-0">
+      {/* Configure — full-width centered hero (Stitch desktop dark) */}
+      <section className="border-b border-[var(--border)]">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-5 lg:py-12 xl:py-14 animate-fade-up">
           <GeneratorForm
+            variant="hero"
             onGenerate={handleGenerate}
             loading={loading}
             settings={settings}
             onOpenSettings={openSettings}
           />
-        </aside>
+        </div>
+      </section>
 
-        <section className="flex-1 min-w-0 space-y-3 lg:space-y-4">
-          <div className="hidden lg:flex items-end justify-between gap-4 pb-1">
-            <div>
-              <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-accent/80">
-                Results board
-              </p>
-              <h2 className="text-lg font-semibold tracking-tight mt-1">
-                Trade-up contracts
+      {/* Results feed */}
+      <section
+        id="results-feed"
+        className="mx-auto max-w-[1100px] px-4 sm:px-6 py-6 lg:py-10"
+      >
+        <div className="flex items-end justify-between gap-4 mb-5 border-b border-[var(--border)] pb-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:block w-1 h-5 rounded-full bg-accent shrink-0" />
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">
+                Calculated Outcomes
               </h2>
             </div>
-            {meta && !loading && (
-              <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[10px] font-mono text-[var(--text-muted)]">
-                <span>{String(meta.pricesLoaded)} prices</span>
-                <span aria-hidden>·</span>
-                <span>{String(meta.priceSource)}</span>
-                {meta.excludedCollections ? (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span>{String(meta.excludedCollections)} filtered</span>
-                  </>
-                ) : null}
-              </div>
+            {meta && !loading && results.length > 0 && (
+              <p className="text-[11px] font-mono text-[var(--text-muted)] mt-1.5 sm:ml-3">
+                {results.length} match{results.length !== 1 ? "es" : ""}
+                {meta.pricesLoaded != null && (
+                  <> · {String(meta.pricesLoaded)} prices</>
+                )}
+                {meta.priceSource != null && <> · {String(meta.priceSource)}</>}
+              </p>
             )}
           </div>
-
-          {error && (
-            <div className="px-3 py-2.5 rounded-md bg-[var(--loss)]/10 border border-[var(--loss)]/20 text-[var(--loss)] text-[11px] leading-relaxed">
-              {error}
-              {(error.includes("Steam") ||
-                error.includes("Upgrade") ||
-                error.includes("week")) && (
-                <button
-                  type="button"
-                  className="ml-2 underline text-accent"
-                  onClick={() => openUpgrade(error)}
-                >
-                  Details
-                </button>
-              )}
-            </div>
+          {results.length > 0 && !loading && (
+            <span className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-mono text-accent">
+              {results.length} match{results.length !== 1 ? "es" : ""}
+            </span>
           )}
+        </div>
 
-          {meta && !loading && (
-            <div className="flex lg:hidden flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-[var(--text-muted)]">
-              <span>{String(meta.pricesLoaded)} prices</span>
-              <span aria-hidden>·</span>
-              <span>{String(meta.priceSource)}</span>
-            </div>
-          )}
+        {error && (
+          <div className="mb-4 px-3 py-2.5 rounded border border-[var(--loss)]/25 bg-[var(--loss)]/10 text-[var(--loss)] text-[11px] leading-relaxed">
+            {error}
+            {(error.includes("Steam") ||
+              error.includes("Upgrade") ||
+              error.includes("week")) && (
+              <button
+                type="button"
+                className="ml-2 underline text-accent"
+                onClick={() => openUpgrade(error)}
+              >
+                Details
+              </button>
+            )}
+          </div>
+        )}
 
-          <TradeUpResults
-            results={results}
-            loading={loading}
-            onSave={handleSave}
-            onInsight={handleInsight}
-            isSaved={isSaved}
-          />
-        </section>
-      </div>
+        <TradeUpResults
+          results={results}
+          loading={loading}
+          onSave={handleSave}
+          onInsight={handleInsight}
+          isSaved={isSaved}
+        />
+      </section>
     </div>
   );
 }

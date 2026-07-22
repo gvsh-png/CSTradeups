@@ -8,7 +8,7 @@ export default function CurrencySelect() {
   const { code, setCode, symbol } = useCurrency();
 
   return (
-    <label className="relative inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] pl-2 pr-1 text-[11px] font-mono text-[var(--text-muted)] hover:border-accent/35 hover:text-[var(--text)] transition-colors duration-150">
+    <label className="relative inline-flex h-8 items-center gap-1 rounded border border-[var(--border)] bg-[var(--bg-deep)] pl-2 pr-1 text-[11px] font-mono text-[var(--text-muted)] hover:border-accent/35 hover:text-[var(--text)] transition-colors duration-150">
       <span className="text-accent tabular-nums shrink-0" aria-hidden>
         {symbol}
       </span>
@@ -20,7 +20,7 @@ export default function CurrencySelect() {
         title="Display currency (prices convert from USD market data)"
       >
         {CURRENCIES.map((c) => (
-          <option key={c.code} value={c.code} className="bg-[var(--surface-raised)]">
+          <option key={c.code} value={c.code} className="bg-[var(--surface)]">
             {c.code}
           </option>
         ))}

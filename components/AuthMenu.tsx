@@ -41,10 +41,10 @@ export default function AuthMenu({ onUpgrade }: Props) {
     return (
       <a
         href="/api/auth/steam"
-        className="inline-flex h-8 items-center gap-1.5 rounded border border-accent/40 bg-[var(--accent-dim)] px-2.5 text-[11px] font-semibold text-[var(--accent-ink)] hover:brightness-110 transition-all"
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition-all duration-150 border border-accent/45 text-accent hover:bg-accent/10 sm:border-transparent sm:bg-accent sm:text-[var(--accent-ink)] sm:hover:brightness-105"
       >
         <SteamMark />
-        <span className="hidden sm:inline">Sign in with Steam</span>
+        <span className="hidden sm:inline">Steam Login</span>
         <span className="sm:hidden">Steam</span>
       </a>
     );

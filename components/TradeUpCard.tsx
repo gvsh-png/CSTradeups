@@ -232,12 +232,11 @@ export default function TradeUpCard({
   return (
     <article
       ref={cardRef}
-      className="panel panel-desktop overflow-hidden relative lg:transition-shadow lg:hover:shadow-[0_12px_40px_-24px_rgba(0,0,0,0.7)]"
+      className="panel panel-desktop overflow-hidden relative transition-shadow duration-150 hover:shadow-[0_12px_40px_-24px_rgba(0,0,0,0.75)]"
       aria-busy={refreshing}
     >
-      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-accent/45 to-transparent pointer-events-none z-10" />
       {refreshing && refreshProgress && (
-        <div className="px-4 pt-3 pb-2 border-b border-[var(--border-subtle)] bg-accent/5">
+        <div className="px-4 pt-3 pb-2 border-b border-[var(--border)] bg-accent/5">
           <LoadingProgress
             progress={refreshProgress}
             title="Refreshing prices"
@@ -249,12 +248,15 @@ export default function TradeUpCard({
         </div>
       )}
       <div
-        className={`p-4 space-y-3 transition-opacity duration-200 ${
+        className={`p-4 space-y-3 transition-opacity duration-150 ${
           refreshing ? "opacity-60 pointer-events-none" : ""
         }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-accent">
+              Trade-up blueprint
+            </p>
             <div className="flex items-center gap-1.5 flex-wrap">
               <RarityBadge rarity={tradeUp.inputRarity} />
               <span className="text-[var(--text-muted)] text-[10px]">→</span>
@@ -266,9 +268,7 @@ export default function TradeUpCard({
               </p>
             )}
           </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
           {onRefresh && (
             <IconBtn
               onClick={onRefresh}
@@ -391,12 +391,11 @@ export default function TradeUpCard({
               </svg>
             </IconBtn>
           )}
-          {copied && (
-            <span className="text-[10px] font-mono text-accent ml-1">
-              Link copied
-            </span>
-          )}
+          </div>
         </div>
+        {copied && (
+          <span className="text-[10px] font-mono text-accent">Link copied</span>
+        )}
       </div>
 
       <div className="px-4 pb-4">
@@ -445,18 +444,18 @@ export default function TradeUpCard({
       </div>
 
       <div className="px-4 pb-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 p-3 bg-[var(--surface)] rounded-md border border-[var(--border)]">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-3 p-3 bg-[var(--bg-deep)] rounded border border-[var(--border)]">
           <Stat
             label="Win chance"
             value={`${tradeUp.winPct}%`}
-            color={tradeUp.winPct >= 50 ? "var(--profit)" : undefined}
+            color={tradeUp.winPct >= 50 ? "var(--profit)" : "var(--accent)"}
           />
           <Stat
             label="Avg profit"
             value={money(tradeUp.expectedProfit, { signed: true })}
             color={profitColor}
           />
-          <Stat label="Return" value={`${tradeUp.roi}%`} color={profitColor} />
+          <Stat label="ROI" value={`${tradeUp.roi}%`} color="var(--accent)" />
           <Stat label="Cost" value={money(tradeUp.totalCost)} />
         </div>
       </div>
@@ -526,7 +525,7 @@ export default function TradeUpCard({
                 type="button"
                 onClick={() => fetchInsight(false)}
                 disabled={insightLoading}
-                className="w-full mt-1 py-2.5 text-[11px] font-mono text-accent hover:text-accent-dim transition-colors duration-150 disabled:opacity-40 border border-[var(--border)] rounded-md"
+                className="w-full mt-1 py-2.5 text-[11px] font-mono uppercase tracking-wider text-accent hover:bg-accent/10 transition-colors duration-150 disabled:opacity-40 border border-accent/40 rounded"
               >
                 {insightLoading ? "Loading…" : "Get AI analysis"}
               </button>

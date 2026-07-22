@@ -9,17 +9,19 @@ export default function SavedPage() {
 
   return (
     <div className="mx-auto max-w-container px-4 sm:px-6 py-5 lg:py-8">
-      <div className="flex items-end justify-between gap-4 mb-5">
+      <div className="flex items-end justify-between gap-4 mb-5 border-b border-[var(--border)] pb-4">
         <div>
-          <p className="label text-accent/80 mb-1">Library</p>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
-            Saved contracts
-          </h1>
-          <p className="text-[12px] text-[var(--text-muted)] mt-1">
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-5 rounded-full bg-accent shrink-0" />
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+              Saved contracts
+            </h1>
+          </div>
+          <p className="text-[12px] text-[var(--text-muted)] mt-1 sm:ml-3">
             Refresh prices or share builds you want to run.
           </p>
         </div>
-        <Link href="/generate" className="btn-accent-outline hidden sm:inline-flex">
+        <Link href="/generate" className="btn-primary w-auto px-4 h-9 hidden sm:inline-flex">
           New scan
         </Link>
       </div>

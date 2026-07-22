@@ -3,24 +3,29 @@
 @tailwind utilities;
 
 :root {
-  /* Stitch "Industrial Precision" — CSTradeups */
-  --bg: #0d141d;
-  --bg-elevated: #151c25;
-  --surface: #192029;
-  --surface-raised: #232a34;
-  --surface-highest: #2e353f;
-  --border: #4e4639;
-  --border-subtle: #2e353f;
-  --text: #dce3f0;
-  --text-muted: #9a8f80;
-  --text-soft: #d1c5b4;
-  --accent: #e9c176;
-  --accent-dim: #c5a059;
-  --accent-ink: #412d00;
+  /* Industrial Precision — style guide */
+  --bg-deep: #0b0e11;
+  --bg: #0d1117;
+  --bg-elevated: #12161d;
+  --surface: #1a1b1e; /* secondary / panels */
+  --surface-low: #161b22;
+  --surface-container: #1a1b1e;
+  --surface-raised: #22252b;
+  --surface-highest: #2a2e36;
+  --border: #2a2e36;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-brass: rgba(229, 168, 89, 0.22);
+  --text: #f3f4f6;
+  --text-muted: #9ca3af; /* neutral */
+  --text-soft: #c4c9d1;
+  --accent: #e5a859; /* primary gold */
+  --accent-dim: #c48f45;
+  --accent-bright: #f0c57a;
+  --accent-ink: #1a1205;
+  --tertiary: #8fa5d6; /* periwinkle accent */
   --profit: #5ecf8e;
   --loss: #e35d5d;
-  --rail: #151c25;
-  --grid: rgba(78, 70, 57, 0.22);
+  --grid: rgba(156, 163, 175, 0.12);
 }
 
 * {
@@ -30,64 +35,122 @@
 html {
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
+  color-scheme: dark;
 }
 
 body {
-  background: var(--bg);
+  background: var(--bg-deep);
   color: var(--text);
   min-height: 100dvh;
   overflow-x: hidden;
 }
 
-/* Fixed atmosphere — solid dark navy, soft vignette, light grid on desktop */
+/* Deep charcoal + dotted industrial grid */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(233, 193, 118, 0.06), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(75, 105, 255, 0.04), transparent 50%),
-    linear-gradient(180deg, #0f1620 0%, #0d141d 40%, #0a1018 100%);
+    radial-gradient(
+      ellipse 65% 40% at 50% -5%,
+      rgba(229, 168, 89, 0.07),
+      transparent 55%
+    ),
+    linear-gradient(180deg, #0b0e11 0%, #0d1117 50%, #090b0e 100%);
   pointer-events: none;
   z-index: 0;
 }
 
-@media (min-width: 1024px) {
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-    background-size: 40px 40px;
-    mask-image: radial-gradient(ellipse 75% 65% at 50% 35%, black, transparent);
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.45;
-  }
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(156, 163, 175, 0.14) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 35%, black, transparent);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.55;
 }
 
 @layer components {
   .panel {
-    @apply rounded-lg border border-[var(--border-subtle)];
-    background-color: color-mix(in srgb, var(--surface) 95%, transparent);
+    @apply rounded-xl border;
+    border-color: var(--border);
+    background-color: var(--surface);
   }
 
   .panel-raised {
-    @apply rounded-lg border border-[var(--border-subtle)];
-    background-color: color-mix(in srgb, var(--surface-raised) 90%, transparent);
+    @apply rounded-xl border;
+    border-color: var(--border);
+    background-color: var(--surface-raised);
   }
 
   .panel-desktop {
-    background: linear-gradient(
-      165deg,
-      rgba(35, 42, 52, 0.98),
-      rgba(25, 32, 41, 0.96)
-    );
     box-shadow:
-      0 0 0 1px rgba(233, 193, 118, 0.04),
-      0 18px 40px -28px rgba(0, 0, 0, 0.7);
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+      0 16px 40px -28px rgba(0, 0, 0, 0.8);
+  }
+
+  .panel-glow {
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+      0 0 0 1px rgba(229, 168, 89, 0.1),
+      0 24px 48px -32px rgba(0, 0, 0, 0.85);
+  }
+
+  /* Gold corner brackets — Computing Outcomes / hero frames */
+  .corner-frame {
+    position: relative;
+  }
+  .corner-frame::before,
+  .corner-frame::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: var(--accent);
+    border-style: solid;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .corner-frame::before {
+    top: 8px;
+    left: 8px;
+    border-width: 1.5px 0 0 1.5px;
+  }
+  .corner-frame::after {
+    top: 8px;
+    right: 8px;
+    border-width: 1.5px 1.5px 0 0;
+  }
+  .corner-frame > .corner-br {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    width: 14px;
+    height: 14px;
+    border-color: var(--accent);
+    border-style: solid;
+    border-width: 0 1.5px 1.5px 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .corner-frame > .corner-bl {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    width: 14px;
+    height: 14px;
+    border-color: var(--accent);
+    border-style: solid;
+    border-width: 0 0 1.5px 1.5px;
+    pointer-events: none;
+    z-index: 2;
   }
 
   .label {
@@ -95,34 +158,50 @@ body::before {
   }
 
   .input-field {
-    @apply w-full h-10 px-3 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)]
-      text-sm text-[var(--text)] focus:outline-none focus:border-accent/50 transition-colors;
+    @apply w-full h-10 px-3 rounded-lg bg-[var(--bg-deep)] border text-sm
+      focus:outline-none transition-colors duration-150;
+    border-color: var(--border);
     color: var(--text);
   }
+  .input-field:focus {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
   .input-field::placeholder {
-    color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+    color: color-mix(in srgb, var(--text-muted) 55%, transparent);
   }
 
   .btn-primary {
-    @apply w-full inline-flex items-center justify-center gap-2 h-11 px-4 rounded-md
-      bg-accent text-sm font-semibold
-      transition-colors disabled:opacity-50;
+    @apply w-full inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl
+      text-sm font-semibold transition-all duration-150 disabled:opacity-50
+      active:opacity-80;
+    background: var(--accent);
     color: var(--accent-ink);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
   }
-  .btn-primary:hover {
-    background-color: var(--accent-dim);
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.06);
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md
-      border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-muted)]
-      hover:text-[var(--text)] hover:border-accent/30 transition-colors;
+    @apply inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg
+      text-xs font-medium transition-colors duration-150;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    background: var(--surface);
+  }
+  .btn-ghost:hover {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   }
 
   .btn-accent-outline {
-    @apply inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md
-      border border-accent/40 text-xs font-medium text-accent
-      hover:bg-accent/10 transition-colors;
+    @apply inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg
+      text-xs font-medium transition-colors duration-150;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent);
+  }
+  .btn-accent-outline:hover {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .text-accent {
@@ -137,15 +216,21 @@ body::before {
     border-color: var(--accent);
   }
 
+  .text-tertiary {
+    color: var(--tertiary);
+  }
+
   .header-shell {
-    @apply sticky top-0 z-50 border-b border-[var(--border-subtle)] backdrop-blur-xl;
-    background-color: color-mix(in srgb, var(--bg) 90%, transparent);
+    @apply sticky top-0 z-50 backdrop-blur-md;
+    border-bottom: 1px solid var(--border-brass);
+    background-color: color-mix(in srgb, var(--bg-deep) 92%, transparent);
   }
 
   .mobile-tabbar {
-    @apply fixed bottom-0 inset-x-0 z-50 border-t border-[var(--border-subtle)]
-      lg:hidden pb-[env(safe-area-inset-bottom)] backdrop-blur-xl;
-    background-color: color-mix(in srgb, var(--bg) 95%, transparent);
+    @apply fixed bottom-0 inset-x-0 z-50 lg:hidden
+      pb-[env(safe-area-inset-bottom)] backdrop-blur-md;
+    border-top: 1px solid var(--border-brass);
+    background-color: color-mix(in srgb, var(--bg-deep) 94%, transparent);
   }
 
   .rarity-pill {
@@ -153,12 +238,11 @@ body::before {
   }
 }
 
-/* Range inputs */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
-  background: var(--border-subtle);
+  background: var(--surface-highest);
   border-radius: 999px;
   outline: none;
 }
@@ -168,26 +252,48 @@ input[type="range"]::-webkit-slider-thumb {
   height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  border: 2px solid var(--accent-ink);
+  border: none;
+  box-shadow: 0 0 10px rgba(229, 168, 89, 0.4);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
   cursor: pointer;
 }
 
-/* Scrollbar */
 .scrollbar-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
+  background: var(--surface-highest);
   border-radius: 999px;
 }
 
 .industrial-dots {
   background-image: radial-gradient(
     circle at 1px 1px,
-    rgba(233, 193, 118, 0.07) 1px,
+    rgba(156, 163, 175, 0.16) 1px,
     transparent 0
   );
-  background-size: 24px 24px;
+  background-size: 22px 22px;
   mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
 }

@@ -7,41 +7,56 @@ import AuthMenu from "./AuthMenu";
 import CurrencySelect from "./CurrencySelect";
 import { useSaved } from "./SavedProvider";
 
-const NAV = [
-  { href: "/", label: "Home", icon: "home", match: (p: string) => p === "/" },
+/** Desktop: Home + Generate + Saved + Profile. Mobile tabs match Stitch: Generate / Saved / Profile */
+const DESKTOP_NAV = [
+  { href: "/", label: "Home", match: (p: string) => p === "/" },
   {
     href: "/generate",
     label: "Generate",
-    icon: "scan",
     match: (p: string) => p.startsWith("/generate"),
   },
   {
     href: "/saved",
     label: "Saved",
-    icon: "saved",
     match: (p: string) => p.startsWith("/saved"),
   },
   {
     href: "/profile",
     label: "Profile",
-    icon: "profile",
-    match: (p: string) => p.startsWith("/profile") || p.startsWith("/subscription"),
+    match: (p: string) =>
+      p.startsWith("/profile") || p.startsWith("/subscription"),
+  },
+] as const;
+
+const MOBILE_NAV = [
+  {
+    href: "/generate",
+    label: "Generate",
+    icon: "scan" as const,
+    match: (p: string) => p === "/" || p.startsWith("/generate"),
+  },
+  {
+    href: "/saved",
+    label: "Saved",
+    icon: "saved" as const,
+    match: (p: string) => p.startsWith("/saved"),
+  },
+  {
+    href: "/profile",
+    label: "Profile",
+    icon: "profile" as const,
+    match: (p: string) =>
+      p.startsWith("/profile") || p.startsWith("/subscription"),
   },
 ] as const;
 
 function NavIcon({ name, active }: { name: string; active?: boolean }) {
-  const cls = `w-[18px] h-[18px] ${active ? "text-accent" : "currentColor"}`;
+  const cls = `w-[20px] h-[20px] ${active ? "text-accent" : ""}`;
   switch (name) {
-    case "home":
-      return (
-        <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z" />
-        </svg>
-      );
     case "scan":
       return (
         <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V5a1 1 0 0 1 1-1h3M20 8V5a1 1 0 0 0-1-1h-3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3M8 12h8" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.5 9V5.5A2 2 0 015.5 3.5H9M20.5 9V5.5A2 2 0 0018.5 3.5H15M3.5 15v3.5A2 2 0 005.5 20.5H9M20.5 15v3.5a2 2 0 01-2 2H15M7 12h10" />
         </svg>
       );
     case "saved":
@@ -75,33 +90,29 @@ export default function AppShell({
   const savedCount = saved.length;
 
   return (
-    <div className="min-h-dvh flex flex-col relative">
+    <div className="min-h-dvh flex flex-col relative z-[1]">
       <header className="header-shell">
-        <div className="mx-auto max-w-container px-4 sm:px-6 h-12 lg:h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-8 min-w-0">
-            <Link
-              href="/"
-              className="flex items-center gap-2 shrink-0 group"
-            >
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded border border-accent/35 bg-accent/10 text-accent">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" d="M4 20 L12 4 L20 20 Z" />
-                  <path strokeLinecap="round" d="M8 14 h8" />
+        <div className="mx-auto max-w-container px-4 sm:px-6 h-12 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-6 lg:gap-10 min-w-0">
+            <Link href="/" className="flex items-center gap-2 shrink-0 group">
+              <span className="text-accent inline-flex">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M12 2L4 20h3.2l1.5-3.5h6.6L16.8 20H20L12 2zm0 5.2l2.4 5.8H9.6L12 7.2z" />
                 </svg>
               </span>
-              <span className="font-semibold tracking-tight text-accent text-[15px] lg:text-base">
+              <span className="font-bold tracking-tight text-accent text-[15px] sm:text-base">
                 CSTradeups
               </span>
             </Link>
 
-            <nav className="hidden lg:flex items-center gap-1 h-full">
-              {NAV.map((item) => {
+            <nav className="hidden md:flex items-center gap-1 h-12">
+              {DESKTOP_NAV.filter((n) => n.href !== "/").map((item) => {
                 const active = item.match(pathname);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`relative h-14 inline-flex items-center px-3 text-[12px] font-mono uppercase tracking-[0.12em] transition-colors ${
+                    className={`relative h-12 inline-flex items-center px-3 text-[12px] font-semibold tracking-wide transition-colors duration-150 ${
                       active
                         ? "text-accent"
                         : "text-[var(--text-soft)] hover:text-[var(--text)]"
@@ -109,7 +120,7 @@ export default function AppShell({
                   >
                     {item.label}
                     {item.href === "/saved" && savedCount > 0 && (
-                      <span className="ml-1.5 text-[10px] text-accent/80">
+                      <span className="ml-1.5 text-[10px] font-mono text-accent/80">
                         {savedCount > 9 ? "9+" : savedCount}
                       </span>
                     )}
@@ -131,7 +142,7 @@ export default function AppShell({
 
       <main
         className={`flex-1 relative z-10 w-full ${
-          hideMobileTabs ? "" : "pb-20 lg:pb-0"
+          hideMobileTabs ? "" : "pb-[4.25rem] lg:pb-0"
         }`}
       >
         {children}
@@ -139,14 +150,14 @@ export default function AppShell({
 
       {!hideMobileTabs && (
         <nav className="mobile-tabbar" aria-label="Primary">
-          <div className="mx-auto max-w-container flex h-[3.75rem] items-stretch justify-around px-1">
-            {NAV.map((item) => {
+          <div className="mx-auto max-w-container flex h-14 items-stretch justify-around px-2">
+            {MOBILE_NAV.map((item) => {
               const active = item.match(pathname);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+                  className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors duration-150 ${
                     active ? "text-accent" : "text-[var(--text-muted)]"
                   }`}
                 >

@@ -8,27 +8,34 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#0d141d",
+        background: {
+          DEFAULT: "#0d1117",
+          deep: "#0b0e11",
+        },
         surface: {
-          DEFAULT: "#0d141d",
-          panel: "#16191e",
-          low: "#151c25",
-          container: "#192029",
-          high: "#232a34",
-          highest: "#2e353f",
-          raised: "#232a34",
-          border: "#4e4639",
-          hover: "#2e353f",
+          DEFAULT: "#1a1b1e",
+          panel: "#1a1b1e",
+          low: "#161b22",
+          container: "#1a1b1e",
+          high: "#22252b",
+          highest: "#2a2e36",
+          raised: "#22252b",
+          border: "#2a2e36",
+          hover: "#2a2e36",
         },
         accent: {
-          DEFAULT: "#e9c176",
-          dim: "#c5a059",
-          muted: "#e9c17620",
-          ink: "#412d00",
+          DEFAULT: "#e5a859",
+          dim: "#c48f45",
+          bright: "#f0c57a",
+          muted: "#e5a85922",
+          ink: "#1a1205",
+        },
+        tertiary: {
+          DEFAULT: "#8fa5d6",
         },
         outline: {
-          DEFAULT: "#9a8f80",
-          variant: "#4e4639",
+          DEFAULT: "#9ca3af",
+          variant: "#2a2e36",
         },
         profit: "#5ecf8e",
         loss: "#e35d5d",
@@ -47,26 +54,15 @@ const config: Config = {
         mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
       },
       borderRadius: {
-        DEFAULT: "0.25rem",
-        lg: "0.5rem",
-        xl: "0.75rem",
+        DEFAULT: "0.5rem",
+        lg: "0.75rem",
+        xl: "1rem",
       },
       maxWidth: {
         container: "1280px",
       },
-      keyframes: {
-        "fade-up": {
-          "0%": { opacity: "0", transform: "translateY(12px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        "pulse-soft": {
-          "0%, 100%": { opacity: "0.55" },
-          "50%": { opacity: "1" },
-        },
-      },
-      animation: {
-        "fade-up": "fade-up 0.55s ease-out both",
-        "pulse-soft": "pulse-soft 2.4s ease-in-out infinite",
+      transitionDuration: {
+        DEFAULT: "150ms",
       },
     },
   },
