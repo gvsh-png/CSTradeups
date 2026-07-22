@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getBulkPrices } from "@/lib/prices";
 
 export const dynamic = "force-dynamic";
+/** Steam compact warm can take ~10–45s on a cold fill */
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
