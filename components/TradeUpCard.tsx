@@ -24,6 +24,8 @@ interface TradeUpCardProps {
   showShare?: boolean;
   savedAt?: string;
   compact?: boolean;
+  /** When set, highlight this outcome and show its hit chance */
+  targetOutcomeName?: string;
 }
 
 function IconBtn({
@@ -149,6 +151,7 @@ export default function TradeUpCard({
   showShare = true,
   savedAt,
   compact = false,
+  targetOutcomeName,
 }: TradeUpCardProps) {
   const { money } = useCurrency();
   const [expanded, setExpanded] = useState(!compact);
@@ -162,6 +165,14 @@ export default function TradeUpCard({
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const fetchedRef = useRef(Boolean(tradeUp.insight));
+
+  const targetHitPct = targetOutcomeName
+    ? Math.round(
+        tradeUp.outcomes
+          .filter((o) => o.name === targetOutcomeName)
+          .reduce((s, o) => s + o.prob, 0) * 100
+      ) / 100
+    : 0;
 
   useEffect(() => {
     // Sync (and clear) when parent expires insight after a price refresh
@@ -300,6 +311,11 @@ export default function TradeUpCard({
               <RarityBadge rarity={tradeUp.inputRarity} />
               <span className="text-[var(--text-muted)] text-[10px]">→</span>
               <RarityBadge rarity={tradeUp.outputRarity} />
+              {targetOutcomeName && targetHitPct > 0 && (
+                <span className="text-[9px] font-mono font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-accent/45 bg-accent/10 text-accent">
+                  Target {targetHitPct}%
+                </span>
+              )}
             </div>
             {dateLabel && (
               <p className="text-[10px] text-[var(--text-muted)] font-mono opacity-70">
@@ -550,12 +566,20 @@ export default function TradeUpCard({
 
         {expanded && (
           <div className="px-4 pb-4 space-y-2">
-            {tradeUp.outcomes.map((outcome, i) => (
+            {tradeUp.outcomes.map((outcome, i) => {
+              const isTarget =
+                Boolean(targetOutcomeName) &&
+                outcome.name === targetOutcomeName;
+              return (
               <div
                 key={i}
-                className="flex items-center gap-2.5 p-2 rounded-md border bg-transparent min-w-0"
+                className={`flex items-center gap-2.5 p-2 rounded-md border bg-transparent min-w-0 ${
+                  isTarget ? "ring-1 ring-accent/50" : ""
+                }`}
                 style={{
-                  borderColor: outputStyle.borderColor,
+                  borderColor: isTarget
+                    ? "var(--accent)"
+                    : outputStyle.borderColor,
                 }}
               >
                 <SkinThumb
@@ -566,6 +590,9 @@ export default function TradeUpCard({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-[11px] font-medium truncate min-w-0">
+                      {isTarget && (
+                        <span className="text-accent font-mono mr-1">★</span>
+                      )}
                       {outcome.name}
                     </p>
                     <MarketLinks skinName={outcome.name} wear={outcome.wear} />
@@ -575,7 +602,13 @@ export default function TradeUpCard({
                   </p>
                 </div>
                 <div className="text-right shrink-0 font-mono w-[4.5rem]">
-                  <p className="text-[11px] tabular-nums">{outcome.prob}%</p>
+                  <p
+                    className={`text-[11px] tabular-nums ${
+                      isTarget ? "text-accent font-semibold" : ""
+                    }`}
+                  >
+                    {outcome.prob}%
+                  </p>
                   <p
                     className="text-[10px] tabular-nums"
                     style={{
@@ -590,7 +623,8 @@ export default function TradeUpCard({
                   </p>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {!insight && (
               <button

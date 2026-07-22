@@ -14,6 +14,8 @@ interface TradeUpResultsProps {
   onUnsave: (id: string) => void | Promise<void>;
   onInsight: (id: string, insight: string | undefined) => void;
   isSaved: (id: string) => boolean;
+  /** Highlight / rank label when hunting a specific outcome */
+  targetOutcomeName?: string | null;
 }
 
 export default function TradeUpResults({
@@ -23,6 +25,7 @@ export default function TradeUpResults({
   onUnsave,
   onInsight,
   isSaved,
+  targetOutcomeName,
 }: TradeUpResultsProps) {
   const progress = useSimulatedProgress(loading, "generate");
 
@@ -84,6 +87,7 @@ export default function TradeUpResults({
             onUnsave={() => onUnsave(tradeUp.id)}
             onInsight={(insight) => onInsight(tradeUp.id, insight)}
             saved={isSaved(tradeUp.id)}
+            targetOutcomeName={targetOutcomeName || undefined}
             showShare
           />
         </div>

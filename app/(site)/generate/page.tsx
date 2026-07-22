@@ -57,6 +57,7 @@ export default function GeneratePage() {
     feeType: "steam" | "csfloat";
     excludeUnstableCollections: boolean;
     customExcludedCollections: string[];
+    targetOutcomeName?: string;
   }) => {
     if (authConfigured && authRequired && !user) {
       openUpgrade("Sign in with Steam to run scans on the free plan.");
@@ -119,7 +120,9 @@ export default function GeneratePage() {
             ? "No knife/glove contracts matched. Widen the price range, loosen risk chance, or include more collections."
             : params.complexity === "souvenir"
               ? "No souvenir contracts matched. Widen the price range or loosen risk chance — souvenir inputs need real market prices."
-              : "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
+              : params.targetOutcomeName
+                ? `No contracts found that can land ${params.targetOutcomeName}. Widen price range, loosen risk chance, or pick another target.`
+                : "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
         );
       }
     } catch (err) {
@@ -211,6 +214,16 @@ export default function GeneratePage() {
                   <> · {String(meta.pricesLoaded)} prices</>
                 )}
                 {meta.priceSource != null && <> · {String(meta.priceSource)}</>}
+                {typeof meta.targetOutcomeName === "string" &&
+                  meta.targetOutcomeName && (
+                    <>
+                      {" "}
+                      · hunting{" "}
+                      <span className="text-accent">
+                        {String(meta.targetOutcomeName)}
+                      </span>
+                    </>
+                  )}
               </p>
             )}
           </div>
@@ -245,6 +258,11 @@ export default function GeneratePage() {
           onUnsave={handleUnsave}
           onInsight={handleInsight}
           isSaved={isSaved}
+          targetOutcomeName={
+            typeof meta?.targetOutcomeName === "string"
+              ? meta.targetOutcomeName
+              : null
+          }
         />
       </section>
     </div>

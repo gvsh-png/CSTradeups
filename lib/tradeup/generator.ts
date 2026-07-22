@@ -23,6 +23,7 @@ import {
   r4,
 } from "./float";
 import { riskRankScore, winChanceBucket, winChanceBandFromTarget } from "./risk";
+import { prevRarity, targetHitPct } from "./targets";
 import type {
   GenerateParams,
   PriceMap,
@@ -351,13 +352,23 @@ function bestCandidateForSkin(
  * Pick up to `limit` trade-ups with skin diversity AND win-chance variety.
  * Caps how many results share the same ~10% win bucket so the list isn't
  * fifteen copies of "40% win".
+ *
+ * When `targetOutcomeName` is set, rank primarily by chance of landing that skin.
  */
 function selectDiverseResults(
   candidates: TradeUpResult[],
   limit: number,
-  targetWinChance: number
+  targetWinChance: number,
+  targetOutcomeName?: string
 ): TradeUpResult[] {
+  const target = targetOutcomeName?.trim() || "";
+
   const sorted = [...candidates].sort((a, b) => {
+    if (target) {
+      const tb = targetHitPct(b.outcomes, target);
+      const ta = targetHitPct(a.outcomes, target);
+      if (tb !== ta) return tb - ta;
+    }
     const sb = riskRankScore(b.winPct, b.expectedProfit, targetWinChance);
     const sa = riskRankScore(a.winPct, a.expectedProfit, targetWinChance);
     return sb - sa;
@@ -368,7 +379,10 @@ function selectDiverseResults(
   const usedWeapons = new Set<string>();
   const winBucketCounts = new Map<number, number>();
   // Spread across buckets: ~2 per 10pt bin for a 15-result list
-  const maxPerWinBucket = Math.max(2, Math.ceil(limit / 6));
+  // When hunting a specific skin, allow more per bucket so top hit-chances aren't dropped
+  const maxPerWinBucket = target
+    ? Math.max(4, Math.ceil(limit / 3))
+    : Math.max(2, Math.ceil(limit / 6));
 
   const inputSkins = (t: TradeUpResult) => t.inputs.map((i) => i.name);
   const inputWeapons = (t: TradeUpResult) =>
@@ -467,15 +481,32 @@ export async function generateTradeUps(
   );
 
   // Souvenir mode: keep contracts that use at least one souvenir input
-  const filtered =
+  let filtered =
     params.complexity === "souvenir"
       ? candidates.filter((t) =>
           t.inputs.some((i) => i.name.startsWith("Souvenir "))
         )
       : candidates;
 
+  const targetName =
+    params.complexity === "standard" && params.targetOutcomeName?.trim()
+      ? params.targetOutcomeName.trim()
+      : "";
+
+  // Standard + target: only contracts that can actually land the skin
+  if (targetName) {
+    filtered = filtered.filter(
+      (t) => targetHitPct(t.outcomes, targetName) > 0
+    );
+  }
+
   const { target } = winChanceBandFromTarget(params.targetWinChance);
-  return selectDiverseResults(filtered, limit, target);
+  return selectDiverseResults(
+    filtered,
+    limit,
+    target,
+    targetName || undefined
+  );
 }
 
 function generateCovertTradeUps(
@@ -693,6 +724,23 @@ function generateTierTradeUps(
   const FILLER_CAP = 10;
   const maxUnit = params.maxPrice / Math.max(2, inputTotal / 2);
 
+  const targetName =
+    params.complexity === "standard" && params.targetOutcomeName?.trim()
+      ? params.targetOutcomeName.trim()
+      : "";
+  const targetPrev = targetName
+    ? (() => {
+        // Find target rarity from any pool that lists it
+        for (const [key, list] of Object.entries(byCR)) {
+          if (list.some((s) => s.name === targetName && !s.isSouvenir)) {
+            const rarity = key.split("|")[1];
+            return { rarity, prev: prevRarity(rarity) };
+          }
+        }
+        return null;
+      })()
+    : null;
+
   const cheapIn: Record<string, InputCandidate[]> = {};
 
   for (const [key, list] of Object.entries(byCR)) {
@@ -723,6 +771,13 @@ function generateTierTradeUps(
     const inR = RARITY_ORDER[ri];
     const nextR = RARITY_ORDER[ri + 1];
 
+    if (
+      targetPrev?.prev &&
+      (inR !== targetPrev.prev || nextR !== targetPrev.rarity)
+    ) {
+      continue;
+    }
+
     const ci: Record<string, InputCandidate[]> = {};
     for (const [key, vals] of Object.entries(cheapIn)) {
       const [cid, rarity] = key.split("|");
@@ -734,6 +789,9 @@ function generateTierTradeUps(
       // Next-tier outcomes must be normal (non-souvenir) skins
       const pOuts = pOS.filter((s) => !s.isSouvenir);
       if (!pOuts.length) continue;
+
+      // Target hunt: primary collection must be able to roll the skin
+      if (targetName && !pOuts.some((s) => s.name === targetName)) continue;
 
       for (const pInp of primaries) {
         const pN = norm(pInp.float, pInp.skin.minF, pInp.skin.maxF);
@@ -783,6 +841,7 @@ function generateTierTradeUps(
           inp: InputCandidate;
           outs: SkinData[];
           n: number;
+          hasTarget: boolean;
         }[] = [];
 
         for (const [fid, flist] of Object.entries(ci)) {
@@ -791,6 +850,9 @@ function generateTierTradeUps(
             (s) => !s.isSouvenir
           );
           if (!fOuts.length) continue;
+          const hasTarget = targetName
+            ? fOuts.some((s) => s.name === targetName)
+            : false;
           for (const f of flist) {
             if (f.skin.name === pInp.skin.name) continue;
             if (weaponOf(f.skin.name) === weaponOf(pInp.skin.name)) continue;
@@ -799,11 +861,18 @@ function generateTierTradeUps(
               inp: f,
               outs: fOuts,
               n: norm(f.float, f.skin.minF, f.skin.maxF),
+              hasTarget,
             });
           }
         }
 
-        fillers.sort((a, b) => a.inp.price - b.inp.price);
+        // Prefer fillers that also produce the target (keeps hit chance high), then cheap
+        fillers.sort((a, b) => {
+          if (targetName && a.hasTarget !== b.hasTarget) {
+            return a.hasTarget ? -1 : 1;
+          }
+          return a.inp.price - b.inp.price;
+        });
 
         const seenFillerSkins = new Set<string>();
         const diverseFillers: typeof fillers = [];
@@ -815,7 +884,13 @@ function generateTierTradeUps(
         }
 
         for (const f1 of diverseFillers) {
-          for (const sp of partitions(inputTotal, 2, 1)) {
+          // When hunting: prefer partitions that put more slots on the target collection
+          const parts = partitions(inputTotal, 2, 1);
+          const orderedParts = targetName
+            ? [...parts].sort((a, b) => b[0] - a[0])
+            : parts;
+
+          for (const sp of orderedParts) {
             const inputs: TradeUpInput[] = [
               {
                 name: pInp.skin.name,

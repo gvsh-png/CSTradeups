@@ -74,6 +74,11 @@ export interface GenerateParams {
   feeType: "steam" | "csfloat";
   excludeUnstableCollections?: boolean;
   limit?: number;
+  /**
+   * Standard mode only — exact outcome market name ("Weapon | Paint").
+   * Generator ranks contracts by chance of landing this skin first.
+   */
+  targetOutcomeName?: string;
 }
 
 export interface PriceMap {
