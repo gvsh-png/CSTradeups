@@ -14,9 +14,13 @@ export default function LoadingProgress({
   title = "Computing Outcomes",
   compact = false,
 }: Props) {
-  const { percent, label, remainingMs, elapsedMs } = progress;
-  const etaSec = Math.max(1, Math.ceil(remainingMs / 1000));
-  const rate = (3.6 + (percent / 100) * 1.4).toFixed(1);
+  const { percent, label, remainingLabel, overdue, elapsedMs } = progress;
+  const elapsedSec = Math.max(1, Math.floor(elapsedMs / 1000));
+
+  // Fake "Rate" for atmosphere — slows once overdue so it doesn't look stuck-fast
+  const rate = overdue
+    ? (1.2 + (percent / 100) * 0.8).toFixed(1)
+    : (2.8 + (percent / 100) * 2.0).toFixed(1);
 
   if (compact) {
     return (
@@ -24,7 +28,7 @@ export default function LoadingProgress({
         <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
           <span className="text-accent truncate">{label || title}</span>
           <span className="text-[var(--text-muted)] tabular-nums shrink-0">
-            {percent}% · {progress.remainingLabel}
+            {percent}% · {remainingLabel}
           </span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-highest)]">
@@ -42,7 +46,6 @@ export default function LoadingProgress({
 
   return (
     <div className="relative">
-      {/* Dimmed skeleton feed behind modal — matches Stitch loading screen */}
       <div className="absolute inset-x-0 top-0 space-y-3 opacity-35 pointer-events-none select-none blur-[0.5px]">
         {[0, 1, 2].map((i) => (
           <div
@@ -71,7 +74,6 @@ export default function LoadingProgress({
           <span className="corner-bl" aria-hidden />
           <span className="corner-br" aria-hidden />
 
-          {/* Circular progress + chip */}
           <div className="relative mx-auto h-24 w-24 mb-5">
             <svg className="h-24 w-24 -rotate-90" viewBox="0 0 80 80" aria-hidden>
               <circle
@@ -131,12 +133,16 @@ export default function LoadingProgress({
               </svg>
               Rate: ~{rate}k/s
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <span className="inline-flex items-center gap-1.5 min-w-0 text-right">
+              <svg className="w-3.5 h-3.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <circle cx="12" cy="12" r="9" />
                 <path strokeLinecap="round" d="M12 7v5l3 2" />
               </svg>
-              ETA: {etaSec}s
+              {overdue ? (
+                <span className="text-accent">Still working · {elapsedSec}s</span>
+              ) : (
+                <span>ETA: {remainingLabel.replace(/^~/, "")}</span>
+              )}
             </span>
           </div>
         </div>

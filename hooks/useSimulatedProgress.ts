@@ -9,19 +9,20 @@ export type LoadStage = {
 };
 
 const GENERATE_STAGES: LoadStage[] = [
-  { until: 18, label: "Fetching live market prices…" },
-  { until: 38, label: "Loading skin schema & collections…" },
-  { until: 62, label: "Scoring trade-up contracts…" },
-  { until: 82, label: "Filtering by win chance & price…" },
-  { until: 94, label: "Ranking best contracts…" },
-  { until: 99, label: "Almost done…" },
+  { until: 16, label: "Fetching live market prices…" },
+  { until: 34, label: "Loading skin schema & collections…" },
+  { until: 55, label: "Scoring trade-up contracts…" },
+  { until: 72, label: "Filtering by risk chance & price…" },
+  { until: 86, label: "Ranking best contracts…" },
+  { until: 94, label: "Finalizing results…" },
+  { until: 99, label: "Still working — large scan…" },
 ];
 
 const REFRESH_STAGES: LoadStage[] = [
-  { until: 30, label: "Loading cached prices…" },
-  { until: 65, label: "Updating skin prices…" },
-  { until: 90, label: "Recalculating EV & ROI…" },
-  { until: 98, label: "Finishing up…" },
+  { until: 28, label: "Loading cached prices…" },
+  { until: 58, label: "Updating skin prices…" },
+  { until: 82, label: "Recalculating EV & ROI…" },
+  { until: 96, label: "Finishing up…" },
 ];
 
 export type ProgressKind = "generate" | "refresh";
@@ -30,9 +31,9 @@ function stagesFor(kind: ProgressKind): LoadStage[] {
   return kind === "generate" ? GENERATE_STAGES : REFRESH_STAGES;
 }
 
-/** Expected wall time used for ETA (ms) */
+/** Expected wall time used for ETA (ms) — cold price cache can be slow */
 function expectedMs(kind: ProgressKind): number {
-  return kind === "generate" ? 22_000 : 4_500;
+  return kind === "generate" ? 45_000 : 6_000;
 }
 
 export type ProgressState = {
@@ -41,12 +42,20 @@ export type ProgressState = {
   elapsedMs: number;
   remainingMs: number;
   remainingLabel: string;
+  overdue: boolean;
 };
 
-function formatRemaining(ms: number, elapsedMs: number, expected: number): string {
-  if (elapsedMs > expected * 1.15) return "still working…";
-  if (ms <= 0) return "almost done…";
-  const sec = Math.ceil(ms / 1000);
+function formatRemaining(
+  remainingMs: number,
+  elapsedMs: number,
+  expected: number
+): string {
+  // Past expected window — never claim "1s left"
+  if (elapsedMs >= expected * 0.92) {
+    return "still working…";
+  }
+  if (remainingMs <= 1500) return "still working…";
+  const sec = Math.ceil(remainingMs / 1000);
   if (sec < 60) return `~${sec}s left`;
   const min = Math.floor(sec / 60);
   const rem = sec % 60;
@@ -54,8 +63,9 @@ function formatRemaining(ms: number, elapsedMs: number, expected: number): strin
 }
 
 /**
- * Simulated but steady progress while a request is in flight.
- * Advances through labeled stages and never stalls visually.
+ * Simulated progress while a request is in flight.
+ * Approaches ~90% over the expected window, then crawls slowly so we
+ * never sit on "99% · ETA 1s" while the API is still running.
  */
 export function useSimulatedProgress(
   active: boolean,
@@ -79,27 +89,32 @@ export function useSimulatedProgress(
     setElapsedMs(0);
 
     const expected = expectedMs(kind);
-    const stages = stagesFor(kind);
 
     const tick = (now: number) => {
       const elapsed = now - startRef.current;
       setElapsedMs(elapsed);
 
-      // Ease toward 99% over expected duration, never quite finish until active=false
-      const t = Math.min(1, elapsed / expected);
-      // ease-out cubic so early progress feels snappy
-      const eased = 1 - Math.pow(1 - t, 2.2);
-      let target = Math.min(99, 2 + eased * 97);
+      const t = elapsed / expected;
+      let target: number;
 
-      // Soft cap at current stage ceiling so labels sync with bar
-      const stage = stages.find((s) => target <= s.until) || stages[stages.length - 1];
-      target = Math.min(target, stage.until);
+      if (t < 1) {
+        // Ease toward 90% over expected duration — leave headroom
+        const eased = 1 - Math.pow(1 - Math.min(1, t), 1.65);
+        target = 3 + eased * 87; // → ~90%
+      } else {
+        // Overdue: crawl from 90 → 97 very slowly (never fake 99 early)
+        const overtime = elapsed - expected;
+        const crawl = Math.min(7, Math.log1p(overtime / 8000) * 3.2);
+        target = 90 + crawl;
+      }
+
+      target = Math.min(97, target);
 
       setPercent((prev) => {
-        // Always move forward a little so the bar never freezes
         const next = Math.max(prev, target);
-        const nudge = prev < 98 ? Math.min(98, prev + 0.08) : prev;
-        return Math.max(next, nudge);
+        // Tiny forward nudge so the bar never freezes before 90%
+        if (prev < 88) return Math.min(88, Math.max(next, prev + 0.04));
+        return next;
       });
 
       rafRef.current = requestAnimationFrame(tick);
@@ -118,6 +133,7 @@ export function useSimulatedProgress(
 
   const expected = expectedMs(kind);
   const remainingMs = Math.max(0, expected - elapsedMs);
+  const overdue = elapsedMs >= expected * 0.92;
 
   return {
     percent: Math.round(percent),
@@ -127,5 +143,6 @@ export function useSimulatedProgress(
     remainingLabel: active
       ? formatRemaining(remainingMs, elapsedMs, expected)
       : "",
+    overdue,
   };
 }

@@ -51,7 +51,25 @@ export default function GeneratePage() {
         body: JSON.stringify(params),
       });
 
-      const data = await res.json();
+      const raw = await res.text();
+      let data: {
+        results?: TradeUpResult[];
+        meta?: Record<string, unknown>;
+        error?: string;
+        code?: string;
+      } = {};
+      try {
+        data = raw ? (JSON.parse(raw) as typeof data) : {};
+      } catch {
+        throw new Error(
+          res.ok
+            ? "Scanner returned an invalid response. Try again."
+            : res.status === 504 || res.status === 502
+              ? "Scan timed out — try a narrower price range or retry in a moment."
+              : `Scan failed (${res.status}). Try again.`
+        );
+      }
+
       if (!res.ok) {
         if (data.code === "AUTH_REQUIRED" || data.code === "SCAN_LIMIT") {
           openUpgrade(data.error);
@@ -68,7 +86,6 @@ export default function GeneratePage() {
           "No contracts matched. Try adjusting risk chance, widening price range, or changing collection filters."
         );
       } else {
-        // Scroll to results on mobile after scan
         requestAnimationFrame(() => {
           document
             .getElementById("results-feed")
@@ -76,7 +93,13 @@ export default function GeneratePage() {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      // Never surface raw JSON.parse noise
+      setError(
+        msg.includes("JSON.parse") || msg.includes("Unexpected token")
+          ? "Scan failed — server returned an invalid response. Try again."
+          : msg
+      );
     } finally {
       setLoading(false);
     }
