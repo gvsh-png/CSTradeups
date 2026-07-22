@@ -104,19 +104,17 @@ function SkinThumb({
     <img
       src={src}
       alt={alt}
-      className="w-10 h-10 shrink-0 object-contain rounded border"
+      className="w-10 h-10 shrink-0 object-contain rounded border-2 bg-[var(--bg-deep)]"
       style={{
         borderColor: souvenir ? SOUVENIR_BORDER : style.borderColor,
-        backgroundColor: style.backgroundColor,
         boxShadow: souvenir ? `0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
       }}
     />
   ) : (
     <div
-      className="w-10 h-10 shrink-0 rounded border"
+      className="w-10 h-10 shrink-0 rounded border-2 bg-[var(--bg-deep)]"
       style={{
         borderColor: souvenir ? SOUVENIR_BORDER : style.borderColor,
-        backgroundColor: style.backgroundColor,
         boxShadow: souvenir ? `0 0 0 1px ${SOUVENIR_BORDER}` : undefined,
       }}
     />
@@ -124,7 +122,7 @@ function SkinThumb({
 }
 
 function RarityBadge({ rarity }: { rarity: string }) {
-  const style = rarityStyle(rarity);
+  const style = rarityStyle(rarity, { fill: true });
   return (
     <span
       className="text-[9px] font-mono font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border"
@@ -473,10 +471,9 @@ export default function TradeUpCard({
             return (
             <div
               key={i}
-              className="flex items-center gap-2.5 rounded-md border p-2 min-w-0"
+              className="flex items-center gap-2.5 rounded-md border bg-transparent p-2 min-w-0"
               style={{
                 borderColor: souvenir ? SOUVENIR_BORDER : inputStyle.borderColor,
-                backgroundColor: inputStyle.backgroundColor,
                 boxShadow: souvenir
                   ? `inset 0 0 0 1px ${SOUVENIR_BORDER}`
                   : undefined,
@@ -522,7 +519,7 @@ export default function TradeUpCard({
             value={money(tradeUp.expectedProfit, { signed: true })}
             color={profitColor}
           />
-          <Stat label="ROI" value={`${tradeUp.roi}%`} color="var(--accent)" />
+          <Stat label="ROI" value={`${tradeUp.roi}%`} color="var(--secondary)" />
           <Stat label="Cost" value={money(tradeUp.totalCost)} />
         </div>
       </div>
@@ -547,10 +544,9 @@ export default function TradeUpCard({
             {tradeUp.outcomes.map((outcome, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 p-2 rounded-md border min-w-0"
+                className="flex items-center gap-2.5 p-2 rounded-md border bg-transparent min-w-0"
                 style={{
                   borderColor: outputStyle.borderColor,
-                  backgroundColor: outputStyle.backgroundColor,
                 }}
               >
                 <SkinThumb
@@ -592,7 +588,7 @@ export default function TradeUpCard({
                 type="button"
                 onClick={() => fetchInsight(false)}
                 disabled={insightLoading}
-                className="w-full mt-1 py-2.5 text-[11px] font-mono uppercase tracking-wider text-accent hover:bg-accent/10 transition-colors duration-150 disabled:opacity-40 border border-accent/40 rounded"
+                className="w-full mt-1 py-2.5 text-[11px] font-mono uppercase tracking-wider text-secondary hover:bg-secondary/10 transition-colors duration-150 disabled:opacity-40 border border-secondary/50 rounded"
               >
                 {insightLoading ? "Loading…" : "Get AI analysis"}
               </button>
