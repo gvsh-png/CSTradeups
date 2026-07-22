@@ -62,7 +62,6 @@ export default function SettingsPanel({
         aria-label="Close settings"
       />
       <div className="relative w-full sm:max-w-lg max-h-[85dvh] overflow-hidden panel panel-desktop rounded-t-xl sm:rounded-xl flex flex-col">
-        <div className="absolute top-0 inset-x-0 h-0.5 bg-accent z-10" />
         <div className="flex items-center justify-between gap-3 px-4 h-12 border-b border-[var(--border-subtle)] shrink-0">
           <div>
             <h2 className="text-sm font-semibold">Settings</h2>

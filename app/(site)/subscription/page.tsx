@@ -74,7 +74,6 @@ export default function SubscriptionPage() {
 
       {/* Current plan */}
       <section className="panel panel-desktop p-5 relative overflow-hidden">
-        <div className="absolute top-0 inset-x-0 h-0.5 bg-accent" />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="label mb-1">Current plan</p>
@@ -214,9 +213,6 @@ function PlanCard({
         highlight ? "border-accent/35" : ""
       } ${active ? "ring-1 ring-accent/50" : ""}`}
     >
-      {highlight && (
-        <div className="absolute top-0 inset-x-0 h-0.5 bg-accent" />
-      )}
       <div className="flex items-center justify-between gap-2">
         <h2
           className={`text-base font-semibold ${highlight ? "text-accent" : ""}`}
