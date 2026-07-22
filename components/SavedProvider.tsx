@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -44,6 +45,14 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   const [saved, setSaved] = useState<SavedTradeUp[]>([]);
   const [settings, setSettingsState] = useState<AppSettings>(loadSettings);
   const [hydrated, setHydrated] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2200);
+  }, []);
 
   const persistSaved = useCallback((items: SavedTradeUp[]) => {
     setSaved(items);
@@ -74,6 +83,12 @@ export function SavedProvider({ children }: { children: ReactNode }) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, authConfigured, user?.steamId]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   const setSettings = useCallback((s: AppSettings) => {
     setSettingsState(s);
@@ -123,11 +138,13 @@ export function SavedProvider({ children }: { children: ReactNode }) {
 
   const removeSaved = useCallback(
     async (id: string) => {
+      if (!saved.some((s) => s.id === id)) return;
       const next = saved.filter((s) => s.id !== id);
       persistSaved(next);
+      showToast("Removed from saved");
       if (authConfigured && user) await releaseSave();
     },
-    [saved, persistSaved, authConfigured, user, releaseSave]
+    [saved, persistSaved, authConfigured, user, releaseSave, showToast]
   );
 
   const updateSaved = useCallback(
@@ -177,7 +194,20 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <SavedContext.Provider value={value}>{children}</SavedContext.Provider>
+    <SavedContext.Provider value={value}>
+      {children}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed bottom-20 left-1/2 z-[80] -translate-x-1/2 md:bottom-8"
+        >
+          <div className="animate-toast-in rounded-md border border-[var(--border)] bg-[var(--surface-raised)] px-3.5 py-2 text-[11px] font-mono text-[var(--text)] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)]">
+            {toast}
+          </div>
+        </div>
+      )}
+    </SavedContext.Provider>
   );
 }
 

@@ -297,3 +297,79 @@ input[type="range"]::-moz-range-thumb {
 .animate-fade-up {
   animation: fade-up 0.35s ease-out both;
 }
+
+@keyframes saved-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    max-height: 1200px;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+    max-height: 0;
+  }
+}
+.animate-saved-exit {
+  animation: saved-exit 0.28s ease-in forwards;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@keyframes bookmark-unsave {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.82);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-bookmark-unsave {
+  animation: bookmark-unsave 0.35s ease-out;
+}
+
+@keyframes bookmark-save {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-bookmark-save {
+  animation: bookmark-save 0.35s ease-out;
+}
+
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-feedback-in {
+  animation: feedback-in 0.2s ease-out both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-toast-in {
+  animation: toast-in 0.25s ease-out both;
+}

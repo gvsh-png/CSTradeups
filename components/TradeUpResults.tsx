@@ -8,7 +8,10 @@ import TradeUpCard from "./TradeUpCard";
 interface TradeUpResultsProps {
   results: TradeUpResult[];
   loading: boolean;
-  onSave: (tradeUp: TradeUpResult) => void | Promise<void>;
+  onSave: (
+    tradeUp: TradeUpResult
+  ) => boolean | void | Promise<boolean | void>;
+  onUnsave: (id: string) => void | Promise<void>;
   onInsight: (id: string, insight: string | undefined) => void;
   isSaved: (id: string) => boolean;
 }
@@ -17,6 +20,7 @@ export default function TradeUpResults({
   results,
   loading,
   onSave,
+  onUnsave,
   onInsight,
   isSaved,
 }: TradeUpResultsProps) {
@@ -77,6 +81,7 @@ export default function TradeUpResults({
           <TradeUpCard
             tradeUp={tradeUp}
             onSave={onSave}
+            onUnsave={() => onUnsave(tradeUp.id)}
             onInsight={(insight) => onInsight(tradeUp.id, insight)}
             saved={isSaved(tradeUp.id)}
             showShare

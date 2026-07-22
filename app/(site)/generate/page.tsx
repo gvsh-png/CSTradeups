@@ -18,7 +18,7 @@ function scrollToId(id: string, block: ScrollLogicalPosition = "start") {
 export default function GeneratePage() {
   const { authConfigured, authRequired, user, refresh } = useAuth();
   const { openUpgrade, openSettings, settings } = useAppFrame();
-  const { saveTradeUp, isSaved, updateInsight, saved } = useSaved();
+  const { saveTradeUp, removeSaved, isSaved, updateInsight, saved } = useSaved();
 
   const [results, setResults] = useState<TradeUpResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -145,7 +145,11 @@ export default function GeneratePage() {
   };
 
   const handleSave = async (tradeUp: TradeUpResult) => {
-    await saveTradeUp(tradeUp, openUpgrade);
+    return saveTradeUp(tradeUp, openUpgrade);
+  };
+
+  const handleUnsave = async (id: string) => {
+    await removeSaved(id);
   };
 
   const handleInsight = (id: string, insight: string | undefined) => {
@@ -238,6 +242,7 @@ export default function GeneratePage() {
           results={results}
           loading={loading}
           onSave={handleSave}
+          onUnsave={handleUnsave}
           onInsight={handleInsight}
           isSaved={isSaved}
         />
