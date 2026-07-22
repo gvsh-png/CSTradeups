@@ -201,7 +201,7 @@ export default function GeneratorForm({
       onSubmit={handleSubmit}
       className={`panel panel-desktop panel-glow relative overflow-hidden ${
         hero
-          ? "scanner-hero flex flex-col p-3.5 sm:p-4 md:p-4 lg:p-5 md:min-h-full md:flex-1"
+          ? "scanner-hero flex flex-col p-3.5 sm:p-4 md:p-3 md:max-w-3xl md:mx-auto"
           : "p-4 lg:p-5"
       } ${hero ? "" : "lg:sticky lg:top-16"}`}
     >
@@ -210,14 +210,14 @@ export default function GeneratorForm({
       <div
         className={`flex items-start justify-between gap-3 ${
           hero
-            ? "mb-3 md:mb-3.5 text-center sm:text-left flex-col sm:flex-row sm:items-end"
+            ? "mb-3 md:mb-2 text-center sm:text-left flex-col sm:flex-row sm:items-end"
             : "mb-5"
         }`}
       >
         <div className={`min-w-0 ${hero ? "w-full sm:flex-1" : ""}`}>
           {hero ? (
             <>
-              <h1 className="text-xl sm:text-2xl lg:text-[1.75rem] font-bold tracking-tight text-[var(--text)]">
+              <h1 className="text-xl sm:text-2xl md:text-lg lg:text-xl font-bold tracking-tight text-[var(--text)]">
                 Configure Scanner
               </h1>
               <p className="scanner-hero-sub text-xs sm:text-sm text-[var(--text-muted)] mt-1">
@@ -253,28 +253,28 @@ export default function GeneratorForm({
         </button>
       </div>
 
-      {/* Hero: 2-col then sell+exclude row; button pinned to bottom on md+ */}
+      {/* Hero: 2-col then sell+exclude row */}
       <div
         className={
           hero
-            ? "flex flex-col flex-1 min-h-0 gap-3 md:gap-3.5"
+            ? "flex flex-col gap-3 md:gap-2"
             : "contents"
         }
       >
       <div
         className={
           hero
-            ? "grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 flex-1 min-h-0"
+            ? "grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-2.5"
             : "space-y-5"
         }
       >
-        <div className={hero ? "space-y-3" : "space-y-4"}>
-          <div className="space-y-2">
+        <div className={hero ? "space-y-3 md:space-y-2" : "space-y-4"}>
+          <div className="space-y-2 md:space-y-1.5">
             <span className="label flex items-center gap-1.5">
               Financial targets
             </span>
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1.5">
+              <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 md:p-2 space-y-1.5 md:space-y-1">
                 <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
                   Min price
                 </label>
@@ -286,7 +286,7 @@ export default function GeneratorForm({
                   max={MAX_PRICE_DISPLAY}
                 />
               </div>
-              <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1.5">
+              <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 md:p-2 space-y-1.5 md:space-y-1">
                 <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
                   Max price
                 </label>
@@ -301,10 +301,10 @@ export default function GeneratorForm({
             </div>
           </div>
 
-          <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2.5 sm:p-3 space-y-1.5 sm:space-y-2">
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2.5 sm:p-3 md:p-2 space-y-1.5 md:space-y-1">
             <div className="flex justify-between items-end gap-2">
               <span className="label mb-0">Risk chance</span>
-              <span className="text-base sm:text-lg font-mono text-accent tabular-nums leading-none">
+              <span className="text-base sm:text-lg md:text-base font-mono text-accent tabular-nums leading-none">
                 {targetWinChance}%
               </span>
             </div>
@@ -325,14 +325,14 @@ export default function GeneratorForm({
           </div>
         </div>
 
-        <div className={hero ? "space-y-3" : "space-y-4"}>
-          <fieldset className="space-y-1.5 sm:space-y-2">
-            <legend className="label mb-1">Contract type</legend>
+        <div className={hero ? "space-y-3 md:space-y-2" : "space-y-4"}>
+          <fieldset className="space-y-1.5 sm:space-y-2 md:space-y-1">
+            <legend className="label mb-1 md:mb-0.5">Contract type</legend>
             {COMPLEXITY_OPTIONS.map((opt) => (
               <label
                 key={opt.value}
                 className={`flex items-start gap-2.5 rounded border cursor-pointer transition-colors duration-150 ${
-                  hero ? "p-1.5 sm:p-2" : "p-2.5"
+                  hero ? "p-1.5 sm:p-2 md:p-1.5" : "p-2.5"
                 } ${
                   complexity === opt.value
                     ? "border-accent/45 bg-accent/5"
@@ -348,9 +348,9 @@ export default function GeneratorForm({
                   className="mt-0.5 shrink-0 accent-[var(--accent)]"
                 />
                 <div className="min-w-0">
-                  <span className="text-sm font-medium">{opt.label}</span>
+                  <span className="text-sm md:text-[13px] font-medium">{opt.label}</span>
                   <p
-                    className={`text-[11px] text-[var(--text-muted)] leading-snug mt-0.5 ${
+                    className={`text-[11px] md:text-[10px] text-[var(--text-muted)] leading-snug mt-0.5 ${
                       hero ? "line-clamp-1" : ""
                     }`}
                   >
@@ -362,10 +362,13 @@ export default function GeneratorForm({
           </fieldset>
 
           {complexity === "standard" && (
-            <div ref={targetBoxRef} className="relative space-y-1.5">
+            <div ref={targetBoxRef} className="relative space-y-1.5 md:space-y-1">
               <div className="flex items-end justify-between gap-2">
                 <span className="label mb-0">Target outcome</span>
-                <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                <span className="text-[10px] font-mono text-[var(--text-muted)] hidden md:inline">
+                  optional
+                </span>
+                <span className="text-[10px] font-mono text-[var(--text-muted)] md:hidden">
                   optional · max hit chance
                 </span>
               </div>
@@ -469,7 +472,7 @@ export default function GeneratorForm({
                   )}
                 </div>
               )}
-              <p className="text-[10px] text-[var(--text-muted)] leading-snug">
+              <p className="scanner-target-hint text-[10px] text-[var(--text-muted)] leading-snug">
                 Ranks Standard contracts by chance of landing this skin.
               </p>
             </div>
@@ -549,16 +552,16 @@ export default function GeneratorForm({
       </div>
 
       {hero && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-2">
           <fieldset>
-            <legend className="label mb-1.5">Sell on</legend>
+            <legend className="label mb-1.5 md:mb-1">Sell on</legend>
             <div className="grid grid-cols-2 gap-2">
               {(["csfloat", "steam"] as const).map((fee) => (
                 <button
                   key={fee}
                   type="button"
                   onClick={() => setFeeType(fee)}
-                  className={`h-8 rounded text-xs font-medium border transition-colors duration-150 ${
+                  className={`h-8 md:h-7 rounded text-xs font-medium border transition-colors duration-150 ${
                     feeType === fee
                       ? "border-accent/50 bg-accent/10 text-accent"
                       : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
@@ -570,7 +573,7 @@ export default function GeneratorForm({
             </div>
           </fieldset>
 
-          <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 space-y-1">
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-deep)] p-2 sm:p-2.5 md:p-2 space-y-1">
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -579,7 +582,7 @@ export default function GeneratorForm({
                 className="mt-0.5 shrink-0 accent-[var(--accent)]"
               />
               <div className="min-w-0 flex-1">
-                <span className="text-sm font-medium leading-tight">
+                <span className="text-sm md:text-[13px] font-medium leading-tight">
                   Exclude new collections
                 </span>
                 <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">
@@ -627,7 +630,7 @@ export default function GeneratorForm({
 
       <div
         className={`border-t border-[var(--border)] ${
-          hero ? "mt-auto pt-3 md:pt-3.5" : "pt-5 mt-5"
+          hero ? "pt-3 md:pt-2.5" : "pt-5 mt-5"
         }`}
       >
         <button
@@ -635,7 +638,7 @@ export default function GeneratorForm({
           disabled={loading}
           className={`tracking-wide ${
             hero
-              ? "btn-secondary h-11 text-[13px] sm:text-[14px]"
+              ? "btn-secondary h-11 md:h-10 text-[13px] sm:text-[14px]"
               : "btn-primary h-12 text-[14px]"
           }`}
           aria-busy={loading}
