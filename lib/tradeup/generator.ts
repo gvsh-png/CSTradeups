@@ -869,6 +869,20 @@ function generateTierTradeUps(
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
+const WEAR_RANK: Record<string, number> = {
+  "Factory New": 0,
+  "Minimal Wear": 1,
+  "Field-Tested": 2,
+  "Well-Worn": 3,
+  "Battle-Scarred": 4,
+};
+
+function wearFromPriceKey(key: string): string | null {
+  const open = key.lastIndexOf(" (");
+  if (open < 0 || !key.endsWith(")")) return null;
+  return key.slice(open + 2, -1);
+}
+
 export function sanitizePrices(
   prices: PriceMap,
   _skinDB: SkinData[]
@@ -902,6 +916,47 @@ export function sanitizePrices(
       // 3.5× catches Blind Spot (~8×) while keeping mild wear ladders
       if (p > mid * 3.5 && p > mid + 5) {
         delete out[key];
+      }
+    }
+
+    // FN ceiling — FT/WW/BS above Factory New is almost always a bad quote
+    // (Glock AXIA BS ~$105 matching FN while real BS is ~$25–40).
+    // Mild MW > FN is allowed (up to 1.2×). First Class BS-premium ladders
+    // without FN are handled below with a looser better-wear cap.
+    const priced = keys
+      .map((key) => {
+        const wear = wearFromPriceKey(key);
+        const p = out[key];
+        return wear && p > 0 ? { key, wear, p } : null;
+      })
+      .filter((x): x is { key: string; wear: string; p: number } => Boolean(x));
+
+    const fn = priced.find((x) => x.wear === "Factory New")?.p || 0;
+
+    for (const row of priced) {
+      if (!(out[row.key] > 0)) continue;
+      if (fn > 0) {
+        if (row.wear === "Factory New") continue;
+        if (row.wear === "Minimal Wear") {
+          if (row.p > fn * 1.2) delete out[row.key];
+        } else if (row.p > fn) {
+          delete out[row.key];
+        }
+        continue;
+      }
+
+      // No FN: drop WW/BS that dominate every better wear (AXIA without FN)
+      // but keep First Class-style BS premium over FT (70 vs 32).
+      if (row.wear !== "Well-Worn" && row.wear !== "Battle-Scarred") continue;
+      const rank = WEAR_RANK[row.wear];
+      if (rank == null) continue;
+      const better = priced
+        .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
+        .map((x) => out[x.key]);
+      if (!better.length) continue;
+      const betterMax = Math.max(...better);
+      if (row.p > betterMax * 2.2 && row.p > betterMax + 10) {
+        delete out[row.key];
       }
     }
   }

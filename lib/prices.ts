@@ -176,9 +176,11 @@ export function resolveSkinportPrice(item: SkinportItem): number {
   const med = item.median_price && item.median_price > 0 ? item.median_price : 0;
   const mean = item.mean_price && item.mean_price > 0 ? item.mean_price : 0;
 
-  // Median/mean dragged up by outlier sales → trust the live book
-  if (min > 0 && med > min * 3) return r2(min);
-  if (min > 0 && mean > min * 3) return r2(min);
+  // Median/mean dragged up by outlier sales → trust the live book.
+  // 2× catches AXIA-style spikes (~$105 med vs ~$35–40 live BS min)
+  // that the old 3× threshold left in place.
+  if (min > 0 && med > min * 2) return r2(min);
+  if (min > 0 && mean > min * 2) return r2(min);
 
   if (med > 0) return r2(med);
   if (mean > 0) return r2(mean);
@@ -604,7 +606,7 @@ async function fetchFreshBulkPrices(): Promise<BulkPriceResult> {
  */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v12"],
+  ["tradeup-bulk-prices-v13"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
