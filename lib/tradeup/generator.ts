@@ -11,7 +11,6 @@ import {
   f32,
   floatForWear,
   getMaxInputFloat,
-  getWear,
   getWearForSkin,
   INPUT_WEAR_MIN_SPAN,
   marketHashName,
