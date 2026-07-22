@@ -110,6 +110,22 @@ function calcWinLoss(
   };
 }
 
+/** EV / profit / ROI from the same display percents shown on outcome rows */
+function metricsFromDisplayOutcomes(
+  outcomes: { prob: number; price: number }[],
+  totalCost: number,
+  fee: number
+): { expectedValue: number; expectedProfit: number; roi: number } {
+  const ev = outcomes.reduce(
+    (s, o) => s + (o.prob / 100) * o.price * (1 - fee),
+    0
+  );
+  const expectedProfit = r2(ev - totalCost);
+  const roi =
+    totalCost > 0 ? r2((expectedProfit / totalCost) * 100) : 0;
+  return { expectedValue: r2(ev), expectedProfit, roi };
+}
+
 function applyComplexity(
   inputs: TradeUpInput[],
   _complexity: Complexity,
@@ -233,12 +249,6 @@ function toTradeUpResult(
   }
 
   const totalCost = r2(inputs.reduce((s, i) => s + i.price * i.count, 0));
-  const ev = outcomes.reduce(
-    (s, o) => s + o.prob * o.price * (1 - fee),
-    0
-  );
-  const profit = r2(ev - totalCost);
-  const roi = totalCost > 0 ? r2((profit / totalCost) * 100) : 0;
 
   // Target hunt: mid-tier skins (e.g. Rat Rod ~$4) need contract costs below
   // the user's min budget floor — don't reject those. Still respect maxPrice.
@@ -290,6 +300,12 @@ function toTradeUpResult(
       ? 100
       : clampWinPct(displayWin);
 
+  const { expectedValue, expectedProfit, roi } = metricsFromDisplayOutcomes(
+    tradeOutcomes,
+    totalCost,
+    fee
+  );
+
   const desc = finalInputs
     .map((i) => `${i.count}x ${i.name} (${i.wear})`)
     .join(" + ");
@@ -303,8 +319,8 @@ function toTradeUpResult(
     })),
     outcomes: tradeOutcomes,
     totalCost,
-    expectedValue: r2(ev),
-    expectedProfit: profit,
+    expectedValue,
+    expectedProfit,
     roi,
     winPct: displayWinPct,
     avgWin,
@@ -1121,13 +1137,11 @@ export function repriceTradeUp(
     })
     .sort((a, b) => b.price - a.price);
 
-  const ev = outcomes.reduce((s, o) => {
-    const prob = o.prob / 100;
-    return s + prob * o.price * (1 - fee);
-  }, 0);
-
-  const expectedProfit = r2(ev - totalCost);
-  const roi = totalCost > 0 ? r2((expectedProfit / totalCost) * 100) : 0;
+  const { expectedValue, expectedProfit, roi } = metricsFromDisplayOutcomes(
+    outcomes,
+    totalCost,
+    fee
+  );
 
   let winPct = 0;
   let allWin = outcomes.length > 0;
@@ -1142,7 +1156,7 @@ export function repriceTradeUp(
     inputs,
     outcomes,
     totalCost,
-    expectedValue: r2(ev),
+    expectedValue,
     expectedProfit,
     roi,
     winPct,
