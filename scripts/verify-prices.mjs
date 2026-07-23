@@ -266,6 +266,41 @@ assert(
   2.16
 );
 
+/** Cheap liquid: bias toward fresher print near safe (Starting at proxy) */
+function resolveCheapSteamPrice(safe, latest, median = 0) {
+  const s = safe > 0 ? safe : 0;
+  const fresher = [latest, median].filter((p) => p > 0);
+  if (!(s > 0)) {
+    const p = fresher[0] || 0;
+    return p > 0 ? r2(p) : 0;
+  }
+  if (s > 4) return r2(s);
+  const near = fresher.filter((p) => p >= s * 0.7 && p <= s * 1.3);
+  if (!near.length) return r2(s);
+  return r2(Math.min(s, ...near));
+}
+
+assert(
+  "Anodized-style cheap: latest near safe → prefer lower",
+  resolveCheapSteamPrice(2.59, 2.24, 2.2),
+  2.2
+);
+assert(
+  "cheap but latest dumped → keep safe",
+  resolveCheapSteamPrice(2.59, 0.4, 0),
+  2.59
+);
+assert(
+  "cheap but latest spiked → keep safe",
+  resolveCheapSteamPrice(2.59, 8, 0),
+  2.59
+);
+assert(
+  "expensive skin stays on safe",
+  resolveCheapSteamPrice(376.4, 350, 360),
+  376.4
+);
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);

@@ -306,11 +306,18 @@ function isAbortError(err: unknown): boolean {
  * Market "Starting at" listing. Using `min` made prices wildly wrong.
  * `safe` is SteamApis' outlier-filtered market price (what TradeUpSpy-style
  * tools use) — stable Steam market price, not a single listing.
+ *
+ * For cheap liquid skins (≤ $4), we bias toward `latest`/`median` when they
+ * sit near `safe` — that tracks Steam "Starting at" much more closely
+ * without resurrecting historical-min dumps on thin books.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
-/** Chunked gzip Steam `safe` book — bump when shape / metric changes */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v21";
+/** Chunked Steam book — bump when shape / metric / blend rules change */
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v22";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
+
+/** USD ceiling for Starting-at bias on cheap liquid skins */
+export const CHEAP_STEAM_USD = 4;
 
 /** Compact Redis payload — full catalog JSON exceeds Upstash REST limits */
 type RedisSteamBook = {
@@ -399,6 +406,33 @@ async function fetchSteamApisCompact(
   return Object.keys(out).length >= 50 ? out : null;
 }
 
+/**
+ * Cheap liquid skins: bias toward fresher SteamApis prints (closer to
+ * Steam Market "Starting at"). Only when latest/median sit near `safe`
+ * — that agreement is our stand-in for "lots listed / liquid book".
+ * Never uses historical `min`.
+ */
+export function resolveCheapSteamPrice(
+  safe: number,
+  latest: number,
+  median = 0
+): { price: number; biased: boolean } {
+  const s = safe > 0 ? safe : 0;
+  const fresher = [latest, median].filter((p) => p > 0);
+  if (!(s > 0)) {
+    const p = fresher[0] || 0;
+    return { price: p > 0 ? r2(p) : 0, biased: false };
+  }
+  if (s > CHEAP_STEAM_USD) return { price: r2(s), biased: false };
+
+  const near = fresher.filter((p) => p >= s * 0.7 && p <= s * 1.3);
+  if (!near.length) return { price: r2(s), biased: false };
+
+  // Lower near-print ≈ Starting at on liquid cheap books
+  const picked = Math.min(s, ...near);
+  return { price: r2(picked), biased: picked !== s };
+}
+
 async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
   const apiKey = process.env.STEAMAPIS_API_KEY;
   if (!apiKey) {
@@ -409,8 +443,12 @@ async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
   }
 
   try {
-    // `safe` = outlier-filtered Steam market price (NOT historical min sale)
-    const safeMap = await fetchSteamApisCompact("safe");
+    // Parallel compact pulls — same wall clock as one call, +1 quota/day
+    const [safeMap, latestMap, medianMap] = await Promise.all([
+      fetchSteamApisCompact("safe"),
+      fetchSteamApisCompact("latest"),
+      fetchSteamApisCompact("median"),
+    ]);
 
     if (!safeMap) {
       return {
@@ -423,18 +461,36 @@ async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
 
     const prices: PriceMap = {};
     const sold: Record<string, { sold7: number; sold30: number }> = {};
+    let corrections = 0;
 
-    for (const [name, price] of Object.entries(safeMap)) {
+    for (const [name, safe] of Object.entries(safeMap)) {
       if (!keepSteamPriceKey(name)) continue;
+      const { price, biased } = resolveCheapSteamPrice(
+        safe,
+        latestMap?.[name] || 0,
+        medianMap?.[name] || 0
+      );
+      if (!(price > 0)) continue;
       prices[name] = price;
       sold[name] = { sold7: 1, sold30: 1 };
+      if (biased) corrections++;
+    }
+
+    // latest-only fills for keys safe missed (still filter trade-up names)
+    if (latestMap) {
+      for (const [name, latest] of Object.entries(latestMap)) {
+        if (prices[name] || !keepSteamPriceKey(name) || !(latest > 0)) continue;
+        if (latest > CHEAP_STEAM_USD) continue;
+        prices[name] = latest;
+        sold[name] = { sold7: 1, sold30: 1 };
+      }
     }
 
     if (Object.keys(prices).length < 50) {
       return { prices: null, sold: null, corrections: 0, status: "error" };
     }
 
-    return { prices, sold, corrections: 0, status: "ok" };
+    return { prices, sold, corrections, status: "ok" };
   } catch (err) {
     return {
       prices: null,
@@ -856,7 +912,7 @@ async function fetchFreshBulkPrices(opts?: {
 /** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v21"],
+  ["tradeup-bulk-prices-v22"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -882,7 +938,7 @@ const getCachedSteamPrices = unstable_cache(
     }
     return steam;
   },
-  ["tradeup-bulk-prices-steam-v21"],
+  ["tradeup-bulk-prices-steam-v22"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
