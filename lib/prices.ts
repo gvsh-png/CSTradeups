@@ -308,9 +308,12 @@ function isAbortError(err: unknown): boolean {
  * tools use) — stable Steam market price, not a single listing.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
-/** Chunked gzip Steam `safe` book — bump when shape / metric changes */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v21";
+/** Chunked Steam `safe` book — bump when shape / metric changes */
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v22";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
+/** Chunks outlive meta slightly so readers never see meta pointing at expired parts */
+const REDIS_STEAM_CHUNK_TTL = PRICE_CACHE_TTL;
+const REDIS_STEAM_META_TTL = Math.max(60, PRICE_CACHE_TTL - 120);
 
 /** Compact Redis payload — full catalog JSON exceeds Upstash REST limits */
 type RedisSteamBook = {
@@ -323,6 +326,14 @@ type RedisSteamMeta = {
   fetchedAt: string;
   steamApisCount: number;
   chunks: string[];
+  /** Positive-price rows written with this generation — used to reject partial loads */
+  priceCount: number;
+};
+
+/** Per-chunk payload — fetchedAt ties the part to one write generation */
+type RedisSteamChunk = {
+  fetchedAt: string;
+  prices: PriceMap;
 };
 
 /** Keep trade-up-relevant rows only (drop stickers/graffiti/etc. that bloat Redis) */
@@ -343,6 +354,38 @@ function steamChunkId(name: string): string {
   if (ch >= "A" && ch <= "Z") return ch;
   if (ch >= "0" && ch <= "9") return "0";
   return "_";
+}
+
+/**
+ * Assemble a Steam book from Redis chunk payloads.
+ * Rejects missing chunks, mixed generations, and count mismatches so scans
+ * never treat a partial alphabet as a full Steam price book.
+ */
+export function assembleChunkedSteamBook(
+  meta: RedisSteamMeta,
+  chunkById: Record<string, unknown>
+): RedisSteamBook | null {
+  if (!meta?.chunks?.length || !meta.fetchedAt) return null;
+  if (!(meta.priceCount >= 50)) return null;
+
+  const prices: PriceMap = {};
+  for (const id of meta.chunks) {
+    const part = chunkById[id];
+    if (!part || typeof part !== "object") return null;
+    const chunk = part as Partial<RedisSteamChunk>;
+    if (chunk.fetchedAt !== meta.fetchedAt) return null;
+    if (!chunk.prices || typeof chunk.prices !== "object") return null;
+    Object.assign(prices, chunk.prices);
+  }
+
+  const count = Object.values(prices).filter((p) => p > 0).length;
+  if (count < 50 || count !== meta.priceCount) return null;
+
+  return {
+    prices,
+    fetchedAt: meta.fetchedAt,
+    steamApisCount: meta.steamApisCount || count,
+  };
 }
 
 function bulkFromRedisSteam(book: RedisSteamBook): BulkPriceResult {
@@ -457,25 +500,18 @@ async function loadSteamPricesFromRedis(): Promise<BulkPriceResult | null> {
     const { Redis } = await import("@upstash/redis");
     const redis = Redis.fromEnv();
 
-    // Preferred: chunked maps under meta.chunks
+    // Preferred: chunked maps under meta.chunks (all-or-nothing)
     const meta = await redis.get<RedisSteamMeta>(REDIS_STEAM_META_KEY);
     if (meta?.chunks?.length && meta.fetchedAt) {
-      const prices: PriceMap = {};
+      const chunkById: Record<string, unknown> = {};
       for (const id of meta.chunks) {
-        const part = await redis.get<PriceMap>(
+        chunkById[id] = await redis.get(
           `${REDIS_STEAM_PRICES_KEY}:c:${id}`
         );
-        if (!part || typeof part !== "object") continue;
-        Object.assign(prices, part);
       }
-      if (Object.keys(prices).filter((k) => prices[k] > 0).length < 50) {
-        return null;
-      }
-      return bulkFromRedisSteam({
-        prices,
-        fetchedAt: meta.fetchedAt,
-        steamApisCount: meta.steamApisCount || Object.keys(prices).length,
-      });
+      const book = assembleChunkedSteamBook(meta, chunkById);
+      if (!book) return null;
+      return bulkFromRedisSteam(book);
     }
 
     // Legacy single-key formats (gzip string or JSON object)
@@ -539,18 +575,25 @@ async function saveSteamPricesToRedis(
     }
 
     const chunkIds = [...chunks.keys()].sort();
+    const fetchedAt = result.meta.fetchedAt;
     for (const id of chunkIds) {
-      await redis.set(`${REDIS_STEAM_PRICES_KEY}:c:${id}`, chunks.get(id)!, {
-        ex: PRICE_CACHE_TTL,
+      const payload: RedisSteamChunk = {
+        fetchedAt,
+        prices: chunks.get(id)!,
+      };
+      await redis.set(`${REDIS_STEAM_PRICES_KEY}:c:${id}`, payload, {
+        ex: REDIS_STEAM_CHUNK_TTL,
       });
     }
 
     const meta: RedisSteamMeta = {
-      fetchedAt: result.meta.fetchedAt,
+      fetchedAt,
       steamApisCount: result.meta.steamApisCount || count,
       chunks: chunkIds,
+      priceCount: count,
     };
-    await redis.set(REDIS_STEAM_META_KEY, meta, { ex: PRICE_CACHE_TTL });
+    // Meta last + shorter TTL: readers never follow meta to missing/expired chunks
+    await redis.set(REDIS_STEAM_META_KEY, meta, { ex: REDIS_STEAM_META_TTL });
     return true;
   } catch {
     return false;
