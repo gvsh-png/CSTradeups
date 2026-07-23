@@ -46,6 +46,20 @@ function mergeLiveSteamPrices(bulk, live) {
   return { ...bulk, ...live };
 }
 
+function applySteamLiveStrict(bulk, live, requiredNames) {
+  const prices = { ...bulk };
+  const missing = [];
+  for (const name of requiredNames) {
+    const livePrice = live[name] || 0;
+    if (livePrice > 0) prices[name] = livePrice;
+    else {
+      delete prices[name];
+      missing.push(name);
+    }
+  }
+  return { prices, missing };
+}
+
 let failed = 0;
 function assert(name, got, expected) {
   const ok = got === expected;
@@ -82,6 +96,22 @@ const merged = mergeLiveSteamPrices(
 );
 assert("live overlays bulk", merged["G3SG1 | Scavenger (Well-Worn)"], 0.77);
 assert("untouched kept", merged["P90 | Vent Rush (Well-Worn)"], 0.41);
+
+const strict = applySteamLiveStrict(
+  {
+    "G3SG1 | Scavenger (Well-Worn)": 0.52,
+    "P90 | Vent Rush (Well-Worn)": 0.41,
+  },
+  { "G3SG1 | Scavenger (Well-Worn)": 0.77 },
+  ["G3SG1 | Scavenger (Well-Worn)", "P90 | Vent Rush (Well-Worn)"]
+);
+assert("strict live wins", strict.prices["G3SG1 | Scavenger (Well-Worn)"], 0.77);
+assert(
+  "strict clears missing bulk",
+  strict.prices["P90 | Vent Rush (Well-Worn)"] === undefined ? 1 : 0,
+  1
+);
+assert("strict missing count", strict.missing.length, 1);
 
 if (failed) {
   console.error(`\n${failed} failed`);

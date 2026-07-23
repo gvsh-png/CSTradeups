@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { CSFLOAT_FEE, STEAM_FEE } from "@/lib/constants";
 import { getBulkPrices } from "@/lib/prices";
 import {
+  applySteamLiveStrict,
   collectTradeUpMarketNames,
   fetchSteamStartingAtPrices,
-  mergeLiveSteamPrices,
+  tradeUpHasFullSteamLive,
 } from "@/lib/steamLive";
 import { repriceTradeUp, sanitizePrices } from "@/lib/tradeup/generator";
 import { buildSkinDatabase, fetchSchema } from "@/lib/schema";
@@ -45,15 +46,20 @@ export async function POST(request: Request) {
       prices = bulk;
     }
 
-    // Live Steam Starting-at for this blueprint's skins
+    // Live Steam Starting-at only for this blueprint
     let steamLiveFetched = 0;
+    let steamLiveStrict = false;
     try {
       const liveNames = collectTradeUpMarketNames([tradeUp]);
       if (liveNames.length) {
         const live = await fetchSteamStartingAtPrices(liveNames);
         steamLiveFetched = live.fetched;
         if (live.fetched > 0) {
-          prices = mergeLiveSteamPrices(prices, live.prices);
+          const applied = applySteamLiveStrict(prices, live.prices, liveNames);
+          prices = applied.prices;
+          steamLiveStrict =
+            applied.missing.length === 0 &&
+            tradeUpHasFullSteamLive(tradeUp, live.prices);
         }
       }
     } catch {
@@ -72,8 +78,13 @@ export async function POST(request: Request) {
       tradeUp: refreshed,
       refreshedAt: new Date().toISOString(),
       feeType: fee === STEAM_FEE ? "steam" : "csfloat",
-      priceSource: steamLiveFetched > 0 ? "steam-live" : meta.source,
+      priceSource: steamLiveStrict
+        ? "steam-live"
+        : steamLiveFetched > 0
+          ? "steam-live-partial"
+          : meta.source,
       steamLiveFetched,
+      steamLiveStrict,
     });
   } catch (error) {
     return NextResponse.json(

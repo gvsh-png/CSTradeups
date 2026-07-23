@@ -7,9 +7,10 @@ import { authConfigured, authRequired } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getBulkPrices, pricesUnavailableMessage } from "@/lib/prices";
 import {
+  applySteamLiveStrict,
   collectTradeUpMarketNames,
   fetchSteamStartingAtPrices,
-  mergeLiveSteamPrices,
+  tradeUpHasFullSteamLive,
 } from "@/lib/steamLive";
 import { buildSkinDatabaseForMode, buildSpecialOutcomesByCollection, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
@@ -158,36 +159,60 @@ export async function POST(request: Request) {
       specialByCR
     );
 
-    // Live Steam Starting-at for skins that actually appear in blueprints
+    // Live Steam Starting-at ONLY for skins in blueprints (100% Market match)
     let priced = prices;
     let steamLiveFetched = 0;
+    let steamLiveStrict = false;
+    let liveMap: import("@/lib/tradeup/types").PriceMap = {};
     try {
       const liveNames = collectTradeUpMarketNames(rawResults);
       if (liveNames.length) {
         const live = await fetchSteamStartingAtPrices(liveNames);
         steamLiveFetched = live.fetched;
+        liveMap = live.prices;
         if (live.fetched > 0) {
-          priced = mergeLiveSteamPrices(prices, live.prices);
+          const applied = applySteamLiveStrict(prices, live.prices, liveNames);
+          priced = applied.prices;
+          steamLiveStrict = applied.missing.length === 0;
         }
       }
     } catch {
       /* keep bulk book */
     }
 
-    const results = rawResults.map((t) => repriceTradeUp(t, priced));
+    let results = rawResults.map((t) => repriceTradeUp(t, priced));
+
+    // Prefer blueprints where every skin has a real Steam Starting-at quote
+    if (steamLiveFetched > 0 && Object.keys(liveMap).length > 0) {
+      const fullLive = results.filter((t) =>
+        tradeUpHasFullSteamLive(t, liveMap)
+      );
+      if (fullLive.length > 0) {
+        results = fullLive;
+        steamLiveStrict = true;
+      }
+      results = [...results].sort(
+        (a, b) => b.expectedProfit - a.expectedProfit
+      );
+    }
 
     return NextResponse.json({
       results,
       meta: {
         skinsLoaded: skinDB.length,
         pricesLoaded: priceCount,
-        priceSource: priceMeta.source,
+        priceSource: steamLiveStrict
+          ? "steam-live"
+          : steamLiveFetched > 0
+            ? "steam-live-partial"
+            : priceMeta.source,
         priceCorrections: priceMeta.corrections,
         steamApisPrices: priceMeta.steamApisCount,
         skinportPrices: priceMeta.skinportCount,
         steamApisStatus: priceMeta.steamApisStatus,
         skinportStatus: priceMeta.skinportStatus,
         steamLiveFetched,
+        steamLiveStrict,
         pricesCachedAt: priceMeta.fetchedAt,
         pricesCachedUntil: priceMeta.cachedUntil,
         staleFallback: priceMeta.staleFallback || false,
