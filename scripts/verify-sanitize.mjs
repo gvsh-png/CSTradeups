@@ -17,6 +17,16 @@ function wearFromPriceKey(key) {
   return key.slice(open + 2, -1);
 }
 
+function medianPositive(nums) {
+  const sorted = nums.filter((n) => n > 0).sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
+}
+
 function sanitizePrices(prices) {
   const out = { ...prices };
   const byBase = new Map();
@@ -33,11 +43,7 @@ function sanitizePrices(prices) {
     if (keys.length < 2) continue;
     const vals = keys.map((k) => out[k]).filter((p) => p > 0);
     if (vals.length < 2) continue;
-    const sorted = [...vals].sort((a, b) => a - b);
-    const mid =
-      sorted.length % 2 === 0
-        ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-        : sorted[Math.floor(sorted.length / 2)];
+    const mid = medianPositive(vals);
     if (mid <= 0) continue;
 
     for (const key of keys) {
@@ -67,18 +73,36 @@ function sanitizePrices(prices) {
         } else if (row.p > fn) {
           delete out[row.key];
         }
-        continue;
+      } else if (
+        row.wear === "Well-Worn" ||
+        row.wear === "Battle-Scarred"
+      ) {
+        const rank = WEAR_RANK[row.wear];
+        if (rank == null) continue;
+        const better = priced
+          .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
+          .map((x) => out[x.key]);
+        if (!better.length) continue;
+        const betterMax = Math.max(...better);
+        if (row.p > betterMax * 2.2 && row.p > betterMax + 10) {
+          delete out[row.key];
+        }
       }
+    }
 
-      if (row.wear !== "Well-Worn" && row.wear !== "Battle-Scarred") continue;
+    for (const row of priced) {
+      if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
-      if (rank == null) continue;
+      if (rank == null || rank === 0) continue;
       const better = priced
         .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
         .map((x) => out[x.key]);
-      if (!better.length) continue;
-      const betterMax = Math.max(...better);
-      if (row.p > betterMax * 2.2 && row.p > betterMax + 10) {
+      if (better.length < 2) continue;
+      const betterLo = Math.min(...better);
+      const betterHi = Math.max(...better);
+      if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
+      const betterMid = medianPositive(better);
+      if (betterMid >= 20 && row.p < betterMid * 0.15) {
         delete out[row.key];
       }
     }
@@ -167,6 +191,36 @@ const axiaNoFn = sanitizePrices({
 assert(
   "AXIA BS without FN dropped",
   axiaNoFn["Glock-18 | AXIA (Battle-Scarred)"] === undefined
+);
+
+// Bulldozer — SteamApis safe BS stuck at $7.90 while FN–WW ~$275–376
+const bulldozer = sanitizePrices({
+  "SG 553 | Bulldozer (Factory New)": 376.4,
+  "SG 553 | Bulldozer (Minimal Wear)": 335.08,
+  "SG 553 | Bulldozer (Field-Tested)": 336.05,
+  "SG 553 | Bulldozer (Well-Worn)": 275.41,
+  "SG 553 | Bulldozer (Battle-Scarred)": 7.9,
+});
+assert(
+  "Bulldozer ghost-cheap BS dropped",
+  bulldozer["SG 553 | Bulldozer (Battle-Scarred)"] === undefined
+);
+assert(
+  "Bulldozer WW kept",
+  bulldozer["SG 553 | Bulldozer (Well-Worn)"] === 275.41
+);
+
+// Normal cheap BS vs mid FN — keep (BS ~20% of better mid)
+const redline = sanitizePrices({
+  "AK-47 | Redline (Factory New)": 80,
+  "AK-47 | Redline (Minimal Wear)": 45,
+  "AK-47 | Redline (Field-Tested)": 22,
+  "AK-47 | Redline (Well-Worn)": 18,
+  "AK-47 | Redline (Battle-Scarred)": 14,
+});
+assert(
+  "Redline BS kept",
+  redline["AK-47 | Redline (Battle-Scarred)"] === 14
 );
 
 if (failed) {

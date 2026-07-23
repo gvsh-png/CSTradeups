@@ -1011,6 +1011,7 @@ function generateTierTradeUps(
  * Drop lone cross-wear spikes without assuming FN≥MW≥FT≥WW≥BS order.
  * Example: CaliCamo WW $529 while other wears are cents → drop WW.
  * Blind Spot FT $124 while peers ~$15 → drop FT (old 12× threshold missed this).
+ * Bulldozer BS $7.90 while FN–WW ~$275–376 → drop BS (stale SteamApis safe).
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
@@ -1026,6 +1027,16 @@ function wearFromPriceKey(key: string): string | null {
   const open = key.lastIndexOf(" (");
   if (open < 0 || !key.endsWith(")")) return null;
   return key.slice(open + 2, -1);
+}
+
+function medianPositive(nums: number[]): number {
+  const sorted = nums.filter((n) => n > 0).sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
 }
 
 export function sanitizePrices(
@@ -1047,11 +1058,7 @@ export function sanitizePrices(
     if (keys.length < 2) continue;
     const vals = keys.map((k) => out[k]).filter((p) => p > 0);
     if (vals.length < 2) continue;
-    const sorted = [...vals].sort((a, b) => a - b);
-    const mid =
-      sorted.length % 2 === 0
-        ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-        : sorted[Math.floor(sorted.length / 2)];
+    const mid = medianPositive(vals);
     if (mid <= 0) continue;
 
     for (const key of keys) {
@@ -1087,20 +1094,41 @@ export function sanitizePrices(
         } else if (row.p > fn) {
           delete out[row.key];
         }
-        continue;
+      } else if (
+        row.wear === "Well-Worn" ||
+        row.wear === "Battle-Scarred"
+      ) {
+        // No FN: drop WW/BS that dominate every better wear (AXIA without FN)
+        // but keep First Class-style BS premium over FT (70 vs 32).
+        const rank = WEAR_RANK[row.wear];
+        if (rank == null) continue;
+        const better = priced
+          .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
+          .map((x) => out[x.key]);
+        if (!better.length) continue;
+        const betterMax = Math.max(...better);
+        if (row.p > betterMax * 2.2 && row.p > betterMax + 10) {
+          delete out[row.key];
+        }
       }
+    }
 
-      // No FN: drop WW/BS that dominate every better wear (AXIA without FN)
-      // but keep First Class-style BS premium over FT (70 vs 32).
-      if (row.wear !== "Well-Worn" && row.wear !== "Battle-Scarred") continue;
+    // Ghost-cheap worse wear vs a coherent expensive better-wear book.
+    // SteamApis `safe` can return stale cents for rare BS (Bulldozer $7.90
+    // while FN/MW/FT/WW sit ~$275–376; real BS is ~$270+).
+    for (const row of priced) {
+      if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
-      if (rank == null) continue;
+      if (rank == null || rank === 0) continue;
       const better = priced
         .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
         .map((x) => out[x.key]);
-      if (!better.length) continue;
-      const betterMax = Math.max(...better);
-      if (row.p > betterMax * 2.2 && row.p > betterMax + 10) {
+      if (better.length < 2) continue;
+      const betterLo = Math.min(...better);
+      const betterHi = Math.max(...better);
+      if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
+      const betterMid = medianPositive(better);
+      if (betterMid >= 20 && row.p < betterMid * 0.15) {
         delete out[row.key];
       }
     }
