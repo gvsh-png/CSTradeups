@@ -1112,11 +1112,14 @@ export function sanitizePrices(
 /**
  * Re-apply live bulk prices to a trade-up and recompute EV / ROI / win%.
  * Shared by /api/refresh and post-generate so both paths match.
+ *
+ * Returns null when any input or outcome is unpriced — substituting 0 would
+ * invent a free contract (totalCost 0, winPct 100%, fake positive EV).
  */
 export function repriceTradeUp(
   tradeUp: TradeUpResult,
   prices: PriceMap
-): TradeUpResult {
+): TradeUpResult | null {
   const fee = tradeUp.fee;
 
   const inputs = tradeUp.inputs.map((input) => {
@@ -1124,10 +1127,14 @@ export function repriceTradeUp(
     const price = getPrice(prices, input.name, input.wear);
     return { ...input, price };
   });
+  if (!inputs.length || inputs.some((i) => !(i.price > 0))) {
+    return null;
+  }
 
   const totalCost = r2(
     inputs.reduce((s, i) => s + i.price * i.count, 0)
   );
+  if (!(totalCost > 0)) return null;
 
   const outcomes = tradeUp.outcomes
     .map((o) => {
@@ -1136,6 +1143,10 @@ export function repriceTradeUp(
       return { ...o, price, profit };
     })
     .sort((a, b) => b.price - a.price);
+
+  if (!outcomes.length || outcomes.some((o) => !(o.price > 0))) {
+    return null;
+  }
 
   const { expectedValue, expectedProfit, roi } = metricsFromDisplayOutcomes(
     outcomes,

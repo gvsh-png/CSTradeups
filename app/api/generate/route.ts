@@ -153,7 +153,9 @@ export async function POST(request: Request) {
       specialByCR
     );
 
-    const results = rawResults.map((t) => repriceTradeUp(t, prices));
+    const results = rawResults
+      .map((t) => repriceTradeUp(t, prices))
+      .filter((t): t is NonNullable<typeof t> => t != null);
 
     return NextResponse.json({
       results,
