@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { gunzipSync, gzipSync } from "zlib";
 import { r2 } from "./tradeup/float";
 import type { PriceMap } from "./tradeup/types";
 
@@ -305,15 +306,50 @@ function isAbortError(err: unknown): boolean {
  * tools use) — stable Steam market price, not a single listing.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
-/** Slim Steam `safe` book — bumped when Redis shape / Steam metric changes */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v19";
+/** Gzip'd slim Steam `safe` book — bump when shape / metric changes */
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v20";
 
-/** Compact Redis payload — full BulkPriceResult was too large for Upstash REST */
+/** Compact Redis payload — full catalog JSON exceeds Upstash REST limits */
 type RedisSteamBook = {
   prices: PriceMap;
   fetchedAt: string;
   steamApisCount: number;
 };
+
+/** Keep trade-up-relevant rows only (drop stickers/graffiti/etc. that bloat Redis) */
+function keepSteamPriceKey(name: string): boolean {
+  if (
+    / \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/.test(
+      name
+    )
+  ) {
+    return true;
+  }
+  // Vanilla knives / gloves list without an exterior
+  return name.startsWith("★ ") && !name.includes(" | ");
+}
+
+function bulkFromRedisSteam(book: RedisSteamBook): BulkPriceResult {
+  const cachedUntil = new Date(
+    new Date(book.fetchedAt).getTime() + PRICE_CACHE_TTL * 1000
+  ).toISOString();
+  return {
+    prices: book.prices,
+    meta: {
+      source: "steamapis",
+      fetchedAt: book.fetchedAt,
+      cachedUntil,
+      fromCache: true,
+      steamApisCount: book.steamApisCount || priceCount(book.prices),
+      skinportCount: 0,
+      corrections: 0,
+      deadMarkets: 0,
+      steamApisStatus: "ok",
+      skinportStatus: "error",
+      redisPersisted: true,
+    },
+  };
+}
 
 async function fetchSteamApisCompact(
   compactValue: string
@@ -372,8 +408,13 @@ async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
     const sold: Record<string, { sold7: number; sold30: number }> = {};
 
     for (const [name, price] of Object.entries(safeMap)) {
+      if (!keepSteamPriceKey(name)) continue;
       prices[name] = price;
       sold[name] = { sold7: 1, sold30: 1 };
+    }
+
+    if (Object.keys(prices).length < 50) {
+      return { prices: null, sold: null, corrections: 0, status: "error" };
     }
 
     return { prices, sold, corrections: 0, status: "ok" };
@@ -398,9 +439,19 @@ async function loadSteamPricesFromRedis(): Promise<BulkPriceResult | null> {
   try {
     const { Redis } = await import("@upstash/redis");
     const raw = await Redis.fromEnv().get<
-      RedisSteamBook | BulkPriceResult
+      string | RedisSteamBook | BulkPriceResult
     >(REDIS_STEAM_PRICES_KEY);
-    if (!raw || typeof raw !== "object") return null;
+    if (raw == null) return null;
+
+    // Preferred: gzip+base64 string (fits Upstash REST body limits)
+    if (typeof raw === "string") {
+      const json = gunzipSync(Buffer.from(raw, "base64")).toString("utf8");
+      const book = JSON.parse(json) as RedisSteamBook;
+      if (!book?.prices || priceCount(book.prices) < 50) return null;
+      return bulkFromRedisSteam(book);
+    }
+
+    if (typeof raw !== "object") return null;
 
     const prices =
       "prices" in raw && raw.prices && typeof raw.prices === "object"
@@ -428,26 +479,12 @@ async function loadSteamPricesFromRedis(): Promise<BulkPriceResult | null> {
         typeof raw.meta.steamApisCount === "number" &&
         raw.meta.steamApisCount) ||
       priceCount(prices);
-    const cachedUntil = new Date(
-      new Date(fetchedAt).getTime() + PRICE_CACHE_TTL * 1000
-    ).toISOString();
 
-    return {
+    return bulkFromRedisSteam({
       prices,
-      meta: {
-        source: "steamapis",
-        fetchedAt,
-        cachedUntil,
-        fromCache: true,
-        steamApisCount,
-        skinportCount: 0,
-        corrections: 0,
-        deadMarkets: 0,
-        steamApisStatus: "ok",
-        skinportStatus: "error",
-        redisPersisted: true,
-      },
-    };
+      fetchedAt,
+      steamApisCount,
+    });
   } catch {
     return null;
   }
@@ -466,12 +503,14 @@ async function saveSteamPricesToRedis(
       steamApisCount:
         result.meta.steamApisCount || priceCount(result.prices),
     };
-    await Redis.fromEnv().set(REDIS_STEAM_PRICES_KEY, slim, {
+    const compressed = gzipSync(
+      Buffer.from(JSON.stringify(slim), "utf8")
+    ).toString("base64");
+    await Redis.fromEnv().set(REDIS_STEAM_PRICES_KEY, compressed, {
       ex: PRICE_CACHE_TTL,
     });
     return true;
   } catch {
-    /* value may still exceed Upstash size limits */
     return false;
   }
 }
