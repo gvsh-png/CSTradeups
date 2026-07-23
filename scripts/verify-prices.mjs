@@ -266,34 +266,65 @@ assert(
   2.16
 );
 
-/** Cheap liquid: bias toward fresher print near safe (Starting at proxy) */
+/** Live Steam band: latest≈median can override stale safe */
 function resolveCheapSteamPrice(safe, latest, median = 0) {
   const s = safe > 0 ? safe : 0;
-  const fresher = [latest, median].filter((p) => p > 0);
-  if (!(s > 0)) {
-    const p = fresher[0] || 0;
-    return p > 0 ? r2(p) : 0;
+  const l = latest > 0 ? latest : 0;
+  const m = median > 0 ? median : 0;
+  const LIVE = 40;
+
+  let fresh = 0;
+  let consensus = false;
+  if (l > 0 && m > 0) {
+    const hi = Math.max(l, m);
+    const lo = Math.min(l, m);
+    if (hi / lo <= 1.25) {
+      fresh = (l + m) / 2;
+      consensus = true;
+    }
   }
-  if (s > 4) return r2(s);
-  const near = fresher.filter((p) => p >= s * 0.7 && p <= s * 1.3);
-  if (!near.length) return r2(s);
-  return r2(Math.min(s, ...near));
+
+  if (!(s > 0)) return fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0;
+  if (s > LIVE && !(consensus && fresh <= LIVE)) return r2(s);
+
+  if (consensus && fresh > 0) {
+    const maxRef = Math.max(s, fresh);
+    if (maxRef <= LIVE * 1.25) {
+      if (fresh / s >= 1.35 || s / fresh >= 1.35) {
+        if (fresh > s) return r2(fresh);
+        return r2(Math.min(l, m));
+      }
+      const lower = Math.min(s, l, m);
+      if (lower >= s * 0.7) return r2(lower);
+    }
+  }
+
+  const one = l || m;
+  if (one > 0 && one >= s * 0.7 && one <= s * 1.05 && s <= LIVE) {
+    return r2(Math.min(s, one));
+  }
+  return r2(s);
 }
 
 assert(
-  "Anodized-style cheap: latest near safe → prefer lower",
+  "Anodized-style: latest≈median under safe → Starting at",
   resolveCheapSteamPrice(2.59, 2.24, 2.2),
   2.2
 );
 assert(
-  "cheap but latest dumped → keep safe",
+  "Airlock-style: stale-low safe, fresh consensus → pull up",
+  resolveCheapSteamPrice(8.09, 16.6, 16.5),
+  16.55
+);
+assert(
+  "cheap but latest dumped alone → keep safe",
   resolveCheapSteamPrice(2.59, 0.4, 0),
   2.59
 );
 assert(
-  "cheap but latest spiked → keep safe",
-  resolveCheapSteamPrice(2.59, 8, 0),
-  2.59
+  "latest spiked vs median → keep safe",
+  resolveCheapSteamPrice(14, 80, 14.5),
+  14
 );
 assert(
   "expensive skin stays on safe",

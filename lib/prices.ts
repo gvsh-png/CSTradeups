@@ -304,20 +304,23 @@ function isAbortError(err: unknown): boolean {
  *
  * IMPORTANT: SteamApis `min` is the historical *lowest sale*, NOT the Steam
  * Market "Starting at" listing. Using `min` made prices wildly wrong.
- * `safe` is SteamApis' outlier-filtered market price (what TradeUpSpy-style
- * tools use) — stable Steam market price, not a single listing.
+ * `safe` is SteamApis' outlier-filtered market price — usually good, but can
+ * go stale-low (Airlock WW `safe` ~$8 while Steam Starting at ~$16).
  *
- * For cheap liquid skins (≤ $4), we bias toward `latest`/`median` when they
- * sit near `safe` — that tracks Steam "Starting at" much more closely
- * without resurrecting historical-min dumps on thin books.
+ * When `latest` and `median` agree, treat that as a liquid live book and
+ * prefer it over a far-off `safe` (either direction). Also nudge toward the
+ * lower fresh print ≈ Starting at inside the live band.
+ * Never uses historical `min`.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
 /** Chunked Steam book — bump when shape / metric / blend rules change */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v22";
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v23";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
 
-/** USD ceiling for Starting-at bias on cheap liquid skins */
-export const CHEAP_STEAM_USD = 4;
+/** USD band where latest≈median can override stale `safe` toward live Steam */
+export const LIVE_STEAM_USD = 40;
+/** @deprecated alias — use LIVE_STEAM_USD */
+export const CHEAP_STEAM_USD = LIVE_STEAM_USD;
 
 /** Compact Redis payload — full catalog JSON exceeds Upstash REST limits */
 type RedisSteamBook = {
@@ -407,9 +410,14 @@ async function fetchSteamApisCompact(
 }
 
 /**
- * Cheap liquid skins: bias toward fresher SteamApis prints (closer to
- * Steam Market "Starting at"). Only when latest/median sit near `safe`
- * — that agreement is our stand-in for "lots listed / liquid book".
+ * Resolve SteamApis compact metrics toward a live Steam Market price.
+ *
+ * - If latest≈median (liquid book), prefer that consensus when `safe` is stale
+ *   (Airlock WW: safe ~$8 vs fresh ~$16 Starting at).
+ * - When safe and fresh are close, nudge toward the lower print (Starting at)
+ *   for items in the live band.
+ * - A lone latest/median print never overrides safe (could be a dump/spike).
+ * - Expensive / thin books stay on `safe`.
  * Never uses historical `min`.
  */
 export function resolveCheapSteamPrice(
@@ -418,19 +426,54 @@ export function resolveCheapSteamPrice(
   median = 0
 ): { price: number; biased: boolean } {
   const s = safe > 0 ? safe : 0;
-  const fresher = [latest, median].filter((p) => p > 0);
-  if (!(s > 0)) {
-    const p = fresher[0] || 0;
-    return { price: p > 0 ? r2(p) : 0, biased: false };
+  const l = latest > 0 ? latest : 0;
+  const m = median > 0 ? median : 0;
+
+  // Liquid proxy: latest and median must agree
+  let fresh = 0;
+  let consensus = false;
+  if (l > 0 && m > 0) {
+    const hi = Math.max(l, m);
+    const lo = Math.min(l, m);
+    if (hi / lo <= 1.25) {
+      fresh = (l + m) / 2;
+      consensus = true;
+    }
   }
-  if (s > CHEAP_STEAM_USD) return { price: r2(s), biased: false };
 
-  const near = fresher.filter((p) => p >= s * 0.7 && p <= s * 1.3);
-  if (!near.length) return { price: r2(s), biased: false };
+  if (!(s > 0)) {
+    return { price: fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0, biased: false };
+  }
 
-  // Lower near-print ≈ Starting at on liquid cheap books
-  const picked = Math.min(s, ...near);
-  return { price: r2(picked), biased: picked !== s };
+  // Outside the live band — trust safe (knives, high-tier, thin books)
+  if (s > LIVE_STEAM_USD && !(consensus && fresh <= LIVE_STEAM_USD)) {
+    return { price: r2(s), biased: false };
+  }
+
+  // Stale safe vs liquid consensus — pull either direction
+  if (consensus && fresh > 0) {
+    const maxRef = Math.max(s, fresh);
+    if (maxRef <= LIVE_STEAM_USD * 1.25) {
+      if (fresh / s >= 1.35 || s / fresh >= 1.35) {
+        if (fresh > s) return { price: r2(fresh), biased: true };
+        return { price: r2(Math.min(l, m)), biased: true };
+      }
+      // Close: nudge toward Starting at (lower fresh print)
+      const lower = Math.min(s, l, m);
+      if (lower >= s * 0.7) {
+        return { price: r2(lower), biased: lower !== s };
+      }
+    }
+  }
+
+  // Single fresher print: only nudge down when near safe (no upward lone spike)
+  const one = l || m;
+  if (one > 0 && one >= s * 0.7 && one <= s * 1.05 && s <= LIVE_STEAM_USD) {
+    const picked = Math.min(s, one);
+    return { price: r2(picked), biased: picked !== s };
+  }
+
+  return { price: r2(s), biased: false };
 }
 
 async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
@@ -480,7 +523,7 @@ async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
     if (latestMap) {
       for (const [name, latest] of Object.entries(latestMap)) {
         if (prices[name] || !keepSteamPriceKey(name) || !(latest > 0)) continue;
-        if (latest > CHEAP_STEAM_USD) continue;
+        if (latest > LIVE_STEAM_USD) continue;
         prices[name] = latest;
         sold[name] = { sold7: 1, sold30: 1 };
       }
@@ -912,7 +955,7 @@ async function fetchFreshBulkPrices(opts?: {
 /** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v22"],
+  ["tradeup-bulk-prices-v23"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -938,7 +981,7 @@ const getCachedSteamPrices = unstable_cache(
     }
     return steam;
   },
-  ["tradeup-bulk-prices-steam-v22"],
+  ["tradeup-bulk-prices-steam-v23"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
