@@ -136,11 +136,16 @@ export type SteamLiveResult = {
 
 /**
  * Live Steam Market Starting-at for blueprint skins only.
- * Bulk SteamApis stays for discovery; visible quotes should be this.
+ * Optional maxMs hard budget so callers never hang the scan.
  */
 export async function fetchSteamStartingAtPrices(
-  marketHashNames: string[]
+  marketHashNames: string[],
+  opts?: { maxMs?: number }
 ): Promise<SteamLiveResult> {
+  const budgetMs = opts?.maxMs ?? 25_000;
+  const started = Date.now();
+  const timeLeft = () => budgetMs - (Date.now() - started);
+
   const unique = [...new Set(marketHashNames.filter(Boolean))].slice(
     0,
     STEAM_LIVE_MAX_NAMES
@@ -151,6 +156,12 @@ export async function fetchSteamStartingAtPrices(
   let failed = 0;
 
   for (let i = 0; i < unique.length; i += STEAM_LIVE_CONCURRENCY) {
+    if (timeLeft() < 1_500) {
+      for (const name of unique.slice(i)) {
+        if (!(prices[name] > 0)) missing.push(name);
+      }
+      break;
+    }
     const batch = unique.slice(i, i + STEAM_LIVE_CONCURRENCY);
     const results = await Promise.all(
       batch.map(async (name) => {
@@ -172,16 +183,20 @@ export async function fetchSteamStartingAtPrices(
       }
     }
     if (i + STEAM_LIVE_CONCURRENCY < unique.length) {
-      await sleep(STEAM_LIVE_GAP_MS);
+      await sleep(Math.min(STEAM_LIVE_GAP_MS, Math.max(0, timeLeft() - 500)));
     }
   }
 
-  // Second pass on misses (Steam often 429s the first wave)
-  if (missing.length) {
+  // Second pass on misses only if budget remains
+  if (missing.length && timeLeft() > 3_000) {
     const retry = [...missing];
     missing.length = 0;
-    await sleep(500);
+    await sleep(Math.min(400, timeLeft() / 4));
     for (let i = 0; i < retry.length; i += STEAM_LIVE_CONCURRENCY) {
+      if (timeLeft() < 1_500) {
+        missing.push(...retry.slice(i));
+        break;
+      }
       const batch = retry.slice(i, i + STEAM_LIVE_CONCURRENCY);
       const results = await Promise.all(
         batch.map(async (name) => {
@@ -203,9 +218,11 @@ export async function fetchSteamStartingAtPrices(
         }
       }
       if (i + STEAM_LIVE_CONCURRENCY < retry.length) {
-        await sleep(STEAM_LIVE_GAP_MS);
+        await sleep(Math.min(STEAM_LIVE_GAP_MS, Math.max(0, timeLeft() - 500)));
       }
     }
+  } else if (missing.length && timeLeft() <= 3_000) {
+    /* keep missing as-is */
   }
 
   return { prices, fetched, failed: missing.length, missing };

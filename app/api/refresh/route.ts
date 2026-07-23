@@ -52,7 +52,9 @@ export async function POST(request: Request) {
     try {
       const liveNames = collectTradeUpMarketNames([tradeUp]);
       if (liveNames.length) {
-        const live = await fetchSteamStartingAtPrices(liveNames);
+        const live = await fetchSteamStartingAtPrices(liveNames, {
+          maxMs: 25_000,
+        });
         steamLiveFetched = live.fetched;
         if (live.fetched > 0) {
           const applied = applySteamLiveStrict(prices, live.prices, liveNames);

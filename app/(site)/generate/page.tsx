@@ -22,10 +22,12 @@ export default function GeneratePage() {
 
   const [results, setResults] = useState<TradeUpResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [livePricing, setLivePricing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<Record<string, unknown> | null>(null);
   /** Scroll to first blueprint once after this scan finishes */
   const scrollToFirstRef = useRef(false);
+  const liveRepriceGen = useRef(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -73,6 +75,8 @@ export default function GeneratePage() {
 
     scrollToFirstRef.current = true;
     setLoading(true);
+    setLivePricing(false);
+    liveRepriceGen.current += 1;
     setError(null);
     setResults([]);
 
@@ -120,6 +124,42 @@ export default function GeneratePage() {
       setResults(data.results || []);
       setMeta(data.meta || null);
       void refresh();
+
+      const scanned = data.results || [];
+      if (scanned.length) {
+        // Background: match Steam Starting-at without blocking the scan
+        const gen = ++liveRepriceGen.current;
+        setLivePricing(true);
+        void fetch("/api/live-reprice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ results: scanned }),
+          signal: AbortSignal.timeout(55_000),
+        })
+          .then(async (liveRes) => {
+            if (gen !== liveRepriceGen.current) return;
+            if (!liveRes.ok) return;
+            const liveData = (await liveRes.json()) as {
+              results?: TradeUpResult[];
+              steamLiveFetched?: number;
+              steamLiveStrict?: boolean;
+              priceSource?: string;
+            };
+            if (!liveData.results?.length) return;
+            setResults(liveData.results);
+            setMeta((prev) => ({
+              ...(prev || {}),
+              priceSource: liveData.priceSource || "steam-live",
+              steamLiveFetched: liveData.steamLiveFetched || 0,
+              steamLiveStrict: Boolean(liveData.steamLiveStrict),
+              steamLivePending: false,
+            }));
+          })
+          .catch(() => {})
+          .finally(() => {
+            if (gen === liveRepriceGen.current) setLivePricing(false);
+          });
+      }
 
       if (!data.results?.length) {
         setError(
@@ -221,6 +261,9 @@ export default function GeneratePage() {
                   <> · {String(meta.pricesLoaded)} prices</>
                 )}
                 {meta.priceSource != null && <> · {String(meta.priceSource)}</>}
+                {livePricing && (
+                  <> · matching Steam Starting at…</>
+                )}
                 {typeof meta.targetOutcomeName === "string" &&
                   meta.targetOutcomeName && (
                     <>
