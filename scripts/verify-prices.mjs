@@ -47,15 +47,9 @@ function resolveSteamApisPrice(item) {
   const last30 = ts.last_30d || 0;
   const safe = p.safe || 0;
   const latest = p.latest || 0;
-  const listingMin = p.min || 0;
-  const sold7 = p.sold?.last_7d || 0;
-  const sold30 = p.sold?.last_30d || 0;
-  const liquid = sold7 > 0 || sold30 > 0;
-  if (listingMin > 0 && liquid) {
-    const anchor = last7 || last30 || safe || latest;
-    if (!anchor || listingMin >= anchor * 0.4) return r2(listingMin);
-  }
-  return r2(last7 || last30 || safe || latest || listingMin || 0);
+  const historicalMin = p.min || 0;
+  // `min` is historical lowest sale — never treat as live listing
+  return r2(last7 || last30 || safe || latest || historicalMin || 0);
 }
 
 /** Skinport: never use suggested_price */
@@ -137,7 +131,7 @@ assert(
   0.4
 );
 assert(
-  "Steam min (Starting at) preferred",
+  "Steam safe/window preferred over historical min",
   resolveSteamApisPrice({
     prices: {
       min: 0.37,
@@ -147,7 +141,7 @@ assert(
       sold: { last_7d: 20, last_30d: 80 },
     },
   }),
-  0.37
+  0.41
 );
 assert(
   "high Steam-only kept when liquid",

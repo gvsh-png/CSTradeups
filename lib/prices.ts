@@ -92,8 +92,9 @@ export function median(nums: number[]): number {
 
 /**
  * Pick price from full SteamApis item payload (legacy path).
- * Note: `prices.min` is historical lowest *sale*, not live Steam listing.
- * Prefer safe / safe_ts windows over min.
+ *
+ * IMPORTANT: `prices.min` is the historical *lowest sale*, NOT Steam Market
+ * "Starting at". Prefer `safe` / `safe_ts` windows; use min only as last resort.
  */
 export function resolveSteamApisPrice(item: SteamApisItem): {
   price: number;
@@ -110,27 +111,14 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
   const safe = p.safe || 0;
   const sold7 = p.sold?.last_7d || 0;
   const sold30 = p.sold?.last_30d || 0;
-  const listingMin = p.min || 0;
-  const liquid = sold7 > 0 || sold30 > 0;
+  const historicalMin = p.min || 0;
 
   let priceUSD = 0;
   let corrected = false;
 
-  // Steam Market "Starting at" — primary when liquid and not a ghost stub
-  if (listingMin > 0 && liquid) {
-    const anchor = last7 || last30 || safe || latest || last90;
-    // Reject absurd undercuts (<40% of recent market) — keep min otherwise
-    if (!anchor || listingMin >= anchor * 0.4) {
-      return {
-        price: r2(listingMin),
-        corrected: Boolean(anchor && listingMin < anchor * 0.95),
-      };
-    }
-  }
-
   // Thin / unstable markets: trust longer windows over a spiked 7d print
   if (p.unstable || (sold7 > 0 && sold30 > 0 && sold7 < 3 && sold30 >= 10)) {
-    priceUSD = last30 || last90 || safe || last7 || latest || listingMin;
+    priceUSD = last30 || last90 || safe || last7 || latest || historicalMin;
     corrected = Boolean(last7 && priceUSD !== last7);
   } else if (last7 > 0 && last30 > 0) {
     const ratio = last7 / last30;
@@ -157,7 +145,7 @@ export function resolveSteamApisPrice(item: SteamApisItem): {
   } else if (latest > 0) {
     priceUSD = latest;
   } else {
-    priceUSD = listingMin;
+    priceUSD = historicalMin;
   }
 
   if (last30 > 0 && last90 > 0 && last30 / last90 > 2.5) {
@@ -312,7 +300,7 @@ function isAbortError(err: unknown): boolean {
  * IMPORTANT: SteamApis `min` is the historical *lowest sale*, NOT the Steam
  * Market "Starting at" listing. Using `min` made prices wildly wrong.
  * `safe` is SteamApis' outlier-filtered market price (what TradeUpSpy-style
- * tools use). We blend with `latest` when they're close for freshness.
+ * tools use) — stable Steam market price, not a single listing.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
 const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v18";
@@ -659,7 +647,7 @@ async function fetchFreshBulkPrices(opts?: {
     );
   }
 
-  // Steam compact "Starting at" + Skinport liquidity
+  // Steam compact `safe` market price + Skinport liquidity
   const steamApisResult = await fetchSteamApisPrices();
   const merged = mergeBulkSources(
     steamApisResult.prices,
@@ -704,7 +692,7 @@ const getCachedBulkPrices = unstable_cache(
   }
 );
 
-/** Steam safe+latest enrich — warm prefetch / Redis fill */
+/** Steam `safe` enrich — warm prefetch / Redis fill */
 const getCachedSteamPrices = unstable_cache(
   async (): Promise<BulkPriceResult> =>
     fetchFreshBulkPrices({ preferSteam: true }),
