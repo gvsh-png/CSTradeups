@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { gunzipSync, gzipSync } from "zlib";
+import { gunzipSync } from "zlib";
 import { r2 } from "./tradeup/float";
 import type { PriceMap } from "./tradeup/types";
 
@@ -29,6 +29,8 @@ export interface PriceMeta {
   staleFallback?: boolean;
   /** Steam warm wrote the slim book to Redis (cross-instance) */
   redisPersisted?: boolean;
+  /** Upstash env present on this instance */
+  redisConfigured?: boolean;
 }
 
 interface SteamApisItem {
@@ -306,14 +308,21 @@ function isAbortError(err: unknown): boolean {
  * tools use) — stable Steam market price, not a single listing.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
-/** Gzip'd slim Steam `safe` book — bump when shape / metric changes */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v20";
+/** Chunked gzip Steam `safe` book — bump when shape / metric changes */
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v21";
+const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
 
 /** Compact Redis payload — full catalog JSON exceeds Upstash REST limits */
 type RedisSteamBook = {
   prices: PriceMap;
   fetchedAt: string;
   steamApisCount: number;
+};
+
+type RedisSteamMeta = {
+  fetchedAt: string;
+  steamApisCount: number;
+  chunks: string[];
 };
 
 /** Keep trade-up-relevant rows only (drop stickers/graffiti/etc. that bloat Redis) */
@@ -329,6 +338,13 @@ function keepSteamPriceKey(name: string): boolean {
   return name.startsWith("★ ") && !name.includes(" | ");
 }
 
+function steamChunkId(name: string): string {
+  const ch = name.charAt(0).toUpperCase();
+  if (ch >= "A" && ch <= "Z") return ch;
+  if (ch >= "0" && ch <= "9") return "0";
+  return "_";
+}
+
 function bulkFromRedisSteam(book: RedisSteamBook): BulkPriceResult {
   const cachedUntil = new Date(
     new Date(book.fetchedAt).getTime() + PRICE_CACHE_TTL * 1000
@@ -340,13 +356,14 @@ function bulkFromRedisSteam(book: RedisSteamBook): BulkPriceResult {
       fetchedAt: book.fetchedAt,
       cachedUntil,
       fromCache: true,
-      steamApisCount: book.steamApisCount || priceCount(book.prices),
+      steamApisCount: book.steamApisCount || Object.keys(book.prices).length,
       skinportCount: 0,
       corrections: 0,
       deadMarkets: 0,
       steamApisStatus: "ok",
       skinportStatus: "error",
       redisPersisted: true,
+      redisConfigured: true,
     },
   };
 }
@@ -438,26 +455,48 @@ async function loadSteamPricesFromRedis(): Promise<BulkPriceResult | null> {
   if (!redisConfigured()) return null;
   try {
     const { Redis } = await import("@upstash/redis");
-    const raw = await Redis.fromEnv().get<
-      string | RedisSteamBook | BulkPriceResult
-    >(REDIS_STEAM_PRICES_KEY);
+    const redis = Redis.fromEnv();
+
+    // Preferred: chunked maps under meta.chunks
+    const meta = await redis.get<RedisSteamMeta>(REDIS_STEAM_META_KEY);
+    if (meta?.chunks?.length && meta.fetchedAt) {
+      const prices: PriceMap = {};
+      for (const id of meta.chunks) {
+        const part = await redis.get<PriceMap>(
+          `${REDIS_STEAM_PRICES_KEY}:c:${id}`
+        );
+        if (!part || typeof part !== "object") continue;
+        Object.assign(prices, part);
+      }
+      if (Object.keys(prices).filter((k) => prices[k] > 0).length < 50) {
+        return null;
+      }
+      return bulkFromRedisSteam({
+        prices,
+        fetchedAt: meta.fetchedAt,
+        steamApisCount: meta.steamApisCount || Object.keys(prices).length,
+      });
+    }
+
+    // Legacy single-key formats (gzip string or JSON object)
+    const raw = await redis.get<string | RedisSteamBook | BulkPriceResult>(
+      REDIS_STEAM_PRICES_KEY
+    );
     if (raw == null) return null;
 
-    // Preferred: gzip+base64 string (fits Upstash REST body limits)
     if (typeof raw === "string") {
       const json = gunzipSync(Buffer.from(raw, "base64")).toString("utf8");
       const book = JSON.parse(json) as RedisSteamBook;
-      if (!book?.prices || priceCount(book.prices) < 50) return null;
+      if (!book?.prices || Object.keys(book.prices).length < 50) return null;
       return bulkFromRedisSteam(book);
     }
 
     if (typeof raw !== "object") return null;
-
     const prices =
       "prices" in raw && raw.prices && typeof raw.prices === "object"
         ? raw.prices
         : null;
-    if (!prices || priceCount(prices) < 50) return null;
+    if (!prices || Object.keys(prices).length < 50) return null;
 
     const fetchedAt =
       ("fetchedAt" in raw && typeof raw.fetchedAt === "string" && raw.fetchedAt) ||
@@ -472,19 +511,9 @@ async function loadSteamPricesFromRedis(): Promise<BulkPriceResult | null> {
       ("steamApisCount" in raw &&
         typeof raw.steamApisCount === "number" &&
         raw.steamApisCount) ||
-      ("meta" in raw &&
-        raw.meta &&
-        typeof raw.meta === "object" &&
-        "steamApisCount" in raw.meta &&
-        typeof raw.meta.steamApisCount === "number" &&
-        raw.meta.steamApisCount) ||
-      priceCount(prices);
+      Object.keys(prices).length;
 
-    return bulkFromRedisSteam({
-      prices,
-      fetchedAt,
-      steamApisCount,
-    });
+    return bulkFromRedisSteam({ prices, fetchedAt, steamApisCount });
   } catch {
     return null;
   }
@@ -494,21 +523,34 @@ async function saveSteamPricesToRedis(
   result: BulkPriceResult
 ): Promise<boolean> {
   if (!redisConfigured()) return false;
-  if (priceCount(result.prices) < 50) return false;
+  const count = Object.values(result.prices).filter((p) => p > 0).length;
+  if (count < 50) return false;
   try {
     const { Redis } = await import("@upstash/redis");
-    const slim: RedisSteamBook = {
-      prices: result.prices,
+    const redis = Redis.fromEnv();
+
+    const chunks = new Map<string, PriceMap>();
+    for (const [name, price] of Object.entries(result.prices)) {
+      if (!(price > 0)) continue;
+      const id = steamChunkId(name);
+      const bucket = chunks.get(id) || {};
+      bucket[name] = price;
+      chunks.set(id, bucket);
+    }
+
+    const chunkIds = [...chunks.keys()].sort();
+    for (const id of chunkIds) {
+      await redis.set(`${REDIS_STEAM_PRICES_KEY}:c:${id}`, chunks.get(id)!, {
+        ex: PRICE_CACHE_TTL,
+      });
+    }
+
+    const meta: RedisSteamMeta = {
       fetchedAt: result.meta.fetchedAt,
-      steamApisCount:
-        result.meta.steamApisCount || priceCount(result.prices),
+      steamApisCount: result.meta.steamApisCount || count,
+      chunks: chunkIds,
     };
-    const compressed = gzipSync(
-      Buffer.from(JSON.stringify(slim), "utf8")
-    ).toString("base64");
-    await Redis.fromEnv().set(REDIS_STEAM_PRICES_KEY, compressed, {
-      ex: PRICE_CACHE_TTL,
-    });
+    await redis.set(REDIS_STEAM_META_KEY, meta, { ex: PRICE_CACHE_TTL });
     return true;
   } catch {
     return false;
@@ -814,7 +856,33 @@ async function fetchFreshBulkPrices(opts?: {
 /** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v19"],
+  ["tradeup-bulk-prices-v21"],
+  {
+    revalidate: PRICE_CACHE_TTL,
+    tags: ["prices"],
+  }
+);
+
+/**
+ * Shared Steam book via Next data cache (works even when Redis is missing).
+ * Throws on failure so Next does not cache a Skinport/empty poison pill.
+ */
+const getCachedSteamPrices = unstable_cache(
+  async (): Promise<BulkPriceResult> => {
+    const steam = await fetchFreshBulkPrices({ preferSteam: true });
+    if (
+      Object.values(steam.prices).filter((p) => p > 0).length < 50 ||
+      !(
+        steam.meta.source === "steamapis" ||
+        steam.meta.source === "merged" ||
+        steam.meta.steamApisStatus === "ok"
+      )
+    ) {
+      throw new Error("Steam price book unavailable");
+    }
+    return steam;
+  },
+  ["tradeup-bulk-prices-steam-v21"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -832,31 +900,78 @@ function isSteamSourced(meta: PriceMeta): boolean {
   );
 }
 
+/** Read shared Steam cache; give up quickly on cold miss so scans stay fast */
+async function trySharedSteamBook(
+  waitMs: number
+): Promise<BulkPriceResult | null> {
+  try {
+    const result = await Promise.race([
+      getCachedSteamPrices(),
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), waitMs)
+      ),
+    ]);
+    if (
+      result &&
+      priceCount(result.prices) >= 50 &&
+      isSteamSourced(result.meta)
+    ) {
+      return result;
+    }
+  } catch {
+    /* cold / failed */
+  }
+  return null;
+}
+
 export async function getBulkPrices(opts?: {
   /** Prefer Steam-enriched cache (warm prefetch — compact SteamApis) */
   preferSteam?: boolean;
 }): Promise<BulkPriceResult> {
+  const redisOk = redisConfigured();
   try {
     // Redis Steam book FIRST — shared across serverless instances
     const fromRedis = await loadSteamPricesFromRedis();
     if (fromRedis && isSteamSourced(fromRedis.meta)) {
       lastGoodPrices = fromRedis;
-      return fromRedis;
+      return {
+        prices: fromRedis.prices,
+        meta: { ...fromRedis.meta, redisConfigured: redisOk },
+      };
     }
 
-    // Warm prefetch: fetch Steam only + persist slim book to Redis
-    // Do NOT use Next unstable_cache here — a timed-out warm used to cache
-    // Skinport-only under the steam key for 24h and block real Steam forever.
+    // Warm prefetch: fill Next data cache + Redis chunks
     if (opts?.preferSteam) {
-      const steam = await fetchFreshBulkPrices({ preferSteam: true });
+      const steam = await getCachedSteamPrices().catch(() =>
+        fetchFreshBulkPrices({ preferSteam: true })
+      );
       if (priceCount(steam.prices) >= 50 && isSteamSourced(steam.meta)) {
         const redisPersisted = await saveSteamPricesToRedis(steam);
         lastGoodPrices = {
           prices: steam.prices,
-          meta: { ...steam.meta, redisPersisted },
+          meta: {
+            ...steam.meta,
+            redisPersisted,
+            redisConfigured: redisOk,
+          },
         };
         return lastGoodPrices;
       }
+    }
+
+    // Next data cache (filled by a prior warm) — short wait so scans don't stall
+    const fromShared = await trySharedSteamBook(opts?.preferSteam ? 50_000 : 2_500);
+    if (fromShared) {
+      lastGoodPrices = fromShared;
+      if (redisOk) void saveSteamPricesToRedis(fromShared);
+      return {
+        prices: fromShared.prices,
+        meta: {
+          ...fromShared.meta,
+          fromCache: true,
+          redisConfigured: redisOk,
+        },
+      };
     }
 
     // Memory only if it's already Steam-sourced
@@ -867,7 +982,11 @@ export async function getBulkPrices(opts?: {
     ) {
       return {
         prices: lastGoodPrices.prices,
-        meta: { ...lastGoodPrices.meta, fromCache: true },
+        meta: {
+          ...lastGoodPrices.meta,
+          fromCache: true,
+          redisConfigured: redisOk,
+        },
       };
     }
 
@@ -880,7 +999,11 @@ export async function getBulkPrices(opts?: {
       }
       return {
         prices: result.prices,
-        meta: { ...result.meta, fromCache: true },
+        meta: {
+          ...result.meta,
+          fromCache: true,
+          redisConfigured: redisOk,
+        },
       };
     }
     if (lastGoodPrices && priceCount(lastGoodPrices.prices) >= 50) {
@@ -892,12 +1015,17 @@ export async function getBulkPrices(opts?: {
           staleFallback: true,
           steamApisStatus: result.meta.steamApisStatus,
           skinportStatus: result.meta.skinportStatus,
+          redisConfigured: redisOk,
         },
       };
     }
     return {
       prices: result.prices,
-      meta: { ...result.meta, fromCache: true },
+      meta: {
+        ...result.meta,
+        fromCache: true,
+        redisConfigured: redisOk,
+      },
     };
   } catch {
     if (lastGoodPrices && priceCount(lastGoodPrices.prices) >= 50) {
@@ -907,6 +1035,7 @@ export async function getBulkPrices(opts?: {
           ...lastGoodPrices.meta,
           fromCache: true,
           staleFallback: true,
+          redisConfigured: redisOk,
         },
       };
     }
