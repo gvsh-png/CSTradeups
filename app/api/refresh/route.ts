@@ -45,6 +45,16 @@ export async function POST(request: Request) {
     // Client can request a fresh one after refresh.
     const { insight: _expiredInsight, ...tradeUpWithoutInsight } = tradeUp;
     const refreshed = repriceTradeUp({ ...tradeUpWithoutInsight, fee }, prices);
+    if (!refreshed) {
+      return NextResponse.json(
+        {
+          error:
+            "One or more skins in this trade-up have no buyable market price right now. Try again later.",
+          code: "TRADEUP_UNPRICEABLE",
+        },
+        { status: 422 }
+      );
+    }
     refreshed.generatedAt = new Date().toISOString();
     delete refreshed.insight;
 
