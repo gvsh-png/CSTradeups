@@ -6,6 +6,11 @@ import {
 import { authConfigured, authRequired } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getBulkPrices, pricesUnavailableMessage } from "@/lib/prices";
+import {
+  collectTradeUpMarketNames,
+  fetchSteamStartingAtPrices,
+  mergeLiveSteamPrices,
+} from "@/lib/steamLive";
 import { buildSkinDatabaseForMode, buildSpecialOutcomesByCollection, fetchSchema, groupByCollectionRarity } from "@/lib/schema";
 import {
   generateTradeUps,
@@ -153,7 +158,23 @@ export async function POST(request: Request) {
       specialByCR
     );
 
-    const results = rawResults.map((t) => repriceTradeUp(t, prices));
+    // Live Steam Starting-at for skins that actually appear in blueprints
+    let priced = prices;
+    let steamLiveFetched = 0;
+    try {
+      const liveNames = collectTradeUpMarketNames(rawResults);
+      if (liveNames.length) {
+        const live = await fetchSteamStartingAtPrices(liveNames);
+        steamLiveFetched = live.fetched;
+        if (live.fetched > 0) {
+          priced = mergeLiveSteamPrices(prices, live.prices);
+        }
+      }
+    } catch {
+      /* keep bulk book */
+    }
+
+    const results = rawResults.map((t) => repriceTradeUp(t, priced));
 
     return NextResponse.json({
       results,
@@ -166,6 +187,7 @@ export async function POST(request: Request) {
         skinportPrices: priceMeta.skinportCount,
         steamApisStatus: priceMeta.steamApisStatus,
         skinportStatus: priceMeta.skinportStatus,
+        steamLiveFetched,
         pricesCachedAt: priceMeta.fetchedAt,
         pricesCachedUntil: priceMeta.cachedUntil,
         staleFallback: priceMeta.staleFallback || false,

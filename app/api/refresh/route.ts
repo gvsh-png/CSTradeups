@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { CSFLOAT_FEE, STEAM_FEE } from "@/lib/constants";
 import { getBulkPrices } from "@/lib/prices";
+import {
+  collectTradeUpMarketNames,
+  fetchSteamStartingAtPrices,
+  mergeLiveSteamPrices,
+} from "@/lib/steamLive";
 import { repriceTradeUp, sanitizePrices } from "@/lib/tradeup/generator";
 import { buildSkinDatabase, fetchSchema } from "@/lib/schema";
 import type { TradeUpResult } from "@/lib/tradeup/types";
@@ -40,6 +45,21 @@ export async function POST(request: Request) {
       prices = bulk;
     }
 
+    // Live Steam Starting-at for this blueprint's skins
+    let steamLiveFetched = 0;
+    try {
+      const liveNames = collectTradeUpMarketNames([tradeUp]);
+      if (liveNames.length) {
+        const live = await fetchSteamStartingAtPrices(liveNames);
+        steamLiveFetched = live.fetched;
+        if (live.fetched > 0) {
+          prices = mergeLiveSteamPrices(prices, live.prices);
+        }
+      }
+    } catch {
+      /* keep bulk */
+    }
+
     const fee = tradeUp.fee ?? CSFLOAT_FEE;
     // Drop cached AI insight — prices changed, so analysis is stale.
     // Client can request a fresh one after refresh.
@@ -52,7 +72,8 @@ export async function POST(request: Request) {
       tradeUp: refreshed,
       refreshedAt: new Date().toISOString(),
       feeType: fee === STEAM_FEE ? "steam" : "csfloat",
-      priceSource: meta.source,
+      priceSource: steamLiveFetched > 0 ? "steam-live" : meta.source,
+      steamLiveFetched,
     });
   } catch (error) {
     return NextResponse.json(
