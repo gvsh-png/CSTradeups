@@ -26,6 +26,8 @@ export interface PriceMeta {
   skinportStatus?: "ok" | "timeout" | "error";
   /** True when serving last-known-good prices after a failed refresh */
   staleFallback?: boolean;
+  /** Steam warm wrote the slim book to Redis (cross-instance) */
+  redisPersisted?: boolean;
 }
 
 interface SteamApisItem {
@@ -303,7 +305,15 @@ function isAbortError(err: unknown): boolean {
  * tools use) — stable Steam market price, not a single listing.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v18";
+/** Slim Steam `safe` book — bumped when Redis shape / Steam metric changes */
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v19";
+
+/** Compact Redis payload — full BulkPriceResult was too large for Upstash REST */
+type RedisSteamBook = {
+  prices: PriceMap;
+  fetchedAt: string;
+  steamApisCount: number;
+};
 
 async function fetchSteamApisCompact(
   compactValue: string
@@ -387,27 +397,82 @@ async function loadSteamPricesFromRedis(): Promise<BulkPriceResult | null> {
   if (!redisConfigured()) return null;
   try {
     const { Redis } = await import("@upstash/redis");
-    const raw = await Redis.fromEnv().get<BulkPriceResult>(REDIS_STEAM_PRICES_KEY);
-    if (!raw?.prices || priceCount(raw.prices) < 50) return null;
+    const raw = await Redis.fromEnv().get<
+      RedisSteamBook | BulkPriceResult
+    >(REDIS_STEAM_PRICES_KEY);
+    if (!raw || typeof raw !== "object") return null;
+
+    const prices =
+      "prices" in raw && raw.prices && typeof raw.prices === "object"
+        ? raw.prices
+        : null;
+    if (!prices || priceCount(prices) < 50) return null;
+
+    const fetchedAt =
+      ("fetchedAt" in raw && typeof raw.fetchedAt === "string" && raw.fetchedAt) ||
+      ("meta" in raw &&
+        raw.meta &&
+        typeof raw.meta === "object" &&
+        "fetchedAt" in raw.meta &&
+        typeof raw.meta.fetchedAt === "string" &&
+        raw.meta.fetchedAt) ||
+      new Date().toISOString();
+    const steamApisCount =
+      ("steamApisCount" in raw &&
+        typeof raw.steamApisCount === "number" &&
+        raw.steamApisCount) ||
+      ("meta" in raw &&
+        raw.meta &&
+        typeof raw.meta === "object" &&
+        "steamApisCount" in raw.meta &&
+        typeof raw.meta.steamApisCount === "number" &&
+        raw.meta.steamApisCount) ||
+      priceCount(prices);
+    const cachedUntil = new Date(
+      new Date(fetchedAt).getTime() + PRICE_CACHE_TTL * 1000
+    ).toISOString();
+
     return {
-      prices: raw.prices,
-      meta: { ...raw.meta, fromCache: true },
+      prices,
+      meta: {
+        source: "steamapis",
+        fetchedAt,
+        cachedUntil,
+        fromCache: true,
+        steamApisCount,
+        skinportCount: 0,
+        corrections: 0,
+        deadMarkets: 0,
+        steamApisStatus: "ok",
+        skinportStatus: "error",
+        redisPersisted: true,
+      },
     };
   } catch {
     return null;
   }
 }
 
-async function saveSteamPricesToRedis(result: BulkPriceResult): Promise<void> {
-  if (!redisConfigured()) return;
-  if (priceCount(result.prices) < 50) return;
+async function saveSteamPricesToRedis(
+  result: BulkPriceResult
+): Promise<boolean> {
+  if (!redisConfigured()) return false;
+  if (priceCount(result.prices) < 50) return false;
   try {
     const { Redis } = await import("@upstash/redis");
-    await Redis.fromEnv().set(REDIS_STEAM_PRICES_KEY, result, {
+    const slim: RedisSteamBook = {
+      prices: result.prices,
+      fetchedAt: result.meta.fetchedAt,
+      steamApisCount:
+        result.meta.steamApisCount || priceCount(result.prices),
+    };
+    await Redis.fromEnv().set(REDIS_STEAM_PRICES_KEY, slim, {
       ex: PRICE_CACHE_TTL,
     });
+    return true;
   } catch {
-    /* value may exceed Upstash size limits — ignore */
+    /* value may still exceed Upstash size limits */
+    return false;
   }
 }
 
@@ -621,19 +686,44 @@ function priceCount(prices: PriceMap): number {
 /**
  * Cold path must finish in a few seconds — never wait on Steam during a scan.
  * Skinport-first for scans; Steam compact enrich via warm + Redis.
+ *
+ * preferSteam: Steam ONLY (no Skinport). Sequential Skinport+Steam was
+ * timing out the Vercel gateway (~60s) so Redis never filled and every
+ * scan stayed on Skinport forever.
  */
 async function fetchFreshBulkPrices(opts?: {
   preferSteam?: boolean;
 }): Promise<BulkPriceResult> {
   const preferSteam = Boolean(opts?.preferSteam);
+
+  if (preferSteam) {
+    const steamApisResult = await fetchSteamApisPrices();
+    if (
+      steamApisResult.prices &&
+      Object.keys(steamApisResult.prices).length >= 50
+    ) {
+      return mergeBulkSources(
+        steamApisResult.prices,
+        null,
+        steamApisResult.corrections,
+        steamApisResult.sold,
+        null,
+        {
+          steamApisStatus: steamApisResult.status,
+          skinportStatus: "error",
+        }
+      );
+    }
+    return mergeBulkSources(null, null, 0, null, null, {
+      steamApisStatus: steamApisResult.status,
+      skinportStatus: "error",
+    });
+  }
+
   const skinportResult = await fetchSkinportPrices();
   const skinCount = Object.keys(skinportResult.prices || {}).length;
 
-  if (
-    !preferSteam &&
-    skinportResult.status === "ok" &&
-    skinCount >= 100
-  ) {
+  if (skinportResult.status === "ok" && skinCount >= 100) {
     return mergeBulkSources(
       null,
       skinportResult.prices,
@@ -647,7 +737,7 @@ async function fetchFreshBulkPrices(opts?: {
     );
   }
 
-  // Steam compact `safe` market price + Skinport liquidity
+  // Skinport thin/failed — try Steam as last resort on the scan path
   const steamApisResult = await fetchSteamApisPrices();
   const merged = mergeBulkSources(
     steamApisResult.prices,
@@ -685,18 +775,7 @@ async function fetchFreshBulkPrices(opts?: {
 /** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v18"],
-  {
-    revalidate: PRICE_CACHE_TTL,
-    tags: ["prices"],
-  }
-);
-
-/** Steam `safe` enrich — warm prefetch / Redis fill */
-const getCachedSteamPrices = unstable_cache(
-  async (): Promise<BulkPriceResult> =>
-    fetchFreshBulkPrices({ preferSteam: true }),
-  ["tradeup-bulk-prices-steam-v18"],
+  ["tradeup-bulk-prices-v19"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -719,24 +798,26 @@ export async function getBulkPrices(opts?: {
   preferSteam?: boolean;
 }): Promise<BulkPriceResult> {
   try {
-    // Warm prefetch: fill Steam book + persist to Redis (await — must stick)
-    if (opts?.preferSteam) {
-      const steam = await getCachedSteamPrices();
-      if (priceCount(steam.prices) >= 50 && isSteamSourced(steam.meta)) {
-        lastGoodPrices = steam;
-        await saveSteamPricesToRedis(steam);
-        return {
-          prices: steam.prices,
-          meta: { ...steam.meta, fromCache: true },
-        };
-      }
-    }
-
-    // Redis Steam book FIRST — never let a Skinport memory stick forever
+    // Redis Steam book FIRST — shared across serverless instances
     const fromRedis = await loadSteamPricesFromRedis();
     if (fromRedis && isSteamSourced(fromRedis.meta)) {
       lastGoodPrices = fromRedis;
       return fromRedis;
+    }
+
+    // Warm prefetch: fetch Steam only + persist slim book to Redis
+    // Do NOT use Next unstable_cache here — a timed-out warm used to cache
+    // Skinport-only under the steam key for 24h and block real Steam forever.
+    if (opts?.preferSteam) {
+      const steam = await fetchFreshBulkPrices({ preferSteam: true });
+      if (priceCount(steam.prices) >= 50 && isSteamSourced(steam.meta)) {
+        const redisPersisted = await saveSteamPricesToRedis(steam);
+        lastGoodPrices = {
+          prices: steam.prices,
+          meta: { ...steam.meta, redisPersisted },
+        };
+        return lastGoodPrices;
+      }
     }
 
     // Memory only if it's already Steam-sourced
@@ -751,7 +832,7 @@ export async function getBulkPrices(opts?: {
       };
     }
 
-    // Fallback: Skinport-first (fast) so scans still work
+    // Fallback: Skinport-first (fast) so scans still work before Steam warms
     const result = await getCachedBulkPrices();
     if (priceCount(result.prices) >= 50) {
       // Don't overwrite a Steam memory book with Skinport

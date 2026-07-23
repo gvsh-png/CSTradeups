@@ -34,14 +34,11 @@ export default function GeneratePage() {
     }
   }, []);
 
-  // Warm price cache before Scan: Skinport-first (fast), then Steam enrich (optional)
+  // Warm price cache before Scan: Steam fills Redis (source of truth);
+  // Skinport warms in parallel as a fast fallback if Steam is still loading.
   useEffect(() => {
-    void fetch("/api/prices?warm=1")
-      .catch(() => {})
-      .finally(() => {
-        // Background Steam enrich — must not block the first scan
-        void fetch("/api/prices?warm=1&steam=1").catch(() => {});
-      });
+    void fetch("/api/prices?warm=1&steam=1").catch(() => {});
+    void fetch("/api/prices?warm=1").catch(() => {});
   }, []);
 
   // After generate click: jump to the loading panel once it mounts
