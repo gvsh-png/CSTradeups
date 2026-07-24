@@ -113,6 +113,80 @@ assert(
 );
 assert("strict missing count", strict.missing.length, 1);
 
+function tradeUpHasFullSteamLive(tradeUp, live) {
+  for (const input of tradeUp.inputs || []) {
+    const key = marketHashFromParts(input.name, input.wear);
+    if (!(live[key] > 0)) return false;
+  }
+  for (const out of tradeUp.outcomes || []) {
+    const key = marketHashFromParts(out.name, out.wear);
+    if (!(live[key] > 0)) return false;
+  }
+  return true;
+}
+
+function applyLiveRepriceToTradeUps(tradeUps, bulk, live, reprice) {
+  const overlay = mergeLiveSteamPrices(bulk, live);
+  let fullLiveCount = 0;
+  const results = tradeUps.map((t) => {
+    if (tradeUpHasFullSteamLive(t, live)) {
+      fullLiveCount++;
+      return reprice(t, overlay);
+    }
+    return t;
+  });
+  return {
+    results,
+    fullLiveCount,
+    steamLiveStrict: fullLiveCount > 0 && fullLiveCount === results.length,
+  };
+}
+
+const tuA = {
+  id: "a",
+  expectedProfit: 1,
+  inputs: [{ name: "Skin A", wear: "FT", price: 1 }],
+  outcomes: [{ name: "Out A", wear: "FT", price: 10 }],
+};
+const tuB = {
+  id: "b",
+  expectedProfit: 2,
+  inputs: [{ name: "Skin B", wear: "FT", price: 2 }],
+  outcomes: [{ name: "Out B", wear: "FT", price: 20 }],
+};
+const bulkBook = {
+  "Skin A (FT)": 1,
+  "Out A (FT)": 10,
+  "Skin B (FT)": 2,
+  "Out B (FT)": 20,
+};
+const partialLive = {
+  "Skin A (FT)": 1.5,
+  "Out A (FT)": 12,
+  // Skin B / Out B missing — name cap or Steam timeout
+};
+const applied = applyLiveRepriceToTradeUps(
+  [tuA, tuB],
+  bulkBook,
+  partialLive,
+  (t, prices) => ({
+    ...t,
+    inputs: t.inputs.map((i) => ({
+      ...i,
+      price: prices[marketHashFromParts(i.name, i.wear)] ?? 0,
+    })),
+  })
+);
+assert("partial live keeps result count", applied.results.length, 2);
+assert("partial live updates covered", applied.results[0].inputs[0].price, 1.5);
+assert(
+  "partial live leaves uncovered bulk",
+  applied.results[1].inputs[0].price,
+  2
+);
+assert("partial live fullLiveCount", applied.fullLiveCount, 1);
+assert("partial live not strict", applied.steamLiveStrict ? 1 : 0, 0);
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);

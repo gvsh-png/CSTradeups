@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripeConfigured } from "@/lib/auth/config";
+import { isStaleSubscriptionEvent } from "@/lib/billing/subscriptionEvents";
 import { getStripe, planFromStripePriceId } from "@/lib/billing/stripe";
 import type { PlanId } from "@/lib/billing/plans";
 import {
   findByStripeCustomer,
+  getUser,
   linkStripeCustomer,
   setPlan,
 } from "@/lib/usage/store";
@@ -98,6 +100,12 @@ export async function POST(request: Request) {
           typeof sub.customer === "string" ? sub.customer : sub.customer.id;
         const steamId = await resolveSteamId(customerId, sub.metadata?.steamId);
         if (!steamId) break;
+
+        // Ignore events for an old subscription after the user replaced it.
+        const user = await getUser(steamId);
+        if (isStaleSubscriptionEvent(user?.stripeSubscriptionId, sub.id)) {
+          break;
+        }
 
         const active =
           event.type === "customer.subscription.updated" &&
