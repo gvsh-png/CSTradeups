@@ -275,3 +275,34 @@ export function tradeUpHasFullSteamLive(
   }
   return true;
 }
+
+/**
+ * Apply live Starting-at only to contracts fully covered by `live`.
+ * Uncovered contracts keep their bulk quotes — never drop them.
+ * (Name caps, Steam 429s, and timeouts commonly leave a partial live set.)
+ */
+export function applyLiveRepriceToTradeUps(
+  tradeUps: TradeUpResult[],
+  bulk: PriceMap,
+  live: PriceMap,
+  reprice: (t: TradeUpResult, prices: PriceMap) => TradeUpResult
+): {
+  results: TradeUpResult[];
+  fullLiveCount: number;
+  steamLiveStrict: boolean;
+} {
+  const overlay = mergeLiveSteamPrices(bulk, live);
+  let fullLiveCount = 0;
+  const results = tradeUps.map((t) => {
+    if (tradeUpHasFullSteamLive(t, live)) {
+      fullLiveCount++;
+      return reprice(t, overlay);
+    }
+    return t;
+  });
+  return {
+    results,
+    fullLiveCount,
+    steamLiveStrict: fullLiveCount > 0 && fullLiveCount === results.length,
+  };
+}

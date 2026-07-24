@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import {
-  applySteamLiveStrict,
+  applyLiveRepriceToTradeUps,
   collectTradeUpMarketNames,
   fetchSteamStartingAtPrices,
-  tradeUpHasFullSteamLive,
 } from "@/lib/steamLive";
 import { repriceTradeUp } from "@/lib/tradeup/generator";
 import type { TradeUpResult } from "@/lib/tradeup/types";
@@ -57,16 +56,12 @@ export async function POST(request: Request) {
       }
     }
 
-    const { prices } = applySteamLiveStrict(bulk, live.prices, liveNames);
-    let results = tradeUps.map((t) => repriceTradeUp(t, prices));
+    // Only reprice fully live-covered contracts; keep the rest at bulk prices.
+    // Never drop results when the live pass is capped / partial.
+    const { results: repriced, fullLiveCount, steamLiveStrict } =
+      applyLiveRepriceToTradeUps(tradeUps, bulk, live.prices, repriceTradeUp);
 
-    const fullLive = results.filter((t) =>
-      tradeUpHasFullSteamLive(t, live.prices)
-    );
-    const steamLiveStrict = fullLive.length > 0;
-    if (steamLiveStrict) results = fullLive;
-
-    results = [...results].sort(
+    const results = [...repriced].sort(
       (a, b) => b.expectedProfit - a.expectedProfit
     );
 
@@ -74,7 +69,12 @@ export async function POST(request: Request) {
       results,
       steamLiveFetched: live.fetched,
       steamLiveStrict,
-      priceSource: steamLiveStrict ? "steam-live" : "steam-live-partial",
+      priceSource:
+        fullLiveCount === 0
+          ? "unchanged"
+          : steamLiveStrict
+            ? "steam-live"
+            : "steam-live-partial",
       missing: live.missing,
     });
   } catch (error) {
