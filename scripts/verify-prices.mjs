@@ -284,7 +284,8 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
     }
   }
 
-  if (!(s > 0)) return fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0;
+  // No safe: consensus only — lone latest must not invent a book row
+  if (!(s > 0)) return fresh > 0 ? r2(fresh) : 0;
   if (s > LIVE && !(consensus && fresh <= LIVE)) return r2(s);
 
   if (consensus && fresh > 0) {
@@ -330,6 +331,38 @@ assert(
   "expensive skin stays on safe",
   resolveCheapSteamPrice(376.4, 350, 360),
   376.4
+);
+assert(
+  "no safe + lone latest dump → no price",
+  resolveCheapSteamPrice(0, 0.5, 0),
+  0
+);
+assert(
+  "no safe + latest≈median consensus → allow fresh",
+  resolveCheapSteamPrice(0, 2.2, 2.24),
+  2.22
+);
+
+/** Safe-miss fill policy (mirrors fetchSteamApisPrices) */
+function steamFillWithoutSafe(latest, median, liveUsd = 40) {
+  const price = resolveCheapSteamPrice(0, latest, median);
+  if (!(price > 0) || price > liveUsd) return 0;
+  return price;
+}
+assert(
+  "safe-miss fill rejects lone latest dump",
+  steamFillWithoutSafe(0.5, 0),
+  0
+);
+assert(
+  "safe-miss fill accepts latest≈median under live band",
+  steamFillWithoutSafe(2.2, 2.24),
+  2.22
+);
+assert(
+  "safe-miss fill rejects consensus above live band",
+  steamFillWithoutSafe(45, 46),
+  0
 );
 
 if (failed) {

@@ -314,7 +314,7 @@ function isAbortError(err: unknown): boolean {
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
 /** Chunked Steam book — bump when shape / metric / blend rules change */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v23";
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v24";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
 
 /** USD band where latest≈median can override stale `safe` toward live Steam */
@@ -441,8 +441,10 @@ export function resolveCheapSteamPrice(
     }
   }
 
+  // No `safe`: only accept latest≈median consensus. A lone latest/median
+  // print is often a dump/spike and must not invent a liquid book row.
   if (!(s > 0)) {
-    return { price: fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0, biased: false };
+    return { price: fresh > 0 ? r2(fresh) : 0, biased: false };
   }
 
   // Outside the live band — trust safe (knives, high-tier, thin books)
@@ -515,16 +517,26 @@ async function fetchSteamApisPrices(): Promise<SteamApisFetch> {
       );
       if (!(price > 0)) continue;
       prices[name] = price;
+      // Compact feeds omit volume — mark as sold so merge liquidity accepts
+      // outlier-filtered `safe` (and consensus fills below). Never do this for
+      // an unvalidated lone latest print.
       sold[name] = { sold7: 1, sold30: 1 };
       if (biased) corrections++;
     }
 
-    // latest-only fills for keys safe missed (still filter trade-up names)
-    if (latestMap) {
+    // Keys missing from `safe`: only fill when latest≈median agree (liquid
+    // proxy). A lone latest dump used to enter the book with fake sold
+    // counts and create ghost-cheap trade-up inputs.
+    if (latestMap && medianMap) {
       for (const [name, latest] of Object.entries(latestMap)) {
-        if (prices[name] || !keepSteamPriceKey(name) || !(latest > 0)) continue;
-        if (latest > LIVE_STEAM_USD) continue;
-        prices[name] = latest;
+        if (prices[name] || !keepSteamPriceKey(name)) continue;
+        const { price } = resolveCheapSteamPrice(
+          0,
+          latest,
+          medianMap[name] || 0
+        );
+        if (!(price > 0) || price > LIVE_STEAM_USD) continue;
+        prices[name] = price;
         sold[name] = { sold7: 1, sold30: 1 };
       }
     }
@@ -955,7 +967,7 @@ async function fetchFreshBulkPrices(opts?: {
 /** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v23"],
+  ["tradeup-bulk-prices-v24"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -981,7 +993,7 @@ const getCachedSteamPrices = unstable_cache(
     }
     return steam;
   },
-  ["tradeup-bulk-prices-steam-v23"],
+  ["tradeup-bulk-prices-steam-v24"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
