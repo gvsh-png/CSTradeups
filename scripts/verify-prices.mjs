@@ -266,7 +266,7 @@ assert(
   2.16
 );
 
-/** Live Steam band: latest≈median can override stale safe */
+/** Live Steam band: latest≈median can override stale-low safe (pull up only) */
 function resolveCheapSteamPrice(safe, latest, median = 0) {
   const s = safe > 0 ? safe : 0;
   const l = latest > 0 ? latest : 0;
@@ -290,10 +290,8 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
   if (consensus && fresh > 0) {
     const maxRef = Math.max(s, fresh);
     if (maxRef <= LIVE * 1.25) {
-      if (fresh / s >= 1.35 || s / fresh >= 1.35) {
-        if (fresh > s) return r2(fresh);
-        return r2(Math.min(l, m));
-      }
+      // Large gap: pull UP only — thin-book dump sales often share latest≈median
+      if (fresh > s && fresh / s >= 1.35) return r2(fresh);
       const lower = Math.min(s, l, m);
       if (lower >= s * 0.7) return r2(lower);
     }
@@ -315,6 +313,11 @@ assert(
   "Airlock-style: stale-low safe, fresh consensus → pull up",
   resolveCheapSteamPrice(8.09, 16.6, 16.5),
   16.55
+);
+assert(
+  "dump consensus under safe → keep safe (not ghost-cheap)",
+  resolveCheapSteamPrice(32, 4, 4.05),
+  32
 );
 assert(
   "cheap but latest dumped alone → keep safe",

@@ -307,14 +307,14 @@ function isAbortError(err: unknown): boolean {
  * `safe` is SteamApis' outlier-filtered market price — usually good, but can
  * go stale-low (Airlock WW `safe` ~$8 while Steam Starting at ~$16).
  *
- * When `latest` and `median` agree, treat that as a liquid live book and
- * prefer it over a far-off `safe` (either direction). Also nudge toward the
- * lower fresh print ≈ Starting at inside the live band.
+ * When `latest` and `median` agree and sit above a stale-low `safe`, prefer
+ * that liquid consensus (pull up). Close books nudge toward Starting at.
+ * Large downward consensus is rejected — thin dump sales share latest≈median.
  * Never uses historical `min`.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
 /** Chunked Steam book — bump when shape / metric / blend rules change */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v23";
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v24";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
 
 /** USD band where latest≈median can override stale `safe` toward live Steam */
@@ -413,9 +413,12 @@ async function fetchSteamApisCompact(
  * Resolve SteamApis compact metrics toward a live Steam Market price.
  *
  * - If latest≈median (liquid book), prefer that consensus when `safe` is stale
- *   (Airlock WW: safe ~$8 vs fresh ~$16 Starting at).
+ *   *low* (Airlock WW: safe ~$8 vs fresh ~$16 Starting at) — pull UP only.
  * - When safe and fresh are close, nudge toward the lower print (Starting at)
- *   for items in the live band.
+ *   for items in the live band (Anodized-style).
+ * - Never let a large downward "consensus" override safe: thin books often
+ *   have latest≈median equal to one dump sale, which invented ghost-cheap
+ *   inputs while compact rows still force sold7/sold30=1.
  * - A lone latest/median print never overrides safe (could be a dump/spike).
  * - Expensive / thin books stay on `safe`.
  * Never uses historical `min`.
@@ -450,13 +453,12 @@ export function resolveCheapSteamPrice(
     return { price: r2(s), biased: false };
   }
 
-  // Stale safe vs liquid consensus — pull either direction
+  // Stale-low safe vs liquid consensus — pull UP only (never dump-sized downs)
   if (consensus && fresh > 0) {
     const maxRef = Math.max(s, fresh);
     if (maxRef <= LIVE_STEAM_USD * 1.25) {
-      if (fresh / s >= 1.35 || s / fresh >= 1.35) {
-        if (fresh > s) return { price: r2(fresh), biased: true };
-        return { price: r2(Math.min(l, m)), biased: true };
+      if (fresh > s && fresh / s >= 1.35) {
+        return { price: r2(fresh), biased: true };
       }
       // Close: nudge toward Starting at (lower fresh print)
       const lower = Math.min(s, l, m);
