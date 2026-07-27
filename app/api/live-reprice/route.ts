@@ -3,6 +3,7 @@ import {
   applySteamLiveStrict,
   collectTradeUpMarketNames,
   fetchSteamStartingAtPrices,
+  marketHashFromParts,
   tradeUpHasFullSteamLive,
 } from "@/lib/steamLive";
 import { repriceTradeUp } from "@/lib/tradeup/generator";
@@ -44,15 +45,16 @@ export async function POST(request: Request) {
       });
     }
 
-    // Build a price map from each trade-up's current quotes, then overlay live
+    // Build a price map from each trade-up's current quotes, then overlay live.
+    // Use market hash keys (bare ★ vanillas — never invent "★ Knife (FN)").
     const bulk: Record<string, number> = {};
     for (const tu of tradeUps) {
       for (const input of tu.inputs || []) {
-        const key = `${input.name} (${input.wear})`;
+        const key = marketHashFromParts(input.name, input.wear);
         if (input.price > 0) bulk[key] = input.price;
       }
       for (const out of tu.outcomes || []) {
-        const key = `${out.name} (${out.wear})`;
+        const key = marketHashFromParts(out.name, out.wear);
         if (out.price > 0) bulk[key] = out.price;
       }
     }

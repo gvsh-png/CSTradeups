@@ -237,6 +237,26 @@ export function mergeLiveSteamPrices(
   return { ...bulk, ...live };
 }
 
+const WEAR_SUFFIXES = [
+  "Factory New",
+  "Minimal Wear",
+  "Field-Tested",
+  "Well-Worn",
+  "Battle-Scarred",
+] as const;
+
+function isVanillaStarName(name: string): boolean {
+  return name.startsWith("★ ") && !name.includes(" | ");
+}
+
+/** Drop invented "★ Knife (FN)" aliases — Steam lists vanillas bare. */
+function clearVanillaWearAliases(prices: PriceMap, bareName: string): void {
+  if (!isVanillaStarName(bareName)) return;
+  for (const wear of WEAR_SUFFIXES) {
+    delete prices[`${bareName} (${wear})`];
+  }
+}
+
 /**
  * Strict Steam book for required names: live Starting-at only.
  * Clears bulk quotes for required names so we never display SteamApis as Steam.
@@ -252,8 +272,10 @@ export function applySteamLiveStrict(
     const livePrice = live[name] || 0;
     if (livePrice > 0) {
       prices[name] = livePrice;
+      clearVanillaWearAliases(prices, name);
     } else {
       delete prices[name];
+      clearVanillaWearAliases(prices, name);
       missing.push(name);
     }
   }
