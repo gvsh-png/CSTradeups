@@ -1161,11 +1161,12 @@ export function getPrice(
   skinName: string,
   wear: string
 ): number {
-  const withWear = prices[`${skinName} (${wear})`] || 0;
-  if (withWear > 0) return withWear;
-  // Vanilla knives/gloves list on Steam without an exterior suffix
+  // Vanilla knives/gloves list on Steam without an exterior suffix.
+  // Prefer the bare key so invented "★ Knife (FN)" bulk aliases cannot
+  // shadow a real live Starting-at quote under the bare market hash.
   if (skinName.startsWith("★ ") && !skinName.includes(" | ")) {
-    return prices[skinName] || 0;
+    const bare = prices[skinName] || 0;
+    if (bare > 0) return bare;
   }
-  return 0;
+  return prices[`${skinName} (${wear})`] || 0;
 }
