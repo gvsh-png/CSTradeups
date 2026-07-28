@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { SavedTradeUp, TradeUpResult } from "@/lib/tradeup/types";
 import { STORAGE_KEY } from "@/lib/constants";
+import { trimSavedToPlanLimit } from "@/lib/billing/plans";
 import { loadSettings, saveSettings, type AppSettings } from "@/lib/settings";
 import { useAuth } from "./AuthProvider";
 
@@ -39,7 +40,6 @@ export function SavedProvider({ children }: { children: ReactNode }) {
     claimSave,
     releaseSave,
     syncSavedCount,
-    limits,
   } = useAuth();
 
   const [saved, setSaved] = useState<SavedTradeUp[]>([]);
@@ -74,10 +74,12 @@ export function SavedProvider({ children }: { children: ReactNode }) {
     if (!hydrated || !authConfigured || !user) return;
     void syncSavedCount(saved.length).then((result) => {
       if (!result.ok && result.error) {
-        const max = limits.freeMaxSaved;
-        if (saved.length > max) {
-          persistSaved(saved.slice(0, max));
-          void syncSavedCount(max);
+        // Trim to THIS plan's cap — never freeMaxSaved for Starter/Pro
+        // (that wiped paid users down to 1 local favorite).
+        const trimmed = trimSavedToPlanLimit(saved, user.plan);
+        if (trimmed.length < saved.length) {
+          persistSaved(trimmed);
+          void syncSavedCount(trimmed.length);
         }
       }
     });
