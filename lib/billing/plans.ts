@@ -46,6 +46,16 @@ export function maxSavedLimit(plan: PlanId): number | null {
   return FREE_MAX_SAVED;
 }
 
+/**
+ * Keep the newest saves within the plan's slot cap.
+ * Pro (unlimited) is a no-op. Never use the free-tier cap for paid plans.
+ */
+export function trimSavedToPlanLimit<T>(saved: T[], plan: PlanId): T[] {
+  const max = maxSavedLimit(plan);
+  if (max == null || saved.length <= max) return saved;
+  return saved.slice(0, max);
+}
+
 /** ISO week key like 2026-W30 — resets weekly quotas */
 export function currentWeekKey(date = new Date()): string {
   const d = new Date(
