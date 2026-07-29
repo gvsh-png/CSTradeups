@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripeConfigured } from "@/lib/auth/config";
-import { getStripe, planFromStripePriceId } from "@/lib/billing/stripe";
+import { getStripe, planFromSubscription } from "@/lib/billing/stripe";
 import type { PlanId } from "@/lib/billing/plans";
 import {
   findByStripeCustomer,
@@ -20,13 +20,6 @@ async function resolveSteamId(
     if (user?.steamId) return user.steamId;
   }
   return metadataSteamId || null;
-}
-
-function planFromSubscription(sub: Stripe.Subscription): PlanId {
-  const metaPlan = sub.metadata?.plan;
-  if (metaPlan === "starter" || metaPlan === "pro") return metaPlan;
-  const priceId = sub.items.data[0]?.price?.id;
-  return planFromStripePriceId(priceId);
 }
 
 export async function POST(request: Request) {
