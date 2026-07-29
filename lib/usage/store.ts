@@ -28,51 +28,82 @@ function userKey(steamId: string) {
   return `user:${steamId}`;
 }
 
+function userLockKey(steamId: string) {
+  return `user:lock:${steamId}`;
+}
+
 export async function getUser(steamId: string): Promise<UserRecord | null> {
   const raw = await redis().get<UserRecord>(userKey(steamId));
   return raw ?? null;
+}
+
+/**
+ * Serialize read-modify-write on a user record.
+ * Without this, scan/save/login full-document SETs race Stripe setPlan and
+ * can silently downgrade a paid user back to free.
+ */
+async function withUserLock<T>(
+  steamId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const r = redis();
+  const lockKey = userLockKey(steamId);
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const locked = await r.set(lockKey, "1", { nx: true, px: 5_000 });
+    if (locked) {
+      try {
+        return await fn();
+      } finally {
+        await r.del(lockKey);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20 * (attempt + 1)));
+  }
+  throw new Error("Could not update account — please retry.");
+}
+
+async function saveUserLocked(user: UserRecord): Promise<UserRecord> {
+  const next = { ...user, updatedAt: new Date().toISOString() };
+  await redis().set(userKey(user.steamId), next);
+  return next;
 }
 
 export async function upsertUser(
   input: Pick<UserRecord, "steamId" | "name" | "avatar"> &
     Partial<Pick<UserRecord, "plan">>
 ): Promise<UserRecord> {
-  const existing = await getUser(input.steamId);
-  const now = new Date().toISOString();
-  const weekKey = currentWeekKey();
+  return withUserLock(input.steamId, async () => {
+    const existing = await getUser(input.steamId);
+    const now = new Date().toISOString();
+    const weekKey = currentWeekKey();
 
-  const user: UserRecord = existing
-    ? {
-        ...existing,
-        name: input.name,
-        avatar: input.avatar ?? existing.avatar,
-        plan: input.plan ?? existing.plan,
-        weekKey:
-          existing.weekKey === weekKey ? existing.weekKey : weekKey,
-        weeklyScans:
-          existing.weekKey === weekKey ? existing.weeklyScans : 0,
-        updatedAt: now,
-      }
-    : {
-        steamId: input.steamId,
-        name: input.name,
-        avatar: input.avatar,
-        plan: input.plan ?? "free",
-        weekKey,
-        weeklyScans: 0,
-        savedCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      };
+    const user: UserRecord = existing
+      ? {
+          ...existing,
+          name: input.name,
+          avatar: input.avatar ?? existing.avatar,
+          plan: input.plan ?? existing.plan,
+          weekKey:
+            existing.weekKey === weekKey ? existing.weekKey : weekKey,
+          weeklyScans:
+            existing.weekKey === weekKey ? existing.weeklyScans : 0,
+          updatedAt: now,
+        }
+      : {
+          steamId: input.steamId,
+          name: input.name,
+          avatar: input.avatar,
+          plan: input.plan ?? "free",
+          weekKey,
+          weeklyScans: 0,
+          savedCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        };
 
-  await redis().set(userKey(input.steamId), user);
-  return user;
-}
-
-async function saveUser(user: UserRecord): Promise<UserRecord> {
-  const next = { ...user, updatedAt: new Date().toISOString() };
-  await redis().set(userKey(user.steamId), next);
-  return next;
+    await redis().set(userKey(input.steamId), user);
+    return user;
+  });
 }
 
 function rollWeek(user: UserRecord): UserRecord {
@@ -114,107 +145,149 @@ export function quotaFromUser(user: UserRecord): QuotaSnapshot {
 export async function consumeScan(
   steamId: string
 ): Promise<{ ok: true; user: UserRecord; quota: QuotaSnapshot } | { ok: false; reason: string; quota: QuotaSnapshot }> {
-  const existing = await getUser(steamId);
-  if (!existing) {
+  const missingQuota = (): QuotaSnapshot =>
+    quotaFromUser({
+      steamId,
+      name: "",
+      plan: "free",
+      weekKey: currentWeekKey(),
+      weeklyScans: 0,
+      savedCount: 0,
+      createdAt: "",
+      updatedAt: "",
+    });
+
+  try {
+    return await withUserLock(steamId, async () => {
+      const existing = await getUser(steamId);
+      if (!existing) {
+        return {
+          ok: false as const,
+          reason: "Account not found. Sign in with Steam again.",
+          quota: missingQuota(),
+        };
+      }
+
+      let user = rollWeek(existing);
+      const scanLimit = weeklyScanLimit(user.plan);
+      const weekKey = user.weekKey;
+      const r = redis();
+
+      // Atomic counter avoids concurrent free-tier overshoot across instances
+      if (scanLimit != null) {
+        const counterKey = `quota:scans:${steamId}:${weekKey}`;
+        const next = await r.incr(counterKey);
+        if (next === 1) {
+          await r.expire(counterKey, 60 * 60 * 24 * 14);
+        }
+        if (next > scanLimit) {
+          await r.decr(counterKey);
+          const quota = quotaFromUser({ ...user, weeklyScans: scanLimit });
+          return {
+            ok: false as const,
+            reason: `Free plan allows ${scanLimit} scans per week. Upgrade to Pro for unlimited.`,
+            quota,
+          };
+        }
+        user = await saveUserLocked({ ...user, weeklyScans: next });
+        return { ok: true as const, user, quota: quotaFromUser(user) };
+      }
+
+      user = await saveUserLocked({
+        ...user,
+        weeklyScans: user.weeklyScans + 1,
+      });
+      return { ok: true as const, user, quota: quotaFromUser(user) };
+    });
+  } catch (err) {
     return {
       ok: false,
-      reason: "Account not found. Sign in with Steam again.",
-      quota: quotaFromUser({
-        steamId,
-        name: "",
-        plan: "free",
-        weekKey: currentWeekKey(),
-        weeklyScans: 0,
-        savedCount: 0,
-        createdAt: "",
-        updatedAt: "",
-      }),
+      reason:
+        err instanceof Error
+          ? err.message
+          : "Could not update account — please retry.",
+      quota: missingQuota(),
     };
   }
-
-  let user = rollWeek(existing);
-  const scanLimit = weeklyScanLimit(user.plan);
-  const weekKey = user.weekKey;
-  const r = redis();
-
-  // Atomic counter avoids concurrent free-tier overshoot
-  if (scanLimit != null) {
-    const counterKey = `quota:scans:${steamId}:${weekKey}`;
-    const next = await r.incr(counterKey);
-    if (next === 1) {
-      await r.expire(counterKey, 60 * 60 * 24 * 14);
-    }
-    if (next > scanLimit) {
-      await r.decr(counterKey);
-      const quota = quotaFromUser({ ...user, weeklyScans: scanLimit });
-      return {
-        ok: false,
-        reason: `Free plan allows ${scanLimit} scans per week. Upgrade to Pro for unlimited.`,
-        quota,
-      };
-    }
-    user = await saveUser({ ...user, weeklyScans: next });
-    return { ok: true, user, quota: quotaFromUser(user) };
-  }
-
-  user = await saveUser({ ...user, weeklyScans: user.weeklyScans + 1 });
-  return { ok: true, user, quota: quotaFromUser(user) };
 }
 
 export async function setSavedCount(
   steamId: string,
   savedCount: number
 ): Promise<UserRecord | null> {
-  const existing = await getUser(steamId);
-  if (!existing) return null;
-  return saveUser({
-    ...rollWeek(existing),
-    savedCount: Math.max(0, Math.floor(savedCount)),
+  return withUserLock(steamId, async () => {
+    const existing = await getUser(steamId);
+    if (!existing) return null;
+    return saveUserLocked({
+      ...rollWeek(existing),
+      savedCount: Math.max(0, Math.floor(savedCount)),
+    });
   });
 }
 
 export async function claimSaveSlot(
   steamId: string
 ): Promise<{ ok: true; user: UserRecord; quota: QuotaSnapshot } | { ok: false; reason: string; quota: QuotaSnapshot }> {
-  const existing = await getUser(steamId);
-  if (!existing) {
+  const missingQuota = (): QuotaSnapshot =>
+    quotaFromUser({
+      steamId,
+      name: "",
+      plan: "free",
+      weekKey: currentWeekKey(),
+      weeklyScans: 0,
+      savedCount: 0,
+      createdAt: "",
+      updatedAt: "",
+    });
+
+  try {
+    return await withUserLock(steamId, async () => {
+      const existing = await getUser(steamId);
+      if (!existing) {
+        return {
+          ok: false as const,
+          reason: "Sign in with Steam to save trade-ups.",
+          quota: missingQuota(),
+        };
+      }
+
+      const user = rollWeek(existing);
+      const quota = quotaFromUser(user);
+      if (!quota.canSave) {
+        return {
+          ok: false as const,
+          reason: `Free plan allows ${quota.maxSaved} saved trade-up at a time. Remove one or upgrade to Pro.`,
+          quota,
+        };
+      }
+
+      const next = await saveUserLocked({
+        ...user,
+        savedCount: user.savedCount + 1,
+      });
+      return { ok: true as const, user: next, quota: quotaFromUser(next) };
+    });
+  } catch (err) {
     return {
       ok: false,
-      reason: "Sign in with Steam to save trade-ups.",
-      quota: quotaFromUser({
-        steamId,
-        name: "",
-        plan: "free",
-        weekKey: currentWeekKey(),
-        weeklyScans: 0,
-        savedCount: 0,
-        createdAt: "",
-        updatedAt: "",
-      }),
+      reason:
+        err instanceof Error
+          ? err.message
+          : "Could not update account — please retry.",
+      quota: missingQuota(),
     };
   }
-
-  const user = rollWeek(existing);
-  const quota = quotaFromUser(user);
-  if (!quota.canSave) {
-    return {
-      ok: false,
-      reason: `Free plan allows ${quota.maxSaved} saved trade-up at a time. Remove one or upgrade to Pro.`,
-      quota,
-    };
-  }
-
-  const next = await saveUser({ ...user, savedCount: user.savedCount + 1 });
-  return { ok: true, user: next, quota: quotaFromUser(next) };
 }
 
 export async function releaseSaveSlot(steamId: string): Promise<UserRecord | null> {
-  const existing = await getUser(steamId);
-  if (!existing) return null;
-  const user = rollWeek(existing);
-  return saveUser({
-    ...user,
-    savedCount: Math.max(0, user.savedCount - 1),
+  return withUserLock(steamId, async () => {
+    const existing = await getUser(steamId);
+    if (!existing) return null;
+    const user = rollWeek(existing);
+    return saveUserLocked({
+      ...user,
+      savedCount: Math.max(0, user.savedCount - 1),
+    });
   });
 }
 
@@ -223,16 +296,18 @@ export async function setPlan(
   plan: PlanId,
   stripe?: { customerId?: string; subscriptionId?: string | null }
 ): Promise<UserRecord | null> {
-  const existing = await getUser(steamId);
-  if (!existing) return null;
-  return saveUser({
-    ...rollWeek(existing),
-    plan,
-    stripeCustomerId: stripe?.customerId ?? existing.stripeCustomerId,
-    stripeSubscriptionId:
-      stripe?.subscriptionId === null
-        ? undefined
-        : stripe?.subscriptionId ?? existing.stripeSubscriptionId,
+  return withUserLock(steamId, async () => {
+    const existing = await getUser(steamId);
+    if (!existing) return null;
+    return saveUserLocked({
+      ...rollWeek(existing),
+      plan,
+      stripeCustomerId: stripe?.customerId ?? existing.stripeCustomerId,
+      stripeSubscriptionId:
+        stripe?.subscriptionId === null
+          ? undefined
+          : stripe?.subscriptionId ?? existing.stripeSubscriptionId,
+    });
   });
 }
 
@@ -250,8 +325,10 @@ export async function linkStripeCustomer(
   customerId: string
 ): Promise<void> {
   await redis().set(`stripe:customer:${customerId}`, steamId);
-  const user = await getUser(steamId);
-  if (user) {
-    await saveUser({ ...user, stripeCustomerId: customerId });
-  }
+  await withUserLock(steamId, async () => {
+    const user = await getUser(steamId);
+    if (user) {
+      await saveUserLocked({ ...user, stripeCustomerId: customerId });
+    }
+  });
 }

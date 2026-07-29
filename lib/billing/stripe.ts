@@ -40,6 +40,29 @@ export function planFromStripePriceId(priceId: string | undefined): PlanId {
   return "pro";
 }
 
+/**
+ * Resolve plan from a Stripe subscription.
+ * Prefer the live item price when Starter/Pro price IDs are distinct —
+ * checkout `metadata.plan` is sticky and goes stale after portal upgrades.
+ * Fall back to metadata only for legacy single-price configs.
+ */
+export function planFromSubscription(sub: {
+  metadata?: { plan?: string | null } | null;
+  items?: { data?: Array<{ price?: { id?: string } | null } | null> } | null;
+}): PlanId {
+  const priceId = sub.items?.data?.[0]?.price?.id;
+  const starter =
+    process.env.STRIPE_PRICE_ID_STARTER || process.env.STRIPE_PRICE_ID;
+  const pro = process.env.STRIPE_PRICE_ID_PRO || process.env.STRIPE_PRICE_ID;
+  if (priceId && starter && pro && starter !== pro) {
+    if (priceId === starter) return "starter";
+    if (priceId === pro) return "pro";
+  }
+  const metaPlan = sub.metadata?.plan;
+  if (metaPlan === "starter" || metaPlan === "pro") return metaPlan;
+  return planFromStripePriceId(priceId);
+}
+
 /** @deprecated use stripePriceIdForPlan("pro") */
 export function stripePriceId(): string {
   return stripePriceIdForPlan("pro");
