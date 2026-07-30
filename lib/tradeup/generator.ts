@@ -205,13 +205,18 @@ function buildOutcomes(
   return [...merged.values()];
 }
 
-/** Keep only specials that have a buyable price for the float-derived wear */
+/**
+ * Covert knife/glove pools: require every special to be buyable for the
+ * float-derived wear. Dropping unpriced specials and keeping the rest would
+ * renormalize odds over a partial pool inside buildOutcomes (fake EV / win%).
+ */
 function pricedSpecialOutcomes(
   outs: SkinData[],
   avgN: number,
   prices: PriceMap
 ): SkinData[] {
-  return outs.filter((outSkin) => {
+  if (!outs.length) return [];
+  for (const outSkin of outs) {
     const outFloat = clampFloat(
       outF(avgN, outSkin.minF, outSkin.maxF),
       outSkin.minF,
@@ -219,10 +224,13 @@ function pricedSpecialOutcomes(
     );
     const wear = getWearForSkin(outFloat, outSkin.minF, outSkin.maxF);
     if (!possibleWears(outSkin.minF, outSkin.maxF, 0.001).includes(wear)) {
-      return false;
+      return [];
     }
-    return getPrice(prices, outSkin.name, wear) > 0;
-  });
+    if (getPrice(prices, outSkin.name, wear) <= 0) {
+      return [];
+    }
+  }
+  return outs;
 }
 
 function toTradeUpResult(
