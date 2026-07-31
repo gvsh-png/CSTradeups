@@ -16,23 +16,57 @@ export function steamLoginUrl(returnTo: string): string {
   return `${STEAM_OPENID}?${params.toString()}`;
 }
 
-/** Verify OpenID assertion with Steam and extract SteamID64 */
-export async function verifySteamOpenId(
-  query: URLSearchParams
-): Promise<string> {
-  const claimedId = query.get("openid.claimed_id") || "";
+function parseSteamIdFromClaimedId(claimedId: string): string {
   const match = claimedId.match(
     /^https?:\/\/steamcommunity\.com\/openid\/id\/(\d+)$/
   );
   if (!match) throw new Error("Invalid Steam OpenID claimed_id");
+  return match[1];
+}
 
-  const steamId = match[1];
-
+/**
+ * Collect OpenID assertion params for Steam check_authentication.
+ * Rejects duplicate openid.* keys so claimed_id used for the session cannot
+ * diverge from the value Steam validates (classic multi-value injection).
+ */
+export function steamOpenIdAssertion(
+  query: URLSearchParams,
+  expectedReturnTo: string
+): { steamId: string; body: URLSearchParams } {
+  const seen = new Set<string>();
   const body = new URLSearchParams();
   for (const [key, value] of query.entries()) {
-    if (key.startsWith("openid.")) body.set(key, value);
+    if (!key.startsWith("openid.")) continue;
+    if (seen.has(key)) {
+      throw new Error(`Duplicate OpenID parameter: ${key}`);
+    }
+    seen.add(key);
+    body.set(key, value);
   }
+
+  const returnTo = body.get("openid.return_to") || "";
+  if (!returnTo || returnTo !== expectedReturnTo) {
+    throw new Error("OpenID return_to mismatch");
+  }
+
+  const claimedId = body.get("openid.claimed_id") || "";
+  const steamId = parseSteamIdFromClaimedId(claimedId);
+
+  const identity = body.get("openid.identity") || "";
+  if (identity && identity !== claimedId) {
+    throw new Error("OpenID identity mismatch");
+  }
+
   body.set("openid.mode", "check_authentication");
+  return { steamId, body };
+}
+
+/** Verify OpenID assertion with Steam and extract SteamID64 */
+export async function verifySteamOpenId(
+  query: URLSearchParams,
+  expectedReturnTo: string = `${appBaseUrl()}/api/auth/steam/callback`
+): Promise<string> {
+  const { steamId, body } = steamOpenIdAssertion(query, expectedReturnTo);
 
   const res = await fetch(STEAM_OPENID, {
     method: "POST",

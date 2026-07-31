@@ -17,7 +17,8 @@ export async function GET(request: Request) {
 
   try {
     const url = new URL(request.url);
-    const steamId = await verifySteamOpenId(url.searchParams);
+    const expectedReturnTo = `${appBaseUrl()}/api/auth/steam/callback`;
+    const steamId = await verifySteamOpenId(url.searchParams, expectedReturnTo);
     const profile = await fetchSteamProfile(steamId);
     const user = await upsertUser(profile);
     const token = await createSessionToken({
