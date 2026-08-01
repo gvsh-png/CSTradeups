@@ -12,7 +12,7 @@ import {
   repriceTradeUp,
   sanitizePrices,
 } from "@/lib/tradeup/generator";
-import { consumeScan } from "@/lib/usage/store";
+import { consumeScan, refundScan } from "@/lib/usage/store";
 import { normalizeComplexity } from "@/lib/constants";
 import type { GenerateParams } from "@/lib/tradeup/types";
 import {
@@ -24,6 +24,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
 export async function POST(request: Request) {
+  let billedSteamId: string | null = null;
+
   try {
     let quotaMeta: Record<string, unknown> | null = null;
 
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
             { status: 403 }
           );
         }
+        billedSteamId = session.steamId;
         quotaMeta = consumed.quota as unknown as Record<string, unknown>;
       }
     }
@@ -127,6 +130,11 @@ export async function POST(request: Request) {
 
     const priceCount = Object.values(prices).filter((p) => p > 0).length;
     if (priceCount < 50) {
+      // Feed failure — do not burn a weekly scan credit
+      if (billedSteamId) {
+        await refundScan(billedSteamId);
+        billedSteamId = null;
+      }
       return NextResponse.json(
         {
           error: pricesUnavailableMessage(priceMeta),
@@ -184,6 +192,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Generate error:", error);
+    if (billedSteamId) {
+      try {
+        await refundScan(billedSteamId);
+      } catch (refundErr) {
+        console.error("Scan refund failed:", refundErr);
+      }
+    }
     return NextResponse.json(
       {
         error:

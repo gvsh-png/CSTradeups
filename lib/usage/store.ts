@@ -161,6 +161,44 @@ export async function consumeScan(
   return { ok: true, user, quota: quotaFromUser(user) };
 }
 
+/**
+ * Undo a successful consumeScan when the scan fails after debit
+ * (prices unavailable, generation error). Keeps free/starter quotas honest.
+ */
+export async function refundScan(steamId: string): Promise<QuotaSnapshot | null> {
+  const existing = await getUser(steamId);
+  if (!existing) return null;
+
+  let user = rollWeek(existing);
+  const scanLimit = weeklyScanLimit(user.plan);
+  const weekKey = user.weekKey;
+  const r = redis();
+
+  if (scanLimit != null) {
+    const counterKey = `quota:scans:${steamId}:${weekKey}`;
+    const next = await r.decr(counterKey);
+    // Counter missing / already zero — do not go negative
+    if (next < 0) {
+      await r.set(counterKey, 0);
+      await r.expire(counterKey, 60 * 60 * 24 * 14);
+      user = await saveUser({ ...user, weeklyScans: 0 });
+      return quotaFromUser(user);
+    }
+    user = await saveUser({
+      ...user,
+      weeklyScans: Math.max(0, Math.min(next, scanLimit)),
+    });
+    return quotaFromUser(user);
+  }
+
+  // Unlimited plans still track weeklyScans for display
+  user = await saveUser({
+    ...user,
+    weeklyScans: Math.max(0, user.weeklyScans - 1),
+  });
+  return quotaFromUser(user);
+}
+
 export async function setSavedCount(
   steamId: string,
   savedCount: number
