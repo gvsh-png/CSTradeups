@@ -310,11 +310,13 @@ function isAbortError(err: unknown): boolean {
  * When `latest` and `median` agree, treat that as a liquid live book and
  * prefer it over a far-off `safe` (either direction). Also nudge toward the
  * lower fresh print ≈ Starting at inside the live band.
+ * A lone fresher print may nudge down near safe; if both fresher prints exist
+ * but disagree, keep `safe` (never pick latest alone as a fake dump).
  * Never uses historical `min`.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
 /** Chunked Steam book — bump when shape / metric / blend rules change */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v23";
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v25";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
 
 /** USD band where latest≈median can override stale `safe` toward live Steam */
@@ -416,7 +418,8 @@ async function fetchSteamApisCompact(
  *   (Airlock WW: safe ~$8 vs fresh ~$16 Starting at).
  * - When safe and fresh are close, nudge toward the lower print (Starting at)
  *   for items in the live band.
- * - A lone latest/median print never overrides safe (could be a dump/spike).
+ * - Exactly one fresher print may nudge down near safe; if both fresher prints
+ *   exist but disagree, keep `safe` (never pick a dump latest alone).
  * - Expensive / thin books stay on `safe`.
  * Never uses historical `min`.
  */
@@ -466,8 +469,11 @@ export function resolveCheapSteamPrice(
     }
   }
 
-  // Single fresher print: only nudge down when near safe (no upward lone spike)
-  const one = l || m;
+  // Exactly one fresher print: nudge down when near safe (no upward lone spike).
+  // If both latest and median exist but failed consensus, trust safe — otherwise
+  // `l || m` underprices mid-tier skins on a dump latest (e.g. safe $30 /
+  // latest $21 / median $29.5 → wrongly $21).
+  const one = l > 0 && !(m > 0) ? l : m > 0 && !(l > 0) ? m : 0;
   if (one > 0 && one >= s * 0.7 && one <= s * 1.05 && s <= LIVE_STEAM_USD) {
     const picked = Math.min(s, one);
     return { price: r2(picked), biased: picked !== s };

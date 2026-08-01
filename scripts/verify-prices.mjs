@@ -299,7 +299,8 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
     }
   }
 
-  const one = l || m;
+  // Exactly one fresher print — never pick latest alone when median disagrees
+  const one = l > 0 && !(m > 0) ? l : m > 0 && !(l > 0) ? m : 0;
   if (one > 0 && one >= s * 0.7 && one <= s * 1.05 && s <= LIVE) {
     return r2(Math.min(s, one));
   }
@@ -325,6 +326,16 @@ assert(
   "latest spiked vs median → keep safe",
   resolveCheapSteamPrice(14, 80, 14.5),
   14
+);
+assert(
+  "disagreeing latest dump under healthy median → keep safe",
+  resolveCheapSteamPrice(30, 21, 29.5),
+  30
+);
+assert(
+  "lone latest near safe (median missing) still nudges down",
+  resolveCheapSteamPrice(2.59, 2.24, 0),
+  2.24
 );
 assert(
   "expensive skin stays on safe",
