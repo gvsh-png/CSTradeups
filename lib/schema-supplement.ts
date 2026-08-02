@@ -1,10 +1,16 @@
 import type { SchemaData, SchemaWeapon } from "./tradeup/types";
 
-/** CSFloat /schema omits some live collections (Ascent as of Jul 2026). */
+/**
+ * Synthetic key used only when CSFloat omits Ascent entirely.
+ * Live schema ships Ascent as `set_timed_drops_cool`.
+ */
 export const ASCENT_COLLECTION = {
   key: "set_ascent",
   name: "The Ascent Collection",
 } as const;
+
+/** CSFloat collection key for The Ascent Collection */
+export const ASCENT_LIVE_COLLECTION_KEY = "set_timed_drops_cool";
 
 type SupplementEntry = {
   defIndex: string;
@@ -19,7 +25,10 @@ type SupplementEntry = {
   image?: string;
 };
 
-/** Full Ascent tier list — CSFloat schema gap fill. */
+/**
+ * Full Ascent tier list — CSFloat schema gap fill.
+ * Float caps mirrored from live CSFloat `set_timed_drops_cool` (Aug 2026).
+ */
 const ASCENT_ENTRIES: SupplementEntry[] = [
   // Classified
   {
@@ -30,7 +39,7 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paint: "Stratosphere",
     rarity: 5,
     min: 0,
-    max: 0.85,
+    max: 0.8,
     image:
       "https://community.akamai.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpou-6kejhz2v_Nfz5H_uO1gYW0hOPmMq_ehXtZ7dd0teXI8oThxgy3qBdvZ22lJYTGIAU5aArTqQW3l-y91p7q7cmYnSMwuiAm4SvVl0OpwUYbpXBVnmw",
   },
@@ -53,7 +62,7 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paint: "Royal Guard",
     rarity: 4,
     min: 0,
-    max: 0.8,
+    max: 0.6,
   },
   // Mil-Spec
   {
@@ -63,6 +72,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_mint_fan",
     paint: "Mint Fan",
     rarity: 3,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "10",
@@ -71,6 +82,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_yeti_camo",
     paint: "Yeti Camo",
     rarity: 3,
+    min: 0,
+    max: 0.7,
   },
   {
     defIndex: "32",
@@ -79,6 +92,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_royal_baroque",
     paint: "Royal Baroque",
     rarity: 3,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "34",
@@ -87,6 +102,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_cobalt_paisley",
     paint: "Cobalt Paisley",
     rarity: 3,
+    min: 0,
+    max: 0.65,
   },
   {
     defIndex: "19",
@@ -95,6 +112,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_reef_grief",
     paint: "Reef Grief",
     rarity: 3,
+    min: 0,
+    max: 0.6,
   },
   // Industrial
   {
@@ -104,6 +123,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_electric_blue",
     paint: "Electric Blue",
     rarity: 2,
+    min: 0,
+    max: 0.75,
   },
   {
     defIndex: "35",
@@ -112,6 +133,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_turquoise_pour",
     paint: "Turquoise Pour",
     rarity: 2,
+    min: 0,
+    max: 0.678431,
   },
   {
     defIndex: "16",
@@ -120,6 +143,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_naval_shred_camo",
     paint: "Naval Shred Camo",
     rarity: 2,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "13",
@@ -128,6 +153,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_robins_egg",
     paint: "Robin's Egg",
     rarity: 2,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "4",
@@ -136,6 +163,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_ocean_topo",
     paint: "Ocean Topo",
     rarity: 2,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "2",
@@ -144,6 +173,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_rose_nacre",
     paint: "Rose Nacre",
     rarity: 2,
+    min: 0,
+    max: 0.7,
   },
   {
     defIndex: "3",
@@ -152,6 +183,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_sky_blue",
     paint: "Sky Blue",
     rarity: 2,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "25",
@@ -160,6 +193,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_gum_wall_camo",
     paint: "Gum Wall Camo",
     rarity: 2,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "28",
@@ -168,6 +203,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_sour_grapes",
     paint: "Sour Grapes",
     rarity: 2,
+    min: 0,
+    max: 0.8,
   },
   // Consumer
   {
@@ -177,6 +214,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_blue_blast",
     paint: "Blue Blast",
     rarity: 1,
+    min: 0,
+    max: 0.8,
   },
   {
     defIndex: "34",
@@ -185,6 +224,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_buff_blue",
     paint: "Buff Blue",
     rarity: 1,
+    min: 0,
+    max: 0.7,
   },
   {
     defIndex: "19",
@@ -193,6 +234,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_blue_tac",
     paint: "Blue Tac",
     rarity: 1,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "36",
@@ -201,6 +244,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_plum_netting",
     paint: "Plum Netting",
     rarity: 1,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "39",
@@ -209,6 +254,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_night_camo",
     paint: "Night Camo",
     rarity: 1,
+    min: 0,
+    max: 0.795222,
   },
   {
     defIndex: "29",
@@ -217,6 +264,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_runoff",
     paint: "Runoff",
     rarity: 1,
+    min: 0,
+    max: 0.780822,
   },
   {
     defIndex: "64",
@@ -225,6 +274,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_cobalt_grip",
     paint: "Cobalt Grip",
     rarity: 1,
+    min: 0,
+    max: 0.80339,
   },
   {
     defIndex: "13",
@@ -233,6 +284,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_grey_smoke",
     paint: "Grey Smoke",
     rarity: 1,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "40",
@@ -241,6 +294,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_grey_smoke",
     paint: "Grey Smoke",
     rarity: 1,
+    min: 0,
+    max: 0.6,
   },
   {
     defIndex: "23",
@@ -249,6 +304,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_lime_hex",
     paint: "Lime Hex",
     rarity: 1,
+    min: 0,
+    max: 0.638225,
   },
   {
     defIndex: "17",
@@ -257,6 +314,8 @@ const ASCENT_ENTRIES: SupplementEntry[] = [
     paintKey: "ascent_storm_camo",
     paint: "Storm Camo",
     rarity: 1,
+    min: 0,
+    max: 0.637288,
   },
 ];
 
@@ -271,8 +330,28 @@ function entryToPaint(entry: SupplementEntry) {
   };
 }
 
-/** Merge skins for collections missing from the live CSFloat schema payload. */
+/** True when CSFloat already ships Ascent under its live collection key. */
+export function schemaHasLiveAscent(schema: SchemaData): boolean {
+  for (const weapon of Object.values(schema.weapons || {})) {
+    for (const paint of Object.values(weapon.paints || {})) {
+      if (paint.collections?.includes(ASCENT_LIVE_COLLECTION_KEY)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Merge skins for collections missing from the live CSFloat schema payload.
+ * When live Ascent (`set_timed_drops_cool`) is present, leave schema untouched
+ * so real float caps drive wear/price math.
+ */
 export function mergeSchemaSupplement(schema: SchemaData): SchemaData {
+  if (schemaHasLiveAscent(schema)) {
+    return schema;
+  }
+
   const collections = [...(schema.collections || [])];
   if (!collections.some((c) => c.key === ASCENT_COLLECTION.key)) {
     collections.push({ ...ASCENT_COLLECTION });

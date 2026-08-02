@@ -9,7 +9,15 @@ import {
 import type { SchemaData, SkinData } from "./tradeup/types";
 import { mergeSchemaSupplement } from "./schema-supplement";
 
-/** Soft name-keyword bans (Anubis, timed drops, etc.) */
+/**
+ * Soft name/key keyword bans (Anubis, other timed drops, etc.).
+ * Ascent is CSFloat `set_timed_drops_cool` — allowlisted so live float
+ * caps are used instead of the synthetic set_ascent fallback.
+ */
+const TRADEUP_ALLOWED_COLLECTION_KEYS = new Set([
+  "set_timed_drops_cool", // The Ascent Collection
+]);
+
 function isExcludedColName(name: string): boolean {
   const nm = name.toLowerCase();
   return (
@@ -23,6 +31,7 @@ export function isTradeUpBannedCollection(
   name?: string
 ): boolean {
   if (isNeverTradeUpCollection(key, name)) return true;
+  if (TRADEUP_ALLOWED_COLLECTION_KEYS.has(key)) return false;
   if (name && isExcludedColName(name)) return true;
   if (isExcludedColName(key)) return true;
   return false;
