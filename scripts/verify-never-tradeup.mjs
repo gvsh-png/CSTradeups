@@ -18,8 +18,13 @@ function isNeverTradeUpCollection(key, name) {
   return false;
 }
 
+const TRADEUP_ALLOWED_COLLECTION_KEYS = new Set([
+  "set_timed_drops_cool", // The Ascent Collection
+]);
+
 function isTradeUpBannedCollection(key, name) {
   if (isNeverTradeUpCollection(key, name)) return true;
+  if (TRADEUP_ALLOWED_COLLECTION_KEYS.has(key)) return false;
   const soft = ["armory", "armoury", "timed_drops", "timed-drops", "anubis", "exuberant", "opulent"];
   const blob = `${key} ${name || ""}`.toLowerCase();
   return soft.some((w) => blob.includes(w)) || blob.includes("exclusive");
@@ -51,6 +56,14 @@ assert(
   "Anubis soft-banned (not never-UI)",
   isTradeUpBannedCollection("set_anubis", "The Anubis Collection") &&
     !isNeverTradeUpCollection("set_anubis", "The Anubis Collection")
+);
+assert(
+  "Ascent live key allowed despite timed_drops",
+  !isTradeUpBannedCollection("set_timed_drops_cool", "The Ascent Collection")
+);
+assert(
+  "other timed_drops collections still soft-banned",
+  isTradeUpBannedCollection("set_timed_drops_warm", "The Radiant Collection")
 );
 assert(
   "Solitude collection banned",
