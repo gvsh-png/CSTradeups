@@ -112,7 +112,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Checkout failed");
-      if (data.url) window.location.href = data.url;
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      // In-place Starter→Pro (existing subscription updated — no Checkout URL)
+      if (data.upgraded) {
+        window.location.href = "/subscription?billing=success";
+      }
     },
     []
   );

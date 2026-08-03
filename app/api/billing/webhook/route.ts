@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripeConfigured } from "@/lib/auth/config";
 import { getStripe, planFromStripePriceId } from "@/lib/billing/stripe";
+import { previousSubscriptionToCancel } from "@/lib/billing/subscriptions";
 import type { PlanId } from "@/lib/billing/plans";
 import {
   findByStripeCustomer,
+  getUser,
   linkStripeCustomer,
   setPlan,
 } from "@/lib/usage/store";
@@ -83,11 +85,22 @@ export async function POST(request: Request) {
         }
 
         if (steamId && customerId) {
+          // Cancel any prior live sub before we overwrite the stored id —
+          // otherwise Starter→Pro Checkout leaves both subscriptions billing.
+          const prior = (await getUser(steamId))?.stripeSubscriptionId;
+          const orphan = previousSubscriptionToCancel(prior, subscriptionId);
           await linkStripeCustomer(steamId, customerId);
           await setPlan(steamId, plan, {
             customerId,
             subscriptionId: subscriptionId ?? undefined,
           });
+          if (orphan) {
+            try {
+              await stripe.subscriptions.cancel(orphan);
+            } catch (err) {
+              console.error("Failed to cancel previous Stripe subscription:", orphan, err);
+            }
+          }
         }
         break;
       }

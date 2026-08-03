@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { authConfigured, appBaseUrl, stripeConfigured } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getStripe, stripePriceIdForPlan } from "@/lib/billing/stripe";
+import { isLiveSubscriptionStatus } from "@/lib/billing/subscriptions";
 import type { PlanId } from "@/lib/billing/plans";
-import { getUser, linkStripeCustomer } from "@/lib/usage/store";
+import { getUser, linkStripeCustomer, setPlan } from "@/lib/usage/store";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,38 @@ export async function POST(request: Request) {
     });
     customerId = customer.id;
     await linkStripeCustomer(user.steamId, customerId);
+  }
+
+  // Starter → Pro (or any paid → paid) must update the existing subscription.
+  // A second Checkout session would leave both subs active and double-bill.
+  if (user.stripeSubscriptionId) {
+    try {
+      const existing = await stripe.subscriptions.retrieve(
+        user.stripeSubscriptionId
+      );
+      if (isLiveSubscriptionStatus(existing.status)) {
+        const itemId = existing.items.data[0]?.id;
+        if (!itemId) {
+          return NextResponse.json(
+            { error: "Existing subscription has no items" },
+            { status: 500 }
+          );
+        }
+        await stripe.subscriptions.update(user.stripeSubscriptionId, {
+          items: [{ id: itemId, price: stripePriceIdForPlan(plan) }],
+          metadata: { steamId: user.steamId, plan },
+          proration_behavior: "create_prorations",
+        });
+        await setPlan(user.steamId, plan, {
+          customerId,
+          subscriptionId: user.stripeSubscriptionId,
+        });
+        return NextResponse.json({ upgraded: true, plan });
+      }
+    } catch (err) {
+      console.error("Existing subscription upgrade failed, falling back to Checkout:", err);
+      /* canceled / missing — open a fresh Checkout session below */
+    }
   }
 
   const checkout = await stripe.checkout.sessions.create({
