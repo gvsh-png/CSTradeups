@@ -49,7 +49,8 @@ Defaults live in `lib/billing/plans.ts` (easy to change):
 | Plan | Scans | Saved trade-ups | Login |
 |------|-------|-----------------|-------|
 | **Free** | 5 / week | 1 at a time | Steam only |
-| **Pro** | Unlimited | Unlimited | Steam + Stripe |
+| **Starter** | 40 / week | 15 at a time | Steam + Stripe ($3/mo) |
+| **Pro** | Unlimited | Unlimited | Steam + Stripe ($8/mo) |
 
 No Google/Discord/etc. — Steam accounts only.
 
@@ -71,13 +72,15 @@ No Google/Discord/etc. — Steam accounts only.
 
 5. Redeploy → confirm **Sign in** appears in the header.
 
-### When you are ready — enable Pro billing
+### When you are ready — enable Starter + Pro billing
 
-1. Create a Product + recurring Price in [Stripe](https://dashboard.stripe.com).
-2. Set `STRIPE_SECRET_KEY` + `STRIPE_PRICE_ID`.
+1. Create two recurring Prices in [Stripe](https://dashboard.stripe.com): Starter ($3/mo) and Pro ($8/mo).
+2. Set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_STARTER`, and `STRIPE_PRICE_ID_PRO` (distinct ids — a single shared price silently overcharges Starter).
 3. Add webhook endpoint: `https://your-domain.com/api/billing/webhook`
    - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 4. Set `STRIPE_WEBHOOK_SECRET` from the webhook details.
+
+`STRIPE_PRICE_ID` remains an optional legacy alias for the **Pro** price only.
 
 Until those vars are set, the site stays open (no login wall, no caps).
 
