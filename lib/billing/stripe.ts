@@ -14,17 +14,33 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
+/** Starter monthly price — never falls back to the Pro / legacy price id */
+export function stripePriceIdStarter(): string | undefined {
+  const id = process.env.STRIPE_PRICE_ID_STARTER?.trim();
+  return id || undefined;
+}
+
+/**
+ * Pro monthly price. `STRIPE_PRICE_ID` remains a legacy alias for Pro only
+ * (never for Starter — that silently overcharged Starter at the Pro amount).
+ */
+export function stripePriceIdPro(): string | undefined {
+  const id =
+    process.env.STRIPE_PRICE_ID_PRO?.trim() ||
+    process.env.STRIPE_PRICE_ID?.trim();
+  return id || undefined;
+}
+
 /** Paid plan price IDs — monthly only ($3 starter / $8 pro) */
 export function stripePriceIdForPlan(
   plan: Exclude<PlanId, "free">
 ): string {
   if (plan === "starter") {
-    const id =
-      process.env.STRIPE_PRICE_ID_STARTER || process.env.STRIPE_PRICE_ID;
+    const id = stripePriceIdStarter();
     if (!id) throw new Error("STRIPE_PRICE_ID_STARTER is not set");
     return id;
   }
-  const id = process.env.STRIPE_PRICE_ID_PRO || process.env.STRIPE_PRICE_ID;
+  const id = stripePriceIdPro();
   if (!id) throw new Error("STRIPE_PRICE_ID_PRO is not set");
   return id;
 }
@@ -32,10 +48,9 @@ export function stripePriceIdForPlan(
 /** Map a Stripe price id back to a plan (webhook) */
 export function planFromStripePriceId(priceId: string | undefined): PlanId {
   if (!priceId) return "pro";
-  const starter =
-    process.env.STRIPE_PRICE_ID_STARTER || process.env.STRIPE_PRICE_ID;
-  const pro = process.env.STRIPE_PRICE_ID_PRO || process.env.STRIPE_PRICE_ID;
-  if (starter && priceId === starter && starter !== pro) return "starter";
+  const starter = stripePriceIdStarter();
+  const pro = stripePriceIdPro();
+  if (starter && priceId === starter) return "starter";
   if (pro && priceId === pro) return "pro";
   return "pro";
 }

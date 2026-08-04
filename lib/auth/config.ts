@@ -22,10 +22,19 @@ export function authRequired(): boolean {
 }
 
 export function stripeConfigured(): boolean {
+  const starter = process.env.STRIPE_PRICE_ID_STARTER?.trim();
+  // Legacy STRIPE_PRICE_ID is Pro-only — never treat it as Starter
+  const pro =
+    process.env.STRIPE_PRICE_ID_PRO?.trim() ||
+    process.env.STRIPE_PRICE_ID?.trim();
+  // Both plans must resolve to distinct Stripe Price objects. A shared id
+  // charged Starter customers the Pro amount (or granted Pro at Starter $).
   return Boolean(
     process.env.STRIPE_SECRET_KEY &&
-      process.env.STRIPE_PRICE_ID &&
-      process.env.STRIPE_WEBHOOK_SECRET
+      process.env.STRIPE_WEBHOOK_SECRET &&
+      starter &&
+      pro &&
+      starter !== pro
   );
 }
 
