@@ -81,6 +81,30 @@ function partitions(
   return result.map((p) => [...p].reverse());
 }
 
+/**
+ * Two-collection input count splits [primary, filler].
+ *
+ * Canonical `partitions(n, 2, 1)` only yields primary ≤ filler (then the
+ * mirrored collection-as-primary pass covers the rest). Target hunts skip
+ * that mirror when the filler collection cannot roll the skin — so they
+ * must enumerate the full ordered range or high-hit mixes (6/4…9/1) never
+ * exist.
+ */
+export function twoCollectionSplits(
+  inputTotal: number,
+  mode: "canonical" | "ordered" = "canonical"
+): number[][] {
+  if (inputTotal < 2) return [];
+  if (mode === "ordered") {
+    const splits: number[][] = [];
+    for (let primary = 1; primary < inputTotal; primary++) {
+      splits.push([primary, inputTotal - primary]);
+    }
+    return splits;
+  }
+  return partitions(inputTotal, 2, 1);
+}
+
 function calcWinLoss(
   outcomes: OutcomeCalc[],
   totalCost: number,
@@ -768,7 +792,12 @@ function generateTierTradeUps(
   // expensive mono-collections (Rat Rod mono often can't profit).
   const SKINS_PER_POOL = hunting ? 8 : 4;
   const FILLER_CAP = hunting ? 16 : 10;
-  const maxUnit = params.maxPrice / Math.max(2, inputTotal / 2);
+  // Non-hunt: unit ceiling ≈ maxPrice / (n/2) prunes the search space.
+  // Hunt: one target-collection input is often > that ceiling while
+  // 1×expensive + 9×cheap fillers still fit maxPrice — enforce budget later.
+  const maxUnit = hunting
+    ? params.maxPrice
+    : params.maxPrice / Math.max(2, inputTotal / 2);
 
   const targetPrev = targetName
     ? (() => {
@@ -935,14 +964,12 @@ function generateTierTradeUps(
         }
 
         for (const f1 of diverseFillers) {
-          const parts = partitions(inputTotal, 2, 1);
-          // Hunt: try low primary counts first (more cheap filler → lower cost),
-          // then higher hit% mixes. Non-hunt: keep original order.
+          // Hunt needs ordered 1..(n-1) primary counts — canonical partitions
+          // only produce primary ≤ filler, and the mirror pass is skipped when
+          // the filler collection cannot roll the target.
           const orderedParts = hunting
-            ? [...parts].sort(
-                (a, b) => a[0] - b[0] || a[1] - b[1]
-              )
-            : parts;
+            ? twoCollectionSplits(inputTotal, "ordered")
+            : twoCollectionSplits(inputTotal, "canonical");
 
           for (const sp of orderedParts) {
             const inputs: TradeUpInput[] = [

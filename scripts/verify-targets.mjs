@@ -201,6 +201,75 @@ assert(
 );
 assert("hunt loser last", ranked[ranked.length - 1].winPct === 0);
 
+/** Mirrors lib/tradeup/generator.ts twoCollectionSplits / partitions */
+function partitions(total, parts, minPer) {
+  const result = [];
+  function recurse(remaining, k, maxVal, current) {
+    if (k === 1) {
+      if (remaining >= minPer && remaining <= maxVal) {
+        result.push([...current, remaining]);
+      }
+      return;
+    }
+    const lo = minPer;
+    const hi = Math.min(maxVal, remaining - minPer * (k - 1));
+    for (let v = lo; v <= hi; v++) {
+      recurse(remaining - v, k - 1, v, [...current, v]);
+    }
+  }
+  recurse(total, parts, total, []);
+  return result.map((p) => [...p].reverse());
+}
+
+function twoCollectionSplits(inputTotal, mode = "canonical") {
+  if (inputTotal < 2) return [];
+  if (mode === "ordered") {
+    const splits = [];
+    for (let primary = 1; primary < inputTotal; primary++) {
+      splits.push([primary, inputTotal - primary]);
+    }
+    return splits;
+  }
+  return partitions(inputTotal, 2, 1);
+}
+
+const canonical = twoCollectionSplits(10, "canonical");
+assert(
+  "canonical 10-input splits stay primary≤filler",
+  canonical.every((sp) => sp[0] <= sp[1]) &&
+    JSON.stringify(canonical) ===
+      JSON.stringify([
+        [5, 5],
+        [4, 6],
+        [3, 7],
+        [2, 8],
+        [1, 9],
+      ])
+);
+
+const ordered = twoCollectionSplits(10, "ordered");
+assert(
+  "ordered target-hunt splits include high-hit primary counts",
+  ordered.length === 9 &&
+    ordered.some((sp) => sp[0] === 7 && sp[1] === 3) &&
+    ordered.some((sp) => sp[0] === 9 && sp[1] === 1) &&
+    ordered[0][0] === 1 &&
+    ordered[ordered.length - 1][0] === 9
+);
+
+/** Hunt unit ceiling must allow a single expensive target-collection input */
+function huntMaxUnit(maxPrice, inputTotal, hunting) {
+  return hunting ? maxPrice : maxPrice / Math.max(2, inputTotal / 2);
+}
+assert(
+  "hunt maxUnit allows $12 input under $50 budget",
+  huntMaxUnit(50, 10, true) >= 12
+);
+assert(
+  "non-hunt maxUnit still prunes above ~max/5",
+  huntMaxUnit(50, 10, false) === 10
+);
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);
