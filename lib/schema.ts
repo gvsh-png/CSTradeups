@@ -75,7 +75,10 @@ export function buildSkinDatabase(
       if (!rarity || !RARITY_ORDER.includes(rarity as (typeof RARITY_ORDER)[number]))
         continue;
 
-      const fullName = `${weapon.name} | ${paint.name}`;
+      // Collapse Doppler phase/gem paints onto the Steam market title and
+      // keep slot weight (e.g. 5× Glock Gamma Doppler finishes → weight 5).
+      const paintTitle = normalizeSpecialPaintName(paint.name);
+      const fullName = `${weapon.name} | ${paintTitle}`;
       if (fullName.includes("★")) continue;
 
       const validCols = filterCollections(
@@ -90,7 +93,7 @@ export function buildSkinDatabase(
         name: colMap[c] || c,
       }));
 
-      skinDB.push({
+      upsertWeightedSkin(skinDB, {
         name: fullName,
         minF: paint.min ?? 0,
         maxF: paint.max ?? 1,
@@ -98,10 +101,11 @@ export function buildSkinDatabase(
         collections: cols,
         image: paint.image,
         isSouvenir: false,
+        outcomeWeight: 1,
       });
 
       if (includeSouvenir && paint.souvenir) {
-        skinDB.push({
+        upsertWeightedSkin(skinDB, {
           name: `Souvenir ${fullName}`,
           minF: paint.min ?? 0,
           maxF: paint.max ?? 1,
@@ -109,25 +113,58 @@ export function buildSkinDatabase(
           collections: cols,
           image: paint.image,
           isSouvenir: true,
+          outcomeWeight: 1,
         });
       }
     }
   }
 
-  const seen = new Set<string>();
-  return skinDB.filter((s) => {
-    if (seen.has(s.name)) return false;
-    seen.add(s.name);
-    return true;
-  });
+  return skinDB;
 }
 
-/** Normalize CSFloat knife paint names onto Steam market titles */
+/** Merge equal market names so Doppler phase/gem slots keep combined weight */
+function upsertWeightedSkin(skinDB: SkinData[], skin: SkinData): void {
+  const existing = skinDB.find(
+    (s) =>
+      s.name === skin.name && Boolean(s.isSouvenir) === Boolean(skin.isSouvenir)
+  );
+  if (!existing) {
+    skinDB.push(skin);
+    return;
+  }
+  existing.outcomeWeight =
+    (existing.outcomeWeight || 1) + (skin.outcomeWeight || 1);
+  existing.minF = Math.min(existing.minF, skin.minF);
+  existing.maxF = Math.max(existing.maxF, skin.maxF);
+  if (!existing.image && skin.image) existing.image = skin.image;
+}
+
+/**
+ * Collapse CSFloat Doppler finish variants onto the Steam market paint title.
+ *
+ * CSFloat schema uses parenthetical finishes (`Doppler (Phase 1)`,
+ * `Doppler (Ruby)`, `Gamma Doppler (Emerald)`). Steam/Skinport list a single
+ * SKU (`Doppler` / `Gamma Doppler`). Older dumps used `Doppler Phase 1`.
+ *
+ * Callers must accumulate `outcomeWeight` so phase/gem slots stay equiprobable.
+ */
 export function normalizeSpecialPaintName(paintName: string): string {
   const p = (paintName || "").trim();
   if (!p) return "Vanilla";
-  if (/^Doppler Phase [1-4]$/i.test(p)) return "Doppler";
-  if (/^Gamma Doppler Phase [1-4]$/i.test(p)) return "Gamma Doppler";
+  if (
+    /^Doppler(\s+Phase\s+[1-4]|\s*\((?:Phase\s+[1-4]|Ruby|Sapphire|Black Pearl)\))$/i.test(
+      p
+    )
+  ) {
+    return "Doppler";
+  }
+  if (
+    /^Gamma Doppler(\s+Phase\s+[1-4]|\s*\((?:Phase\s+[1-4]|Emerald)\))$/i.test(
+      p
+    )
+  ) {
+    return "Gamma Doppler";
+  }
   return p;
 }
 
@@ -149,8 +186,8 @@ export function specialItemMarketName(
 
 /**
  * Knives & gloves grouped by collection — Covert→Extraordinary outcomes.
- * Doppler phase paints collapse to one Steam name but keep slot weight so
- * odds stay correct (4 phases → weight 4).
+ * Doppler phase/gem paints collapse to one Steam name but keep slot weight
+ * so odds stay correct (4 phases + 3 gems → weight 7).
  */
 export function buildSpecialOutcomesByCollection(
   schema: SchemaData,
