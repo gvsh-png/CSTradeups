@@ -3,6 +3,10 @@
  * Run: node scripts/verify-prices.mjs
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 function r2(n) {
   return Math.round(n * 100) / 100;
 }
@@ -330,6 +334,28 @@ assert(
   "expensive skin stays on safe",
   resolveCheapSteamPrice(376.4, 350, 360),
   376.4
+);
+
+/** Guard: Skinport fetch must use the tradable book, not trade-locked mins. */
+function skinportItemsUrl(currency = "USD") {
+  return `https://api.skinport.com/v1/items?app_id=730&currency=${encodeURIComponent(currency)}&tradable=1`;
+}
+const skinportUrl = skinportItemsUrl("USD");
+assert(
+  "Skinport URL helper requests tradable-only book",
+  skinportUrl.includes("tradable=1") && !skinportUrl.includes("tradable=0"),
+  true
+);
+
+const pricesSrc = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../lib/prices.ts"),
+  "utf8"
+);
+assert(
+  "lib/prices.ts skinportItemsUrl locks tradable=1",
+  /tradable=1/.test(pricesSrc) &&
+    !/skinport\.com\/v1\/items[^"`']*tradable=0/.test(pricesSrc),
+  true
 );
 
 if (failed) {

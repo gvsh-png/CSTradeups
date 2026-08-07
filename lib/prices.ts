@@ -656,19 +656,27 @@ async function saveSteamPricesToRedis(
   }
 }
 
+/**
+ * Skinport catalog URL for buyable trade-up inputs.
+ *
+ * Must request tradable=1. tradable=0 is the trade-locked book — those mins
+ * are often far cheaper and cannot be withdrawn into Steam for a contract
+ * until the lock ends, so using them invents ghost-+EV inputs.
+ */
+export function skinportItemsUrl(currency = "USD"): string {
+  return `https://api.skinport.com/v1/items?app_id=730&currency=${encodeURIComponent(currency)}&tradable=1`;
+}
+
 async function fetchSkinportPricesOnce(): Promise<SkinportFetch> {
   try {
-    const res = await fetch(
-      "https://api.skinport.com/v1/items?app_id=730&currency=USD&tradable=0",
-      {
-        headers: {
-          "Accept-Encoding": "br",
-          "User-Agent": "tradeupcsgo.net/1.0",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(15_000),
-      }
-    );
+    const res = await fetch(skinportItemsUrl("USD"), {
+      headers: {
+        "Accept-Encoding": "br",
+        "User-Agent": "tradeupcsgo.net/1.0",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!res.ok) return { prices: null, quantity: null, status: "error" };
 
     const data = (await res.json()) as SkinportItem[];
