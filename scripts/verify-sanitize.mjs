@@ -62,7 +62,28 @@ function sanitizePrices(prices) {
       })
       .filter(Boolean);
 
-    const fn = priced.find((x) => x.wear === "Factory New")?.p || 0;
+    let fn = priced.find((x) => x.wear === "Factory New")?.p || 0;
+
+    // Ghost-cheap / dump FN must not become the ceiling.
+    if (fn > 0) {
+      const others = priced.filter(
+        (x) => x.wear !== "Factory New" && out[x.key] > 0
+      );
+      const blockedByCeiling = others.filter((row) =>
+        row.wear === "Minimal Wear" ? row.p > fn * 1.2 : row.p > fn
+      );
+      const othersMid = medianPositive(others.map((x) => x.p));
+      if (
+        blockedByCeiling.length >= 2 &&
+        blockedByCeiling.length === others.length &&
+        othersMid > 0 &&
+        fn < othersMid
+      ) {
+        const fnRow = priced.find((x) => x.wear === "Factory New");
+        if (fnRow) delete out[fnRow.key];
+        fn = 0;
+      }
+    }
 
     for (const row of priced) {
       if (!(out[row.key] > 0)) continue;
@@ -221,6 +242,27 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Dump/stale FN below a coherent MW–BS book must not wipe the ladder
+const dumpFn = sanitizePrices({
+  "AK-47 | Fake Dump (Factory New)": 0.8,
+  "AK-47 | Fake Dump (Minimal Wear)": 10,
+  "AK-47 | Fake Dump (Field-Tested)": 9,
+  "AK-47 | Fake Dump (Well-Worn)": 8,
+  "AK-47 | Fake Dump (Battle-Scarred)": 8,
+});
+assert(
+  "Dump FN dropped (not used as ceiling)",
+  dumpFn["AK-47 | Fake Dump (Factory New)"] === undefined
+);
+assert(
+  "Dump FN: FT ladder kept",
+  dumpFn["AK-47 | Fake Dump (Field-Tested)"] === 9
+);
+assert(
+  "Dump FN: MW ladder kept",
+  dumpFn["AK-47 | Fake Dump (Minimal Wear)"] === 10
 );
 
 if (failed) {

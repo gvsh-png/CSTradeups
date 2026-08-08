@@ -1012,6 +1012,7 @@ function generateTierTradeUps(
  * Example: CaliCamo WW $529 while other wears are cents → drop WW.
  * Blind Spot FT $124 while peers ~$15 → drop FT (old 12× threshold missed this).
  * Bulldozer BS $7.90 while FN–WW ~$275–376 → drop BS (stale SteamApis safe).
+ * Dump FN $0.80 while MW–BS sit $8–12 → drop FN (do not let FN ceiling wipe ladder).
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
@@ -1083,7 +1084,30 @@ export function sanitizePrices(
       })
       .filter((x): x is { key: string; wear: string; p: number } => Boolean(x));
 
-    const fn = priced.find((x) => x.wear === "Factory New")?.p || 0;
+    let fn = priced.find((x) => x.wear === "Factory New")?.p || 0;
+
+    // Ghost-cheap / dump FN must not become the ceiling. Example: FN $0.80
+    // while MW–BS sit $8–12 — the ceiling would delete every real wear and
+    // leave only the dump, which then becomes a ghost-cheap trade-up input.
+    if (fn > 0) {
+      const others = priced.filter(
+        (x) => x.wear !== "Factory New" && out[x.key] > 0
+      );
+      const blockedByCeiling = others.filter((row) =>
+        row.wear === "Minimal Wear" ? row.p > fn * 1.2 : row.p > fn
+      );
+      const othersMid = medianPositive(others.map((x) => x.p));
+      if (
+        blockedByCeiling.length >= 2 &&
+        blockedByCeiling.length === others.length &&
+        othersMid > 0 &&
+        fn < othersMid
+      ) {
+        const fnRow = priced.find((x) => x.wear === "Factory New");
+        if (fnRow) delete out[fnRow.key];
+        fn = 0;
+      }
+    }
 
     for (const row of priced) {
       if (!(out[row.key] > 0)) continue;
