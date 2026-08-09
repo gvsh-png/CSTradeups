@@ -1012,6 +1012,7 @@ function generateTierTradeUps(
  * Example: CaliCamo WW $529 while other wears are cents → drop WW.
  * Blind Spot FT $124 while peers ~$15 → drop FT (old 12× threshold missed this).
  * Bulldozer BS $7.90 while FN–WW ~$275–376 → drop BS (stale SteamApis safe).
+ * Mid-tier dump BS ($0.55 under a ~$7–14 ladder) is dropped the same way.
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
@@ -1113,9 +1114,10 @@ export function sanitizePrices(
       }
     }
 
-    // Ghost-cheap worse wear vs a coherent expensive better-wear book.
-    // SteamApis `safe` can return stale cents for rare BS (Bulldozer $7.90
-    // while FN/MW/FT/WW sit ~$275–376; real BS is ~$270+).
+    // Ghost-cheap worse wear vs a coherent better-wear book.
+    // SteamApis `safe` can return stale cents for BS/WW while FN–FT stay
+    // liquid (Bulldozer $7.90 vs ~$275–376; mid-tier Elite Build $0.55 vs
+    // ~$7–14). Floor is $5 so penny ladders (FN $0.80 / BS $0.04) stay.
     for (const row of priced) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
@@ -1128,7 +1130,7 @@ export function sanitizePrices(
       const betterHi = Math.max(...better);
       if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
       const betterMid = medianPositive(better);
-      if (betterMid >= 20 && row.p < betterMid * 0.15) {
+      if (betterMid >= 5 && row.p < betterMid * 0.15) {
         delete out[row.key];
       }
     }
