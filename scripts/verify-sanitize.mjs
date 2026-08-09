@@ -102,7 +102,7 @@ function sanitizePrices(prices) {
       const betterHi = Math.max(...better);
       if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
       const betterMid = medianPositive(better);
-      if (betterMid >= 20 && row.p < betterMid * 0.15) {
+      if (betterMid >= 5 && row.p < betterMid * 0.15) {
         delete out[row.key];
       }
     }
@@ -221,6 +221,36 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Mid-tier dump BS — old betterMid>=20 floor left $0.55 BS under a ~$7–14
+// ladder, so scans bought ghost-cheap inputs / fake +EV.
+const eliteBuild = sanitizePrices({
+  "AK-47 | Elite Build (Factory New)": 14,
+  "AK-47 | Elite Build (Minimal Wear)": 9.5,
+  "AK-47 | Elite Build (Field-Tested)": 7.2,
+  "AK-47 | Elite Build (Well-Worn)": 6.8,
+  "AK-47 | Elite Build (Battle-Scarred)": 0.55,
+});
+assert(
+  "Elite Build mid-tier ghost BS dropped",
+  eliteBuild["AK-47 | Elite Build (Battle-Scarred)"] === undefined
+);
+assert(
+  "Elite Build FT kept",
+  eliteBuild["AK-47 | Elite Build (Field-Tested)"] === 7.2
+);
+
+// Penny ladders — real BS can be << FN; do not wipe sub-$5 books
+const sandStorm = sanitizePrices({
+  "Tec-9 | Sandstorm (Factory New)": 0.8,
+  "Tec-9 | Sandstorm (Minimal Wear)": 0.45,
+  "Tec-9 | Sandstorm (Field-Tested)": 0.28,
+  "Tec-9 | Sandstorm (Battle-Scarred)": 0.04,
+});
+assert(
+  "penny BS kept under $5 better-mid floor",
+  sandStorm["Tec-9 | Sandstorm (Battle-Scarred)"] === 0.04
 );
 
 if (failed) {
