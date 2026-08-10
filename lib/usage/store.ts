@@ -33,6 +33,18 @@ export async function getUser(steamId: string): Promise<UserRecord | null> {
   return raw ?? null;
 }
 
+/**
+ * Plan for upsertUser writes. Existing Redis plans are preserved; new records
+ * are always free. Caller/JWT `requestedPlan` is ignored — paid entitlements
+ * only come from Stripe via setPlan.
+ */
+export function resolveUpsertPlan(
+  existingPlan: PlanId | undefined,
+  _requestedPlan?: PlanId
+): PlanId {
+  return existingPlan ?? "free";
+}
+
 export async function upsertUser(
   input: Pick<UserRecord, "steamId" | "name" | "avatar"> &
     Partial<Pick<UserRecord, "plan">>
@@ -40,13 +52,14 @@ export async function upsertUser(
   const existing = await getUser(input.steamId);
   const now = new Date().toISOString();
   const weekKey = currentWeekKey();
+  const plan = resolveUpsertPlan(existing?.plan, input.plan);
 
   const user: UserRecord = existing
     ? {
         ...existing,
         name: input.name,
         avatar: input.avatar ?? existing.avatar,
-        plan: input.plan ?? existing.plan,
+        plan,
         weekKey:
           existing.weekKey === weekKey ? existing.weekKey : weekKey,
         weeklyScans:
@@ -57,7 +70,7 @@ export async function upsertUser(
         steamId: input.steamId,
         name: input.name,
         avatar: input.avatar,
-        plan: input.plan ?? "free",
+        plan,
         weekKey,
         weeklyScans: 0,
         savedCount: 0,

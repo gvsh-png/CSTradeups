@@ -53,7 +53,13 @@ export async function GET() {
 
   let user = await getUser(session.steamId);
   if (!user) {
-    user = await upsertUser(session);
+    // Recreate profile only — plan must not come from the signed cookie
+    // (stale starter/pro JWT after Redis loss would grant unpaid access).
+    user = await upsertUser({
+      steamId: session.steamId,
+      name: session.name,
+      avatar: session.avatar,
+    });
   }
 
   // Keep session plan in sync with Redis (e.g. after Stripe webhook)
