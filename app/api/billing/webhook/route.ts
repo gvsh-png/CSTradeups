@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripeConfigured } from "@/lib/auth/config";
+import {
+  checkoutPaymentSettled,
+  shouldClearStoredSubscriptionId,
+  subscriptionEntitlesPaidPlan,
+} from "@/lib/billing/entitlements";
 import { getStripe, planFromStripePriceId } from "@/lib/billing/stripe";
 import type { PlanId } from "@/lib/billing/plans";
 import {
@@ -29,6 +34,49 @@ function planFromSubscription(sub: Stripe.Subscription): PlanId {
   return planFromStripePriceId(priceId);
 }
 
+async function grantCheckoutPlan(session: Stripe.Checkout.Session) {
+  // Delayed methods (ACH/SEPA/etc.) fire checkout.session.completed with
+  // payment_status=unpaid — do not unlock paid quotas until payment settles.
+  if (!checkoutPaymentSettled(session.payment_status)) {
+    return;
+  }
+
+  const customerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : session.customer?.id;
+  const subscriptionId =
+    typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription?.id;
+  const steamId = await resolveSteamId(customerId, session.metadata?.steamId);
+  const planMeta = session.metadata?.plan;
+  let plan: PlanId =
+    planMeta === "starter" || planMeta === "pro" ? planMeta : "pro";
+
+  if (subscriptionId) {
+    try {
+      const stripe = getStripe();
+      const sub = await stripe.subscriptions.retrieve(subscriptionId);
+      // Incomplete first invoice must not grant Starter/Pro.
+      if (!subscriptionEntitlesPaidPlan(sub.status)) {
+        return;
+      }
+      plan = planFromSubscription(sub);
+    } catch {
+      /* payment already settled — keep metadata plan if retrieve fails */
+    }
+  }
+
+  if (steamId && customerId) {
+    await linkStripeCustomer(steamId, customerId);
+    await setPlan(steamId, plan, {
+      customerId,
+      subscriptionId: subscriptionId ?? undefined,
+    });
+  }
+}
+
 export async function POST(request: Request) {
   if (!stripeConfigured()) {
     return NextResponse.json({ error: "Stripe not configured" }, { status: 503 });
@@ -55,36 +103,29 @@ export async function POST(request: Request) {
 
   try {
     switch (event.type) {
-      case "checkout.session.completed": {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded": {
+        await grantCheckoutPlan(event.data.object as Stripe.Checkout.Session);
+        break;
+      }
+      case "checkout.session.async_payment_failed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId =
           typeof session.customer === "string"
             ? session.customer
             : session.customer?.id;
-        const subscriptionId =
-          typeof session.subscription === "string"
-            ? session.subscription
-            : session.subscription?.id;
         const steamId = await resolveSteamId(
           customerId,
           session.metadata?.steamId
         );
-        const planMeta = session.metadata?.plan;
-        let plan: PlanId =
-          planMeta === "starter" || planMeta === "pro" ? planMeta : "pro";
-
-        if (subscriptionId) {
-          try {
-            const sub = await stripe.subscriptions.retrieve(subscriptionId);
-            plan = planFromSubscription(sub);
-          } catch {
-            /* keep metadata plan */
-          }
-        }
-
         if (steamId && customerId) {
-          await linkStripeCustomer(steamId, customerId);
-          await setPlan(steamId, plan, {
+          // Keep subscription id when present — sub may still be incomplete;
+          // clearing it would force a stacked second Checkout later.
+          const subscriptionId =
+            typeof session.subscription === "string"
+              ? session.subscription
+              : session.subscription?.id;
+          await setPlan(steamId, "free", {
             customerId,
             subscriptionId: subscriptionId ?? undefined,
           });
@@ -101,11 +142,15 @@ export async function POST(request: Request) {
 
         const active =
           event.type === "customer.subscription.updated" &&
-          (sub.status === "active" || sub.status === "trialing");
+          subscriptionEntitlesPaidPlan(sub.status);
+
+        const clearId = shouldClearStoredSubscriptionId(event.type, sub.status);
 
         await setPlan(steamId, active ? planFromSubscription(sub) : "free", {
           customerId,
-          subscriptionId: active ? sub.id : null,
+          // Preserve id on past_due/unpaid so re-checkout can update in place
+          // instead of opening a second live subscription.
+          subscriptionId: clearId ? null : sub.id,
         });
         break;
       }
