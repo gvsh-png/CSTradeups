@@ -1012,6 +1012,7 @@ function generateTierTradeUps(
  * Example: CaliCamo WW $529 while other wears are cents → drop WW.
  * Blind Spot FT $124 while peers ~$15 → drop FT (old 12× threshold missed this).
  * Bulldozer BS $7.90 while FN–WW ~$275–376 → drop BS (stale SteamApis safe).
+ * Dump MW under FN-only books (MW $4 vs FN $45) → drop MW.
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
@@ -1116,14 +1117,23 @@ export function sanitizePrices(
     // Ghost-cheap worse wear vs a coherent expensive better-wear book.
     // SteamApis `safe` can return stale cents for rare BS (Bulldozer $7.90
     // while FN/MW/FT/WW sit ~$275–376; real BS is ~$270+).
+    // Also dump MW under FN-only books: requiring two better wears skipped
+    // that case entirely. A single *adjacent* better wear is enough
+    // (MW≪FN); sparse FN+BS books still need two better wears so wide
+    // real FN→BS spreads are not wiped.
     for (const row of priced) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
       if (rank == null || rank === 0) continue;
-      const better = priced
-        .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
-        .map((x) => out[x.key]);
-      if (better.length < 2) continue;
+      const betterRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0
+      );
+      if (!betterRows.length) continue;
+      if (betterRows.length === 1) {
+        const onlyRank = WEAR_RANK[betterRows[0].wear];
+        if (onlyRank == null || onlyRank !== rank - 1) continue;
+      }
+      const better = betterRows.map((x) => out[x.key]);
       const betterLo = Math.min(...better);
       const betterHi = Math.max(...better);
       if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
