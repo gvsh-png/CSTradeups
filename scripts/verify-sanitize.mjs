@@ -94,10 +94,15 @@ function sanitizePrices(prices) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
       if (rank == null || rank === 0) continue;
-      const better = priced
-        .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
-        .map((x) => out[x.key]);
-      if (better.length < 2) continue;
+      const betterRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0
+      );
+      if (!betterRows.length) continue;
+      if (betterRows.length === 1) {
+        const onlyRank = WEAR_RANK[betterRows[0].wear];
+        if (onlyRank == null || onlyRank !== rank - 1) continue;
+      }
+      const better = betterRows.map((x) => out[x.key]);
       const betterLo = Math.min(...better);
       const betterHi = Math.max(...better);
       if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
@@ -221,6 +226,46 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Dump MW under FN-only book — old better.length<2 skipped this, so scans
+// bought ghost-cheap MW / fake +EV when FT–BS were missing from the book.
+const nightmareMw = sanitizePrices({
+  "M4A1-S | Nightmare (Factory New)": 45,
+  "M4A1-S | Nightmare (Minimal Wear)": 4,
+});
+assert(
+  "FN-only dump MW dropped",
+  nightmareMw["M4A1-S | Nightmare (Minimal Wear)"] === undefined
+);
+assert(
+  "FN-only FN kept",
+  nightmareMw["M4A1-S | Nightmare (Factory New)"] === 45
+);
+
+// Sparse FN+BS — real wide spreads must not be wiped by a lone non-adjacent
+// better wear (requires two better wears, or an adjacent single).
+const caseHardened = sanitizePrices({
+  "AK-47 | Case Hardened (Factory New)": 100,
+  "AK-47 | Case Hardened (Battle-Scarred)": 12,
+});
+assert(
+  "sparse FN+BS real BS kept",
+  caseHardened["AK-47 | Case Hardened (Battle-Scarred)"] === 12
+);
+
+// Dump FT under MW-only (adjacent single better)
+const eliteFt = sanitizePrices({
+  "AK-47 | Elite Build (Minimal Wear)": 40,
+  "AK-47 | Elite Build (Field-Tested)": 3,
+});
+assert(
+  "MW-only dump FT dropped",
+  eliteFt["AK-47 | Elite Build (Field-Tested)"] === undefined
+);
+assert(
+  "MW-only MW kept",
+  eliteFt["AK-47 | Elite Build (Minimal Wear)"] === 40
 );
 
 if (failed) {
