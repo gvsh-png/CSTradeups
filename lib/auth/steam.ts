@@ -16,17 +16,51 @@ export function steamLoginUrl(returnTo: string): string {
   return `${STEAM_OPENID}?${params.toString()}`;
 }
 
-/** Verify OpenID assertion with Steam and extract SteamID64 */
-export async function verifySteamOpenId(
-  query: URLSearchParams
-): Promise<string> {
+/**
+ * Validate OpenID assertion shape before calling Steam check_authentication.
+ * Pins op_endpoint and rejects control characters so newline-stuffed
+ * op_endpoint values cannot confuse Steam's parser into validating an
+ * attacker assertion while claimed_id names a victim (account takeover).
+ */
+export function assertSteamOpenIdShape(query: URLSearchParams): string {
+  const opEndpoint = query.get("openid.op_endpoint") || "";
+  if (opEndpoint !== STEAM_OPENID) {
+    throw new Error("Invalid Steam OpenID op_endpoint");
+  }
+
+  // Steam never sends invalidate_handle on a normal login; the known
+  // op_endpoint stuffing PoC injects it. Reject early.
+  if (query.has("openid.invalidate_handle")) {
+    throw new Error("Unexpected OpenID invalidate_handle");
+  }
+
+  for (const [key, value] of query.entries()) {
+    if (!key.startsWith("openid.")) continue;
+    // Newlines / other controls enable parameter stuffing inside values
+    if (/[\u0000-\u001f\u007f]/.test(value)) {
+      throw new Error(`Invalid characters in OpenID parameter: ${key}`);
+    }
+  }
+
   const claimedId = query.get("openid.claimed_id") || "";
   const match = claimedId.match(
     /^https?:\/\/steamcommunity\.com\/openid\/id\/(\d+)$/
   );
   if (!match) throw new Error("Invalid Steam OpenID claimed_id");
 
-  const steamId = match[1];
+  const identity = query.get("openid.identity") || "";
+  if (identity && identity !== claimedId) {
+    throw new Error("OpenID identity mismatch");
+  }
+
+  return match[1];
+}
+
+/** Verify OpenID assertion with Steam and extract SteamID64 */
+export async function verifySteamOpenId(
+  query: URLSearchParams
+): Promise<string> {
+  const steamId = assertSteamOpenIdShape(query);
 
   const body = new URLSearchParams();
   for (const [key, value] of query.entries()) {
