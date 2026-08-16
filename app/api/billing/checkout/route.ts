@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authConfigured, appBaseUrl, stripeConfigured } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getStripe, stripePriceIdForPlan } from "@/lib/billing/stripe";
+import { findReusableCheckoutUrl } from "@/lib/billing/subscriptions";
 import type { PlanId } from "@/lib/billing/plans";
 import { getUser, linkStripeCustomer } from "@/lib/usage/store";
 
@@ -64,6 +65,23 @@ export async function POST(request: Request) {
     });
     customerId = customer.id;
     await linkStripeCustomer(user.steamId, customerId);
+  }
+
+  // Double-click / retry while Redis is still free: reuse the open session
+  // instead of creating a second subscription Checkout.
+  try {
+    const openSessions = await stripe.checkout.sessions.list({
+      customer: customerId,
+      status: "open",
+      limit: 10,
+    });
+    const reusableUrl = findReusableCheckoutUrl(openSessions.data, plan);
+    if (reusableUrl) {
+      return NextResponse.json({ url: reusableUrl });
+    }
+  } catch (err) {
+    console.error("Failed to list open Checkout sessions:", err);
+    /* fall through and create a new session */
   }
 
   const checkout = await stripe.checkout.sessions.create({

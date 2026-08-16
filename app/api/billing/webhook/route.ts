@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripeConfigured } from "@/lib/auth/config";
 import { getStripe, planFromStripePriceId } from "@/lib/billing/stripe";
+import { siblingSubscriptionsToCancel } from "@/lib/billing/subscriptions";
 import type { PlanId } from "@/lib/billing/plans";
 import {
   findByStripeCustomer,
@@ -88,6 +89,38 @@ export async function POST(request: Request) {
             customerId,
             subscriptionId: subscriptionId ?? undefined,
           });
+
+          // Two completed Checkouts (double-click / two tabs) leave two live
+          // subscriptions; Redis only stores one id. Cancel siblings on Stripe.
+          if (subscriptionId) {
+            try {
+              const subs = await stripe.subscriptions.list({
+                customer: customerId,
+                status: "all",
+                limit: 20,
+              });
+              const orphans = siblingSubscriptionsToCancel(
+                subs.data,
+                subscriptionId
+              );
+              for (const orphanId of orphans) {
+                try {
+                  await stripe.subscriptions.cancel(orphanId);
+                } catch (err) {
+                  console.error(
+                    "Failed to cancel sibling Stripe subscription:",
+                    orphanId,
+                    err
+                  );
+                }
+              }
+            } catch (err) {
+              console.error(
+                "Failed to list subscriptions for sibling cancel:",
+                err
+              );
+            }
+          }
         }
         break;
       }
