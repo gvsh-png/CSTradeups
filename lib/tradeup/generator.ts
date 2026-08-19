@@ -1039,9 +1039,14 @@ function medianPositive(nums: number[]): number {
   return sorted[mid];
 }
 
+/**
+ * Cross-wear spike / ghost-cheap / FN-ceiling cleanup.
+ * `_skinDB` is unused (kept for call-site compatibility) — callers must not
+ * skip this when schema fetch fails.
+ */
 export function sanitizePrices(
   prices: PriceMap,
-  _skinDB: SkinData[]
+  _skinDB: SkinData[] = []
 ): PriceMap {
   const out: PriceMap = { ...prices };
   const byBase = new Map<string, string[]>();

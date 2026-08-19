@@ -8,7 +8,6 @@ import {
   tradeUpHasFullSteamLive,
 } from "@/lib/steamLive";
 import { repriceTradeUp, sanitizePrices } from "@/lib/tradeup/generator";
-import { buildSkinDatabase, fetchSchema } from "@/lib/schema";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 
 export const dynamic = "force-dynamic";
@@ -36,15 +35,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Same light sanitize as /api/generate so both paths stay in sync
-    let prices = bulk;
-    try {
-      const schema = await fetchSchema();
-      const skinDB = buildSkinDatabase(schema);
-      prices = sanitizePrices(bulk, skinDB);
-    } catch {
-      prices = bulk;
-    }
+    // sanitizePrices only reads the price book (skinDB is unused). Never gate
+    // it on fetchSchema — a schema timeout/5xx used to fall back to raw bulk
+    // and let ghost-cheap Steam dumps inflate refresh EV/win%.
+    let prices = sanitizePrices(bulk, []);
 
     // Live Steam Starting-at only for this blueprint
     let steamLiveFetched = 0;
@@ -65,7 +59,7 @@ export async function POST(request: Request) {
         }
       }
     } catch {
-      /* keep bulk */
+      /* keep sanitized bulk */
     }
 
     const fee = tradeUp.fee ?? CSFLOAT_FEE;
