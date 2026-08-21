@@ -47,6 +47,10 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
+  /** Always-current list for concurrent bookmark clicks (stale closures lose favorites) */
+  const savedRef = useRef<SavedTradeUp[]>([]);
+  /** Serialize claim → persist so two cards cannot clobber each other */
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -55,6 +59,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const persistSaved = useCallback((items: SavedTradeUp[]) => {
+    savedRef.current = items;
     setSaved(items);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, []);
@@ -62,7 +67,11 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setSaved(JSON.parse(raw) as SavedTradeUp[]);
+      if (raw) {
+        const items = JSON.parse(raw) as SavedTradeUp[];
+        savedRef.current = items;
+        setSaved(items);
+      }
     } catch {
       /* ignore */
     }
@@ -101,63 +110,71 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   );
 
   const saveTradeUp = useCallback(
-    async (
+    (
       tradeUp: TradeUpResult,
       openUpgrade: (reason?: string) => void
     ): Promise<boolean> => {
-      if (saved.some((s) => s.id === tradeUp.id)) return false;
+      const work = async (): Promise<boolean> => {
+        if (savedRef.current.some((s) => s.id === tradeUp.id)) return false;
 
-      if (authConfigured && authRequired && !user) {
-        openUpgrade("Sign in with Steam to save trade-ups.");
-        return false;
-      }
-
-      if (authConfigured && user) {
-        const claimed = await claimSave();
-        if (!claimed.ok) {
-          openUpgrade(claimed.error);
+        if (authConfigured && authRequired && !user) {
+          openUpgrade("Sign in with Steam to save trade-ups.");
           return false;
         }
-      }
 
-      persistSaved([
-        { ...tradeUp, savedAt: new Date().toISOString() },
-        ...saved,
-      ]);
-      return true;
+        if (authConfigured && user) {
+          const claimed = await claimSave();
+          if (!claimed.ok) {
+            openUpgrade(claimed.error);
+            return false;
+          }
+        }
+
+        // Re-check after await — another serialized save may have landed
+        if (savedRef.current.some((s) => s.id === tradeUp.id)) {
+          if (authConfigured && user) await releaseSave();
+          return false;
+        }
+
+        persistSaved([
+          { ...tradeUp, savedAt: new Date().toISOString() },
+          ...savedRef.current,
+        ]);
+        return true;
+      };
+
+      const result = saveChainRef.current.then(work, work);
+      saveChainRef.current = result.then(
+        () => undefined,
+        () => undefined
+      );
+      return result;
     },
-    [
-      saved,
-      authConfigured,
-      authRequired,
-      user,
-      claimSave,
-      persistSaved,
-    ]
+    [authConfigured, authRequired, user, claimSave, releaseSave, persistSaved]
   );
 
   const removeSaved = useCallback(
     async (id: string) => {
-      if (!saved.some((s) => s.id === id)) return;
-      const next = saved.filter((s) => s.id !== id);
+      if (!savedRef.current.some((s) => s.id === id)) return;
+      const next = savedRef.current.filter((s) => s.id !== id);
       persistSaved(next);
       showToast("Removed from saved");
       if (authConfigured && user) await releaseSave();
     },
-    [saved, persistSaved, authConfigured, user, releaseSave, showToast]
+    [persistSaved, authConfigured, user, releaseSave, showToast]
   );
 
   const updateSaved = useCallback(
     (item: SavedTradeUp) => {
-      persistSaved(saved.map((s) => (s.id === item.id ? item : s)));
+      persistSaved(savedRef.current.map((s) => (s.id === item.id ? item : s)));
     },
-    [saved, persistSaved]
+    [persistSaved]
   );
 
   const updateInsight = useCallback(
     (id: string, insight: string | undefined) => {
       persistSaved(
-        saved.map((s) => {
+        savedRef.current.map((s) => {
           if (s.id !== id) return s;
           if (insight === undefined) {
             const { insight: _removed, ...rest } = s;
@@ -167,7 +184,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
         })
       );
     },
-    [saved, persistSaved]
+    [persistSaved]
   );
 
   const value = useMemo(

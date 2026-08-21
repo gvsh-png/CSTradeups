@@ -161,15 +161,44 @@ export async function consumeScan(
   return { ok: true, user, quota: quotaFromUser(user) };
 }
 
+function saveCounterKey(steamId: string) {
+  return `quota:saves:${steamId}`;
+}
+
+/**
+ * Align the atomic save counter with the user document.
+ * Never lowers an existing counter (concurrent claims may already be ahead);
+ * raises it when the document is ahead (e.g. after Pro-unlimited saves).
+ */
+async function syncSaveCounter(
+  steamId: string,
+  savedCount: number
+): Promise<void> {
+  const key = saveCounterKey(steamId);
+  const n = Math.max(0, Math.floor(savedCount));
+  const r = redis();
+  const current = await r.get<number>(key);
+  if (current == null || !Number.isFinite(Number(current))) {
+    await r.set(key, n);
+    return;
+  }
+  if (Number(current) < n) {
+    await r.set(key, n);
+  }
+}
+
 export async function setSavedCount(
   steamId: string,
   savedCount: number
 ): Promise<UserRecord | null> {
   const existing = await getUser(steamId);
   if (!existing) return null;
+  const n = Math.max(0, Math.floor(savedCount));
+  // Keep the atomic counter aligned with explicit syncs
+  await redis().set(saveCounterKey(steamId), n);
   return saveUser({
     ...rollWeek(existing),
-    savedCount: Math.max(0, Math.floor(savedCount)),
+    savedCount: n,
   });
 }
 
@@ -195,26 +224,44 @@ export async function claimSaveSlot(
   }
 
   const user = rollWeek(existing);
-  const quota = quotaFromUser(user);
-  if (!quota.canSave) {
+  const savedLimit = maxSavedLimit(user.plan);
+  const r = redis();
+
+  // Atomic counter avoids concurrent free/starter overshoot (same pattern as consumeScan)
+  await syncSaveCounter(steamId, user.savedCount);
+  const next = await r.incr(saveCounterKey(steamId));
+  if (savedLimit != null && next > savedLimit) {
+    await r.decr(saveCounterKey(steamId));
+    const quota = quotaFromUser({ ...user, savedCount: savedLimit });
     return {
       ok: false,
-      reason: `Free plan allows ${quota.maxSaved} saved trade-up at a time. Remove one or upgrade to Pro.`,
+      reason:
+        user.plan === "starter"
+          ? `Starter plan allows ${savedLimit} saved trade-ups. Remove one or upgrade to Pro.`
+          : `Free plan allows ${savedLimit} saved trade-up at a time. Remove one or upgrade.`,
       quota,
     };
   }
 
-  const next = await saveUser({ ...user, savedCount: user.savedCount + 1 });
-  return { ok: true, user: next, quota: quotaFromUser(next) };
+  const saved = await saveUser({ ...user, savedCount: next });
+  return { ok: true, user: saved, quota: quotaFromUser(saved) };
 }
 
 export async function releaseSaveSlot(steamId: string): Promise<UserRecord | null> {
   const existing = await getUser(steamId);
   if (!existing) return null;
   const user = rollWeek(existing);
+
+  await syncSaveCounter(steamId, user.savedCount);
+  const next = await redis().decr(saveCounterKey(steamId));
+  const nextCount = Math.max(0, next);
+  if (next < 0) {
+    await redis().set(saveCounterKey(steamId), 0);
+  }
+
   return saveUser({
     ...user,
-    savedCount: Math.max(0, user.savedCount - 1),
+    savedCount: nextCount,
   });
 }
 
