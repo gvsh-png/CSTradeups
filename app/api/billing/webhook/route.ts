@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripeConfigured } from "@/lib/auth/config";
+import {
+  resolveSubscriptionStatusForEntitlement,
+  subscriptionStatusEntitlesPaid,
+} from "@/lib/billing/subscriptionLiveStatus";
 import { getStripe, planFromStripePriceId } from "@/lib/billing/stripe";
 import type { PlanId } from "@/lib/billing/plans";
 import {
@@ -99,13 +103,29 @@ export async function POST(request: Request) {
         const steamId = await resolveSteamId(customerId, sub.metadata?.steamId);
         if (!steamId) break;
 
-        const active =
-          event.type === "customer.subscription.updated" &&
-          (sub.status === "active" || sub.status === "trialing");
+        // Reconcile against live Stripe state so a delayed/retried
+        // subscription.updated (status=active) cannot resurrect paid access
+        // after a newer cancel/delete for the same subscription id.
+        let liveSub: Stripe.Subscription | null = null;
+        if (event.type === "customer.subscription.updated") {
+          try {
+            liveSub = await stripe.subscriptions.retrieve(sub.id);
+          } catch {
+            liveSub = null;
+          }
+        }
 
-        await setPlan(steamId, active ? planFromSubscription(sub) : "free", {
+        const { status } = resolveSubscriptionStatusForEntitlement(
+          event.type,
+          sub,
+          liveSub
+        );
+        const active = subscriptionStatusEntitlesPaid(status);
+        const planSub = liveSub ?? sub;
+
+        await setPlan(steamId, active ? planFromSubscription(planSub) : "free", {
           customerId,
-          subscriptionId: active ? sub.id : null,
+          subscriptionId: active ? planSub.id : null,
         });
         break;
       }
