@@ -1,5 +1,6 @@
 import type { TradeUpResult } from "@/lib/tradeup/types";
 import { RARITY_COLORS, rarityShort, isSouvenirSkinName, SOUVENIR_BORDER } from "@/lib/constants";
+import { isWinProfit } from "@/lib/tradeup/float";
 import { proxiedImageUrl } from "@/lib/proxyImage";
 import {
   DEFAULT_CURRENCY,
@@ -385,7 +386,7 @@ export default function TradeUpExport({
                     fontSize: 12,
                     fontWeight: 700,
                     color:
-                      outcome.profit >= 0 ? COLORS.profit : COLORS.loss,
+                      isWinProfit(outcome.profit) ? COLORS.profit : COLORS.loss,
                     marginTop: 2,
                   }}
                 >

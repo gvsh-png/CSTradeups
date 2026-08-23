@@ -128,6 +128,14 @@ export function r2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * True break-even (+0) counts as a win; rounded micro-losses become -0 in JS
+ * (`Math.round(-0.4) === -0`) and must NOT count as wins (`-0 >= 0` is true).
+ */
+export function isWinProfit(profit: number): boolean {
+  return profit > 0 || Object.is(profit, 0);
+}
+
 export function r4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
