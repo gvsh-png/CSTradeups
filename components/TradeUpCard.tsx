@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TradeUpResult } from "@/lib/tradeup/types";
 import { rarityShort, rarityStyle, isSouvenirSkinName, SOUVENIR_BORDER } from "@/lib/constants";
+import { isWinProfit } from "@/lib/tradeup/float";
 import type { ProgressState } from "@/hooks/useSimulatedProgress";
 import LoadingProgress from "./LoadingProgress";
 import MarketLinks from "./MarketLinks";
@@ -613,7 +614,9 @@ export default function TradeUpCard({
                     className="text-[10px] tabular-nums"
                     style={{
                       color:
-                        outcome.profit >= 0 ? "var(--profit)" : "var(--loss)",
+                        isWinProfit(outcome.profit)
+                          ? "var(--profit)"
+                          : "var(--loss)",
                     }}
                   >
                     {money(outcome.profit, { signed: true })}

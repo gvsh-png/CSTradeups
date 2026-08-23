@@ -19,6 +19,7 @@ import {
   outF,
   possibleWears,
   clampWinPct,
+  isWinProfit,
   r2,
   r4,
 } from "./float";
@@ -290,13 +291,14 @@ function toTradeUpResult(
     }))
     .sort((a, b) => b.price - a.price);
 
-  // Win % from display probs so the header matches the outcome list
+  // Win % from display probs so the header matches the outcome list.
+  // Use isWinProfit — `r2` micro-losses become -0 and `-0 >= 0` is true in JS.
   let displayWin = 0;
   for (const o of tradeOutcomes) {
-    if (o.profit >= 0) displayWin += o.prob;
+    if (isWinProfit(o.profit)) displayWin += o.prob;
   }
   const displayWinPct =
-    tradeOutcomes.length > 0 && tradeOutcomes.every((o) => o.profit >= 0)
+    tradeOutcomes.length > 0 && tradeOutcomes.every((o) => isWinProfit(o.profit))
       ? 100
       : clampWinPct(displayWin);
 
@@ -1174,7 +1176,7 @@ export function repriceTradeUp(
   let winPct = 0;
   let allWin = outcomes.length > 0;
   for (const o of outcomes) {
-    if (o.profit >= 0) winPct += o.prob;
+    if (isWinProfit(o.profit)) winPct += o.prob;
     else allWin = false;
   }
   winPct = allWin ? 100 : clampWinPct(winPct);
