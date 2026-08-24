@@ -3,6 +3,7 @@ import {
   currentWeekKey,
   type PlanId,
   maxSavedLimit,
+  shouldResetWeeklyScansOnPlanChange,
   weeklyScanLimit,
 } from "@/lib/billing/plans";
 
@@ -225,8 +226,21 @@ export async function setPlan(
 ): Promise<UserRecord | null> {
   const existing = await getUser(steamId);
   if (!existing) return null;
+  let user = rollWeek(existing);
+
+  // consumeScan uses quota:scans:{steamId}:{week} for finite plans and only
+  // bumps user.weeklyScans for Pro. After Starter (e.g. 10/40) or Pro→Free,
+  // that counter / mirror can sit at or above Free's 5 and SCAN_LIMIT until
+  // the week rolls — canceling paid access should still grant the Free (or
+  // Starter) weekly allotment.
+  if (shouldResetWeeklyScansOnPlanChange(user.plan, plan)) {
+    const counterKey = `quota:scans:${steamId}:${user.weekKey}`;
+    await redis().del(counterKey);
+    user = { ...user, weeklyScans: 0 };
+  }
+
   return saveUser({
-    ...rollWeek(existing),
+    ...user,
     plan,
     stripeCustomerId: stripe?.customerId ?? existing.stripeCustomerId,
     stripeSubscriptionId:
