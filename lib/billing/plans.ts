@@ -40,6 +40,21 @@ export function weeklyScanLimit(plan: PlanId): number | null {
   return FREE_WEEKLY_SCANS;
 }
 
+/**
+ * True when moving onto a tighter (or newly finite) weekly scan cap.
+ * Used to clear the durable Redis INCR so Starter/Pro usage cannot
+ * permanently SCAN_LIMIT the lower tier for the rest of the ISO week.
+ */
+export function shouldResetWeeklyScansOnPlanChange(
+  prev: PlanId,
+  next: PlanId
+): boolean {
+  if (prev === next) return false;
+  const prevLimit = weeklyScanLimit(prev);
+  const nextLimit = weeklyScanLimit(next);
+  return nextLimit != null && (prevLimit == null || nextLimit < prevLimit);
+}
+
 export function maxSavedLimit(plan: PlanId): number | null {
   if (plan === "pro") return PRO_MAX_SAVED;
   if (plan === "starter") return STARTER_MAX_SAVED;
