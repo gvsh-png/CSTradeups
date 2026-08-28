@@ -14,6 +14,10 @@ const ALLOWED_HOSTS = new Set([
   "steamcommunity-a.akamaihd.net",
 ]);
 
+/** Cap proxy buffer so a huge upstream body cannot OOM the route */
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_REDIRECT_HOPS = 3;
+
 function rewriteSteamCdn(url: URL): URL {
   // Prefer Cloudflare edge when Akamai blocks datacenter IPs
   if (url.hostname === "community.akamai.steamstatic.com") {
@@ -22,6 +26,46 @@ function rewriteSteamCdn(url: URL): URL {
     return next;
   }
   return url;
+}
+
+function isAllowedImageUrl(url: URL): boolean {
+  return url.protocol === "https:" && ALLOWED_HOSTS.has(url.hostname);
+}
+
+/**
+ * Fetch an allowlisted image without open redirect SSRF.
+ * Default fetch() follows redirects to any host — re-check each hop.
+ */
+async function fetchAllowedImage(start: URL): Promise<Response | null> {
+  let current = start;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+    if (!isAllowedImageUrl(current)) return null;
+
+    const res = await fetch(current.toString(), {
+      redirect: "manual",
+      headers: {
+        Accept: "image/png,image/webp,image/*,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (compatible; tradeupcsgo.net/1.0)",
+        Referer: "https://steamcommunity.com/",
+      },
+      signal: AbortSignal.timeout(15_000),
+      next: { revalidate: 86400 },
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) return null;
+      try {
+        current = new URL(loc, current);
+      } catch {
+        return null;
+      }
+      continue;
+    }
+
+    return res;
+  }
+  return null;
 }
 
 export async function GET(request: Request) {
@@ -38,7 +82,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid url" }, { status: 400 });
     }
 
-    if (target.protocol !== "https:" || !ALLOWED_HOSTS.has(target.hostname)) {
+    if (!isAllowedImageUrl(target)) {
       return NextResponse.json({ error: "Host not allowed" }, { status: 403 });
     }
 
@@ -48,16 +92,8 @@ export async function GET(request: Request) {
 
     let upstream: Response | null = null;
     for (const candidate of candidates) {
-      upstream = await fetch(candidate.toString(), {
-        headers: {
-          Accept: "image/png,image/webp,image/*,*/*;q=0.8",
-          "User-Agent":
-            "Mozilla/5.0 (compatible; tradeupcsgo.net/1.0)",
-          Referer: "https://steamcommunity.com/",
-        },
-        next: { revalidate: 86400 },
-      });
-      if (upstream.ok) break;
+      upstream = await fetchAllowedImage(candidate);
+      if (upstream?.ok) break;
     }
 
     if (!upstream || !upstream.ok) {
@@ -72,7 +108,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Not an image" }, { status: 415 });
     }
 
+    const declared = upstream.headers.get("content-length");
+    if (declared && Number(declared) > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: "Image too large" }, { status: 413 });
+    }
+
     const buffer = await upstream.arrayBuffer();
+    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: "Image too large" }, { status: 413 });
+    }
+
     return new NextResponse(buffer, {
       status: 200,
       headers: {

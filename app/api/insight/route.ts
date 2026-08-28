@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  MAX_INSIGHT_BODY_CHARS,
+  allowInsightRequest,
+  compactInsightTradeUp,
+  insightClientKey,
+} from "@/lib/insightGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +17,34 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!allowInsightRequest(insightClientKey(request))) {
+    return NextResponse.json(
+      { error: "Too many insight requests. Try again later." },
+      { status: 429 }
+    );
+  }
+
   try {
-    const { tradeUp } = await request.json();
-    if (!tradeUp) {
-      return NextResponse.json({ error: "No trade-up provided" }, { status: 400 });
+    const contentLength = request.headers.get("content-length");
+    if (contentLength && Number(contentLength) > MAX_INSIGHT_BODY_CHARS) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+
+    const raw = await request.text();
+    if (raw.length > MAX_INSIGHT_BODY_CHARS) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+
+    let body: { tradeUp?: unknown };
+    try {
+      body = JSON.parse(raw) as { tradeUp?: unknown };
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+
+    const compacted = compactInsightTradeUp(body.tradeUp);
+    if (!compacted.ok) {
+      return NextResponse.json({ error: compacted.error }, { status: 400 });
     }
 
     const model =
@@ -38,7 +68,7 @@ export async function POST(request: Request) {
           },
           {
             role: "user",
-            content: `Analyze this CS2 trade-up contract:\n${JSON.stringify(tradeUp, null, 2)}`,
+            content: `Analyze this CS2 trade-up contract:\n${compacted.payload}`,
           },
         ],
         max_tokens: 200,
