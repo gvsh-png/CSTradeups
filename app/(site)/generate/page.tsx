@@ -18,7 +18,14 @@ function scrollToId(id: string, block: ScrollLogicalPosition = "start") {
 export default function GeneratePage() {
   const { authConfigured, authRequired, user, refresh } = useAuth();
   const { openUpgrade, openSettings, settings } = useAppFrame();
-  const { saveTradeUp, removeSaved, isSaved, updateInsight, saved } = useSaved();
+  const {
+    saveTradeUp,
+    removeSaved,
+    isSaved,
+    updateInsight,
+    saved,
+    syncSavedFromLiveResults,
+  } = useSaved();
 
   const [results, setResults] = useState<TradeUpResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -147,6 +154,9 @@ export default function GeneratePage() {
             };
             if (!liveData.results?.length) return;
             setResults(liveData.results);
+            // Favorites saved during live-reprice still hold bulk quotes;
+            // overlay live prices onto matching ids so Saved stays correct.
+            syncSavedFromLiveResults(liveData.results);
             setMeta((prev) => ({
               ...(prev || {}),
               priceSource: liveData.priceSource || "steam-live",
@@ -195,6 +205,7 @@ export default function GeneratePage() {
   };
 
   const handleSave = async (tradeUp: TradeUpResult) => {
+    if (livePricing) return false;
     return saveTradeUp(tradeUp, openUpgrade);
   };
 
@@ -308,6 +319,7 @@ export default function GeneratePage() {
           onUnsave={handleUnsave}
           onInsight={handleInsight}
           isSaved={isSaved}
+          saveDisabled={livePricing}
           targetOutcomeName={
             typeof meta?.targetOutcomeName === "string"
               ? meta.targetOutcomeName

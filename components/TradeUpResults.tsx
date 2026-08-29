@@ -16,6 +16,8 @@ interface TradeUpResultsProps {
   isSaved: (id: string) => boolean;
   /** Highlight / rank label when hunting a specific outcome */
   targetOutcomeName?: string | null;
+  /** True while background Steam Starting-at reprice is in flight */
+  saveDisabled?: boolean;
 }
 
 export default function TradeUpResults({
@@ -26,6 +28,7 @@ export default function TradeUpResults({
   onInsight,
   isSaved,
   targetOutcomeName,
+  saveDisabled = false,
 }: TradeUpResultsProps) {
   const progress = useSimulatedProgress(loading, "generate");
 
@@ -89,6 +92,7 @@ export default function TradeUpResults({
             saved={isSaved(tradeUp.id)}
             targetOutcomeName={targetOutcomeName || undefined}
             showShare
+            saveDisabled={saveDisabled}
           />
         </div>
       ))}
