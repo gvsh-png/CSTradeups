@@ -26,6 +26,8 @@ interface TradeUpCardProps {
   compact?: boolean;
   /** When set, highlight this outcome and show its hit chance */
   targetOutcomeName?: string;
+  /** Block new saves while live Steam reprice is still pending */
+  saveDisabled?: boolean;
 }
 
 function IconBtn({
@@ -152,6 +154,7 @@ export default function TradeUpCard({
   savedAt,
   compact = false,
   targetOutcomeName,
+  saveDisabled = false,
 }: TradeUpCardProps) {
   const { money } = useCurrency();
   const [expanded, setExpanded] = useState(!compact);
@@ -195,6 +198,7 @@ export default function TradeUpCard({
 
   const handleBookmark = async () => {
     if (bookmarkBusy) return;
+    if (!saved && saveDisabled) return;
     setBookmarkBusy(true);
     try {
       if (saved && onUnsave) {
@@ -410,14 +414,20 @@ export default function TradeUpCard({
           {(onSave || onUnsave) && (
             <IconBtn
               onClick={() => void handleBookmark()}
-              disabled={bookmarkBusy || (saved && !onUnsave)}
+              disabled={
+                bookmarkBusy ||
+                (saved && !onUnsave) ||
+                (!saved && saveDisabled)
+              }
               active={saved}
               title={
                 saved
                   ? onUnsave
                     ? "Remove from saved"
                     : "Saved"
-                  : "Save"
+                  : saveDisabled
+                    ? "Wait for Steam Starting at…"
+                    : "Save"
               }
               className={
                 bookmarkFlash === "removed"

@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { SavedTradeUp, TradeUpResult } from "@/lib/tradeup/types";
 import { STORAGE_KEY } from "@/lib/constants";
+import { applyLiveResultsToSaved } from "@/lib/savedSync";
 import { loadSettings, saveSettings, type AppSettings } from "@/lib/settings";
 import { useAuth } from "./AuthProvider";
 
@@ -27,6 +28,8 @@ type SavedContextValue = {
   removeSaved: (id: string) => Promise<void>;
   updateSaved: (item: SavedTradeUp) => void;
   updateInsight: (id: string, insight: string | undefined) => void;
+  /** Overlay live-repriced scan results onto matching saved favorites */
+  syncSavedFromLiveResults: (liveResults: TradeUpResult[]) => void;
 };
 
 const SavedContext = createContext<SavedContextValue | null>(null);
@@ -47,6 +50,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
+  const savedRef = useRef<SavedTradeUp[]>([]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -55,6 +59,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const persistSaved = useCallback((items: SavedTradeUp[]) => {
+    savedRef.current = items;
     setSaved(items);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, []);
@@ -62,7 +67,11 @@ export function SavedProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setSaved(JSON.parse(raw) as SavedTradeUp[]);
+      if (raw) {
+        const items = JSON.parse(raw) as SavedTradeUp[];
+        savedRef.current = items;
+        setSaved(items);
+      }
     } catch {
       /* ignore */
     }
@@ -170,6 +179,18 @@ export function SavedProvider({ children }: { children: ReactNode }) {
     [saved, persistSaved]
   );
 
+  const syncSavedFromLiveResults = useCallback(
+    (liveResults: TradeUpResult[]) => {
+      const { next, updatedIds } = applyLiveResultsToSaved(
+        savedRef.current,
+        liveResults
+      );
+      if (!updatedIds.length) return;
+      persistSaved(next);
+    },
+    [persistSaved]
+  );
+
   const value = useMemo(
     () => ({
       saved,
@@ -180,6 +201,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
       removeSaved,
       updateSaved,
       updateInsight,
+      syncSavedFromLiveResults,
     }),
     [
       saved,
@@ -190,6 +212,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
       removeSaved,
       updateSaved,
       updateInsight,
+      syncSavedFromLiveResults,
     ]
   );
 
