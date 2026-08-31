@@ -1,5 +1,4 @@
 import {
-  EXCLUDED_KEYWORDS,
   isNeverTradeUpCollection,
   KNIFE_GLOVE_TYPES,
   RARITY_MAP,
@@ -9,23 +8,16 @@ import {
 import type { SchemaData, SkinData } from "./tradeup/types";
 import { mergeSchemaSupplement } from "./schema-supplement";
 
-/** Soft name-keyword bans (Anubis, timed drops, etc.) */
-function isExcludedColName(name: string): boolean {
-  const nm = name.toLowerCase();
-  return (
-    EXCLUDED_KEYWORDS.some((k) => nm.includes(k)) || nm.includes("exclusive")
-  );
-}
-
-/** Permanent + soft bans — collection key or display name */
+/**
+ * Hard bans only — Armory Limited Edition (`set_xpshop_*`).
+ * Do not substring-ban live keys like `set_timed_drops_*` / `set_anubis`:
+ * Ascent, Boreal, Radiant, Achroma, Harlequin, and Anubis are valid trade-ups.
+ */
 export function isTradeUpBannedCollection(
   key: string,
   name?: string
 ): boolean {
-  if (isNeverTradeUpCollection(key, name)) return true;
-  if (name && isExcludedColName(name)) return true;
-  if (isExcludedColName(key)) return true;
-  return false;
+  return isNeverTradeUpCollection(key, name);
 }
 
 export type SkinDbOptions = {

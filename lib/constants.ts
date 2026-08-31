@@ -99,20 +99,6 @@ export function isNeverTradeUpCollection(
   return false;
 }
 
-/**
- * Soft keyword bans on collection *names* (always skipped in generation).
- * Separate from NEVER_TRADEUP — these may still appear in settings UI.
- */
-export const EXCLUDED_KEYWORDS = [
-  "armory",
-  "armoury",
-  "timed_drops",
-  "timed-drops",
-  "anubis",
-  "exuberant",
-  "opulent",
-];
-
 export const KNIFE_GLOVE_TYPES = ["Knives", "Gloves"];
 
 export const STORAGE_KEY = "tradeup-gen-saved";
