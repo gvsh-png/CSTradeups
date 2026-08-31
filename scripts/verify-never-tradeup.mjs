@@ -18,11 +18,9 @@ function isNeverTradeUpCollection(key, name) {
   return false;
 }
 
+/** Mirrors lib/schema.ts — hard bans only */
 function isTradeUpBannedCollection(key, name) {
-  if (isNeverTradeUpCollection(key, name)) return true;
-  const soft = ["armory", "armoury", "timed_drops", "timed-drops", "anubis", "exuberant", "opulent"];
-  const blob = `${key} ${name || ""}`.toLowerCase();
-  return soft.some((w) => blob.includes(w)) || blob.includes("exclusive");
+  return isNeverTradeUpCollection(key, name);
 }
 
 let failed = 0;
@@ -48,9 +46,31 @@ assert(
   !isNeverTradeUpCollection("set_community_13", "The Gamma Collection")
 );
 assert(
-  "Anubis soft-banned (not never-UI)",
-  isTradeUpBannedCollection("set_anubis", "The Anubis Collection") &&
-    !isNeverTradeUpCollection("set_anubis", "The Anubis Collection")
+  "Anubis allowed (valid map collection)",
+  !isTradeUpBannedCollection("set_anubis", "The Anubis Collection")
+);
+assert(
+  "Ascent live key allowed",
+  !isTradeUpBannedCollection("set_timed_drops_cool", "The Ascent Collection")
+);
+assert(
+  "Boreal allowed",
+  !isTradeUpBannedCollection("set_timed_drops_neutral", "The Boreal Collection")
+);
+assert(
+  "Radiant allowed",
+  !isTradeUpBannedCollection("set_timed_drops_warm", "The Radiant Collection")
+);
+assert(
+  "Achroma allowed",
+  !isTradeUpBannedCollection("set_timed_drops_achroma", "The Achroma Collection")
+);
+assert(
+  "Harlequin allowed",
+  !isTradeUpBannedCollection(
+    "set_timed_drops_exuberant",
+    "The Harlequin Collection"
+  )
 );
 assert(
   "Solitude collection banned",
@@ -89,6 +109,34 @@ fetch("https://csfloat.com/api/v1/schema")
       "exactly the LEI skins are never-tradeup paints",
       uniqueSkins.length === 4,
       `count=${uniqueSkins.length} → ${uniqueSkins.join("; ")}`
+    );
+
+    // Soft keyword bans used to strip these live trade-up ladders
+    const mustAllow = [
+      "set_anubis",
+      "set_timed_drops_cool",
+      "set_timed_drops_neutral",
+      "set_timed_drops_warm",
+      "set_timed_drops_achroma",
+      "set_timed_drops_exuberant",
+    ];
+    let weaponSkinsAllowed = 0;
+    for (const w of Object.values(s.weapons || {})) {
+      if (["Knives", "Gloves"].includes(w.type)) continue;
+      for (const p of Object.values(w.paints || {})) {
+        const cols = p.collections || [];
+        if (!cols.length) continue;
+        const valid = cols.filter((c) => {
+          const col = (s.collections || []).find((x) => x.key === c);
+          return !isTradeUpBannedCollection(c, col?.name);
+        });
+        if (valid.some((c) => mustAllow.includes(c))) weaponSkinsAllowed++;
+      }
+    }
+    assert(
+      "live Armory+Anubis weapon skins stay in generation pool",
+      weaponSkinsAllowed >= 115,
+      `allowed=${weaponSkinsAllowed}`
     );
 
     if (failed) {
