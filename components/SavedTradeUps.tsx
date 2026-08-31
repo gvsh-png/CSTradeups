@@ -9,12 +9,15 @@ interface SavedTradeUpsProps {
   items: SavedTradeUp[];
   onRemove: (id: string) => void;
   onUpdate: (item: SavedTradeUp) => void;
+  /** Insight-only patch — must not rewrite the full contract (stale closure vs refresh) */
+  onInsightUpdate: (id: string, insight: string | undefined) => void;
 }
 
 export default function SavedTradeUps({
   items,
   onRemove,
   onUpdate,
+  onInsightUpdate,
 }: SavedTradeUpsProps) {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [exitingIds, setExitingIds] = useState<Set<string>>(() => new Set());
@@ -117,14 +120,7 @@ export default function SavedTradeUps({
               refreshingId === item.id ? refreshProgress : undefined
             }
             onRemove={() => handleRemove(item.id)}
-            onInsight={(insight) => {
-              if (insight === undefined) {
-                const { insight: _removed, ...rest } = item;
-                onUpdate(rest as SavedTradeUp);
-              } else {
-                onUpdate({ ...item, insight });
-              }
-            }}
+            onInsight={(insight) => onInsightUpdate(item.id, insight)}
             showShare
           />
         </div>
