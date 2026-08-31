@@ -5,7 +5,7 @@ import SavedTradeUps from "@/components/SavedTradeUps";
 import { useSaved } from "@/components/SavedProvider";
 
 export default function SavedPage() {
-  const { saved, removeSaved, updateSaved } = useSaved();
+  const { saved, removeSaved, updateSaved, updateInsight } = useSaved();
 
   return (
     <div className="mx-auto max-w-container px-4 sm:px-6 py-5 lg:py-8">
@@ -30,6 +30,7 @@ export default function SavedPage() {
         items={saved}
         onRemove={(id) => void removeSaved(id)}
         onUpdate={updateSaved}
+        onInsightUpdate={updateInsight}
       />
     </div>
   );

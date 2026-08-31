@@ -59,6 +59,18 @@ export function SavedProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, []);
 
+  /** Patch helpers read latest state so in-flight insight/refresh cannot clobber each other */
+  const patchSaved = useCallback(
+    (fn: (prev: SavedTradeUp[]) => SavedTradeUp[]) => {
+      setSaved((prev) => {
+        const next = fn(prev);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -149,15 +161,15 @@ export function SavedProvider({ children }: { children: ReactNode }) {
 
   const updateSaved = useCallback(
     (item: SavedTradeUp) => {
-      persistSaved(saved.map((s) => (s.id === item.id ? item : s)));
+      patchSaved((prev) => prev.map((s) => (s.id === item.id ? item : s)));
     },
-    [saved, persistSaved]
+    [patchSaved]
   );
 
   const updateInsight = useCallback(
     (id: string, insight: string | undefined) => {
-      persistSaved(
-        saved.map((s) => {
+      patchSaved((prev) =>
+        prev.map((s) => {
           if (s.id !== id) return s;
           if (insight === undefined) {
             const { insight: _removed, ...rest } = s;
@@ -167,7 +179,7 @@ export function SavedProvider({ children }: { children: ReactNode }) {
         })
       );
     },
-    [saved, persistSaved]
+    [patchSaved]
   );
 
   const value = useMemo(
