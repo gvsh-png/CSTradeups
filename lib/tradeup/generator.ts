@@ -341,6 +341,68 @@ function weaponOf(skinName: string): string {
   return name.split(" | ")[0] || name;
 }
 
+function isSouvenirCandidate(opt: InputCandidate): boolean {
+  return Boolean(
+    opt.skin.isSouvenir || opt.skin.name.startsWith("Souvenir ")
+  );
+}
+
+/**
+ * Pick up to `poolSize` input candidates with weapon diversity.
+ * Souvenir mode must keep ≥1 souvenir in the pool — otherwise the
+ * post-filter (`inputs.some(Souvenir)`) wipes every contract when the
+ * cheaper normal of each weapon filled the diversity slots first.
+ */
+function pickInputPoolCandidates(
+  options: InputCandidate[],
+  poolSize: number,
+  requireSouvenir = false
+): InputCandidate[] {
+  const sorted = [...options].sort((a, b) => a.price - b.price);
+  const picked: InputCandidate[] = [];
+  const seenWeapons = new Set<string>();
+
+  for (const opt of sorted) {
+    if (picked.length >= poolSize) break;
+    const w = weaponOf(opt.skin.name);
+    if (seenWeapons.has(w)) continue;
+    seenWeapons.add(w);
+    picked.push(opt);
+  }
+  for (const opt of sorted) {
+    if (picked.length >= poolSize) break;
+    if (picked.some((p) => p.skin.name === opt.skin.name)) continue;
+    picked.push(opt);
+  }
+
+  if (
+    requireSouvenir &&
+    picked.length > 0 &&
+    !picked.some(isSouvenirCandidate)
+  ) {
+    const souv = sorted.find(
+      (o) =>
+        isSouvenirCandidate(o) &&
+        !picked.some((p) => p.skin.name === o.skin.name)
+    );
+    if (souv) {
+      let replaceAt = -1;
+      let worst = -Infinity;
+      for (let i = 0; i < picked.length; i++) {
+        if (isSouvenirCandidate(picked[i])) continue;
+        if (picked[i].price >= worst) {
+          worst = picked[i].price;
+          replaceAt = i;
+        }
+      }
+      if (replaceAt >= 0) picked[replaceAt] = souv;
+      else picked.push(souv);
+    }
+  }
+
+  return picked;
+}
+
 /** Best priced wear/float option for a skin under the budget cap */
 function bestCandidateForSkin(
   skin: SkinData,
@@ -784,6 +846,7 @@ function generateTierTradeUps(
     : null;
 
   const cheapIn: Record<string, InputCandidate[]> = {};
+  const requireSouvenir = params.complexity === "souvenir";
 
   for (const [key, list] of Object.entries(byCR)) {
     const options: InputCandidate[] = [];
@@ -791,21 +854,11 @@ function generateTierTradeUps(
       const best = bestCandidateForSkin(skin, prices, maxUnit);
       if (best) options.push(best);
     }
-    options.sort((a, b) => a.price - b.price);
-    const picked: InputCandidate[] = [];
-    const seenWeapons = new Set<string>();
-    for (const opt of options) {
-      if (picked.length >= SKINS_PER_POOL) break;
-      const w = weaponOf(opt.skin.name);
-      if (seenWeapons.has(w)) continue;
-      seenWeapons.add(w);
-      picked.push(opt);
-    }
-    for (const opt of options) {
-      if (picked.length >= SKINS_PER_POOL) break;
-      if (picked.some((p) => p.skin.name === opt.skin.name)) continue;
-      picked.push(opt);
-    }
+    const picked = pickInputPoolCandidates(
+      options,
+      SKINS_PER_POOL,
+      requireSouvenir
+    );
     if (picked.length) cheapIn[key] = picked;
   }
 
