@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { authConfigured, appBaseUrl } from "@/lib/auth/config";
-import { steamLoginUrl } from "@/lib/auth/steam";
+import {
+  createSteamOpenIdState,
+  steamCallbackUrl,
+  steamLoginUrl,
+  steamOpenIdStateCookieOptions,
+} from "@/lib/auth/steam";
 
 export const dynamic = "force-dynamic";
 
-/** Start Steam OpenID login */
+/** Start Steam OpenID login — bind a one-time state cookie into return_to. */
 export async function GET() {
   if (!authConfigured()) {
     return NextResponse.json(
@@ -16,6 +21,10 @@ export async function GET() {
     );
   }
 
-  const returnTo = `${appBaseUrl()}/api/auth/steam/callback`;
-  return NextResponse.redirect(steamLoginUrl(returnTo));
+  const state = createSteamOpenIdState();
+  const returnTo = steamCallbackUrl(state);
+  const res = NextResponse.redirect(steamLoginUrl(returnTo));
+  const cookie = steamOpenIdStateCookieOptions(state);
+  res.cookies.set(cookie.name, cookie.value, cookie);
+  return res;
 }
