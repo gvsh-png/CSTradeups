@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authConfigured, appBaseUrl } from "@/lib/auth/config";
+import { authConfigured } from "@/lib/auth/config";
 import {
   createSteamOpenIdState,
   steamCallbackUrl,
