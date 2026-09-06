@@ -106,6 +106,35 @@ function sanitizePrices(prices) {
         delete out[row.key];
       }
     }
+
+    // Ghost-cheap better wear vs coherent worse ladder (Asiimov MW dump)
+    for (const row of priced) {
+      if (!(out[row.key] > 0)) continue;
+      const rank = WEAR_RANK[row.wear];
+      if (rank == null || rank >= 4) continue;
+      const worseRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? -1) > rank && out[x.key] > 0
+      );
+      if (!worseRows.length) continue;
+
+      let worseMid = 0;
+      if (worseRows.length >= 2) {
+        const worse = worseRows.map((x) => x.p);
+        const worseLo = Math.min(...worse);
+        const worseHi = Math.max(...worse);
+        if (!(worseLo > 0) || worseHi / worseLo > 3.5) continue;
+        worseMid = medianPositive(worse);
+      } else {
+        const only = worseRows[0];
+        const wRank = WEAR_RANK[only.wear];
+        if (wRank == null || wRank !== rank + 1) continue;
+        worseMid = only.p;
+      }
+
+      if (worseMid >= 20 && row.p < worseMid * 0.15) {
+        delete out[row.key];
+      }
+    }
   }
 
   return out;
@@ -221,6 +250,61 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Asiimov-style: FN impossible, dump/stale MW under liquid FT/WW/BS
+const asiimov = sanitizePrices({
+  "P250 | Asiimov (Minimal Wear)": 3.2,
+  "P250 | Asiimov (Field-Tested)": 42,
+  "P250 | Asiimov (Well-Worn)": 38,
+  "P250 | Asiimov (Battle-Scarred)": 35,
+});
+assert(
+  "Asiimov ghost-cheap MW dropped",
+  asiimov["P250 | Asiimov (Minimal Wear)"] === undefined
+);
+assert(
+  "Asiimov FT kept",
+  asiimov["P250 | Asiimov (Field-Tested)"] === 42
+);
+assert(
+  "Asiimov BS kept",
+  asiimov["P250 | Asiimov (Battle-Scarred)"] === 35
+);
+
+// Single adjacent worse wear also arms the better-wear dump guard
+const sergeant = sanitizePrices({
+  "FAMAS | Sergeant (Minimal Wear)": 2.5,
+  "FAMAS | Sergeant (Field-Tested)": 28,
+});
+assert(
+  "Sergeant MW dump vs adjacent FT dropped",
+  sergeant["FAMAS | Sergeant (Minimal Wear)"] === undefined
+);
+assert(
+  "Sergeant FT kept",
+  sergeant["FAMAS | Sergeant (Field-Tested)"] === 28
+);
+
+// Sparse non-adjacent FN+BS — better-wear dump guard must not fire
+// (only one worse wear, and it is not adjacent).
+const sparseFnBs = sanitizePrices({
+  "X | Sparse (Factory New)": 70,
+  "X | Sparse (Battle-Scarred)": 60,
+});
+assert(
+  "sparse FN+BS keeps FN (non-adjacent)",
+  sparseFnBs["X | Sparse (Factory New)"] === 70
+);
+assert(
+  "sparse FN+BS keeps BS",
+  sparseFnBs["X | Sparse (Battle-Scarred)"] === 60
+);
+
+// First Class already checked — FT must stay under WW/BS premium
+assert(
+  "First Class FT still preserved after better-wear guard",
+  firstClass["Sawed-Off | First Class (Field-Tested)"] === 32
 );
 
 if (failed) {

@@ -1132,6 +1132,41 @@ export function sanitizePrices(
         delete out[row.key];
       }
     }
+
+    // Ghost-cheap *better* wear vs a coherent expensive worse-wear book.
+    // Inverse of the BS dump guard: SteamApis `safe` can stick MW (or FN)
+    // at cents while FT/WW/BS are liquid — common when FN is impossible
+    // (P250 Asiimov minF 0.10, FAMAS Sergeant, …) so MW is the best wear
+    // and has no "better" peers for the rule above. Generator then buys the
+    // dump MW and inflates EV. Require ≥2 worse wears (or one adjacent) so
+    // sparse FN+BS books and mild liquidity inversions stay intact.
+    for (const row of priced) {
+      if (!(out[row.key] > 0)) continue;
+      const rank = WEAR_RANK[row.wear];
+      if (rank == null || rank >= 4) continue;
+      const worseRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? -1) > rank && out[x.key] > 0
+      );
+      if (!worseRows.length) continue;
+
+      let worseMid = 0;
+      if (worseRows.length >= 2) {
+        const worse = worseRows.map((x) => x.p);
+        const worseLo = Math.min(...worse);
+        const worseHi = Math.max(...worse);
+        if (!(worseLo > 0) || worseHi / worseLo > 3.5) continue;
+        worseMid = medianPositive(worse);
+      } else {
+        const only = worseRows[0];
+        const wRank = WEAR_RANK[only.wear];
+        if (wRank == null || wRank !== rank + 1) continue;
+        worseMid = only.p;
+      }
+
+      if (worseMid >= 20 && row.p < worseMid * 0.15) {
+        delete out[row.key];
+      }
+    }
   }
 
   return out;
