@@ -514,7 +514,7 @@ export default function GeneratorForm({
                           : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
                       }`}
                     >
-                      {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 13%"}
+                      {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 15%"}
                     </button>
                   ))}
                 </div>
@@ -587,7 +587,7 @@ export default function GeneratorForm({
                       : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
                   }`}
                 >
-                  {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 13%"}
+                  {fee === "csfloat" ? "CSFloat · 2%" : "Steam · 15%"}
                 </button>
               ))}
             </div>

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { CSFLOAT_FEE, STEAM_FEE } from "@/lib/constants";
+import {
+  CSFLOAT_FEE,
+  feeTypeFromFee,
+  normalizeSellFee,
+} from "@/lib/constants";
 import { getBulkPrices } from "@/lib/prices";
 import {
   applySteamLiveStrict,
@@ -68,7 +72,7 @@ export async function POST(request: Request) {
       /* keep bulk */
     }
 
-    const fee = tradeUp.fee ?? CSFLOAT_FEE;
+    const fee = normalizeSellFee(tradeUp.fee ?? CSFLOAT_FEE);
     // Drop cached AI insight — prices changed, so analysis is stale.
     // Client can request a fresh one after refresh.
     const { insight: _expiredInsight, ...tradeUpWithoutInsight } = tradeUp;
@@ -79,7 +83,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       tradeUp: refreshed,
       refreshedAt: new Date().toISOString(),
-      feeType: fee === STEAM_FEE ? "steam" : "csfloat",
+      feeType: feeTypeFromFee(fee),
       priceSource: steamLiveStrict
         ? "steam-live"
         : steamLiveFetched > 0
