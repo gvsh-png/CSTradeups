@@ -3,6 +3,7 @@ import {
   RARITY_ORDER,
   STEAM_FEE,
   inputCountForMode,
+  normalizeSellFee,
   type Complexity,
 } from "../constants";
 import { getPrice } from "../prices";
@@ -1145,7 +1146,8 @@ export function repriceTradeUp(
   tradeUp: TradeUpResult,
   prices: PriceMap
 ): TradeUpResult {
-  const fee = tradeUp.fee;
+  // Upgrade legacy Steam 13% blueprints to the real 15% seller fee
+  const fee = normalizeSellFee(tradeUp.fee);
 
   const inputs = tradeUp.inputs.map((input) => {
     // Never keep a stale optimistic quote after liquidity drops to zero
@@ -1188,6 +1190,7 @@ export function repriceTradeUp(
     expectedProfit,
     roi,
     winPct,
+    fee,
   };
 }
 

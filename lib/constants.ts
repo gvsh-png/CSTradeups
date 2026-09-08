@@ -65,8 +65,28 @@ export const WEAR_RANGES = [
   { name: "Battle-Scarred", min: 0.45, max: 1.0 },
 ] as const;
 
-export const STEAM_FEE = 0.13;
+/**
+ * CS2 Steam Community Market seller fee: 5% Steam transaction + 10% game
+ * publisher = 15% of the sale price (seller receives ~85%).
+ * Was incorrectly 0.13, which inflated Steam-mode EV/win% near break-even.
+ */
+export const STEAM_FEE = 0.15;
+/** Pre-fix Steam fee baked into saved/shared blueprints — migrate on reprice */
+export const LEGACY_STEAM_FEE = 0.13;
 export const CSFLOAT_FEE = 0.02;
+
+/** Map stored fee onto current sell-fee constants (upgrades legacy 13% → 15%). */
+export function normalizeSellFee(fee: number | undefined | null): number {
+  if (fee == null || !Number.isFinite(fee)) return CSFLOAT_FEE;
+  if (Math.abs(fee - LEGACY_STEAM_FEE) < 1e-9) return STEAM_FEE;
+  if (Math.abs(fee - STEAM_FEE) < 1e-9) return STEAM_FEE;
+  if (Math.abs(fee - CSFLOAT_FEE) < 1e-9) return CSFLOAT_FEE;
+  return fee;
+}
+
+export function feeTypeFromFee(fee: number | undefined | null): "steam" | "csfloat" {
+  return Math.abs(normalizeSellFee(fee) - STEAM_FEE) < 1e-9 ? "steam" : "csfloat";
+}
 
 /**
  * Collections that can NEVER be used in CS2 trade-up contracts.
