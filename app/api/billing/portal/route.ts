@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { authConfigured, appBaseUrl, stripeConfigured } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getStripe } from "@/lib/billing/stripe";
-import { getUser } from "@/lib/usage/store";
+import { findByStripeCustomer, getUser } from "@/lib/usage/store";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,17 @@ export async function POST() {
     return NextResponse.json(
       { error: "No billing account yet — upgrade first" },
       { status: 400 }
+    );
+  }
+
+  // Refuse portal if the Redis customer pointer maps to a different Steam user
+  // (stale user.stripeCustomerId after a cross-link). Missing pointer is OK —
+  // legacy rows still open portal for the id stored on the user document.
+  const mapped = await findByStripeCustomer(user.stripeCustomerId);
+  if (mapped && mapped.steamId !== user.steamId) {
+    return NextResponse.json(
+      { error: "Billing account mismatch — contact support" },
+      { status: 403 }
     );
   }
 
