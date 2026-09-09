@@ -255,3 +255,39 @@ export async function linkStripeCustomer(
     await saveUser({ ...user, stripeCustomerId: customerId });
   }
 }
+
+/**
+ * First-time Checkout used to TOCTOU on `!user.stripeCustomerId` and call
+ * `stripe.customers.create` twice under parallel tabs/double-clicks. Each
+ * request kept its local customer id, so two Checkout sessions billed two
+ * customers. Per-customer session reuse / sibling cancel (#54) cannot see
+ * cross-customer duplicates, and the portal only opens the last-linked id.
+ */
+export async function ensureStripeCustomer(
+  steamId: string,
+  createCustomer: () => Promise<{ id: string }>
+): Promise<string> {
+  const existing = await getUser(steamId);
+  if (existing?.stripeCustomerId) return existing.stripeCustomerId;
+
+  const r = redis();
+  const lockKey = `lock:stripe-customer:${steamId}`;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const locked = await r.set(lockKey, "1", { nx: true, px: 15_000 });
+    if (locked) {
+      try {
+        const again = await getUser(steamId);
+        if (again?.stripeCustomerId) return again.stripeCustomerId;
+        const customer = await createCustomer();
+        await linkStripeCustomer(steamId, customer.id);
+        return customer.id;
+      } finally {
+        await r.del(lockKey);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    const raced = await getUser(steamId);
+    if (raced?.stripeCustomerId) return raced.stripeCustomerId;
+  }
+  throw new Error("Could not create billing customer — please retry.");
+}

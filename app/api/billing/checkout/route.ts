@@ -3,7 +3,7 @@ import { authConfigured, appBaseUrl, stripeConfigured } from "@/lib/auth/config"
 import { getSession } from "@/lib/auth/session";
 import { getStripe, stripePriceIdForPlan } from "@/lib/billing/stripe";
 import type { PlanId } from "@/lib/billing/plans";
-import { getUser, linkStripeCustomer } from "@/lib/usage/store";
+import { ensureStripeCustomer, getUser } from "@/lib/usage/store";
 
 export const dynamic = "force-dynamic";
 
@@ -55,15 +55,21 @@ export async function POST(request: Request) {
   }
 
   const stripe = getStripe();
-  let customerId = user.stripeCustomerId;
-
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      metadata: { steamId: user.steamId },
-      name: user.name,
+  let customerId: string;
+  try {
+    customerId = await ensureStripeCustomer(user.steamId, async () => {
+      const customer = await stripe.customers.create({
+        metadata: { steamId: user.steamId },
+        name: user.name,
+      });
+      return { id: customer.id };
     });
-    customerId = customer.id;
-    await linkStripeCustomer(user.steamId, customerId);
+  } catch (err) {
+    console.error("ensureStripeCustomer failed:", err);
+    return NextResponse.json(
+      { error: "Could not create billing customer — please retry." },
+      { status: 503 }
+    );
   }
 
   const checkout = await stripe.checkout.sessions.create({
