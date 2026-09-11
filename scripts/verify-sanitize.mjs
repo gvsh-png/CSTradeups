@@ -46,9 +46,24 @@ function sanitizePrices(prices) {
     const mid = medianPositive(vals);
     if (mid <= 0) continue;
 
+    const pricedBeforeSpike = keys
+      .map((key) => {
+        const wear = wearFromPriceKey(key);
+        const p = out[key];
+        return wear && p > 0 ? { key, wear, p } : null;
+      })
+      .filter(Boolean);
+    const bestRank = pricedBeforeSpike.reduce(
+      (best, row) => Math.min(best, WEAR_RANK[row.wear] ?? 99),
+      99
+    );
+
     for (const key of keys) {
       const p = out[key];
       if (!(p > 0)) continue;
+      const wear = wearFromPriceKey(key);
+      const rank = wear ? WEAR_RANK[wear] : null;
+      if (rank == null || rank === bestRank) continue;
       if (p > mid * 3.5 && p > mid + 5) {
         delete out[key];
       }
@@ -219,8 +234,29 @@ const redline = sanitizePrices({
   "AK-47 | Redline (Battle-Scarred)": 14,
 });
 assert(
+  "Redline FN premium kept (not spike vs FT/BS median)",
+  redline["AK-47 | Redline (Factory New)"] === 80
+);
+assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Steep but real FN premium (Asiimov-class) — must not wipe FN
+const steepFn = sanitizePrices({
+  "AWP | Asiimov (Factory New)": 200,
+  "AWP | Asiimov (Minimal Wear)": 45,
+  "AWP | Asiimov (Field-Tested)": 25,
+  "AWP | Asiimov (Well-Worn)": 20,
+  "AWP | Asiimov (Battle-Scarred)": 18,
+});
+assert(
+  "Steep FN premium kept",
+  steepFn["AWP | Asiimov (Factory New)"] === 200
+);
+assert(
+  "Steep FN ladder FT kept",
+  steepFn["AWP | Asiimov (Field-Tested)"] === 25
 );
 
 if (failed) {

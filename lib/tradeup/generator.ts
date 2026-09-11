@@ -519,11 +519,12 @@ export async function generateTradeUps(
     inputTotal
   );
 
-  // Souvenir mode: keep contracts that use at least one souvenir input
+  // Souvenir mode: CS2 requires every input to be Souvenir (no mixing with normals)
   let filtered =
     params.complexity === "souvenir"
       ? candidates.filter((t) =>
-          t.inputs.some((i) => i.name.startsWith("Souvenir "))
+          t.inputs.length > 0 &&
+          t.inputs.every((i) => i.name.startsWith("Souvenir "))
         )
       : candidates;
 
@@ -783,11 +784,19 @@ function generateTierTradeUps(
       })()
     : null;
 
+  const souvenirMode = params.complexity === "souvenir";
   const cheapIn: Record<string, InputCandidate[]> = {};
 
   for (const [key, list] of Object.entries(byCR)) {
     const options: InputCandidate[] = [];
     for (const skin of list) {
+      // Souvenir contracts cannot mix in normal skins
+      if (souvenirMode && !skin.isSouvenir && !skin.name.startsWith("Souvenir ")) {
+        continue;
+      }
+      if (!souvenirMode && (skin.isSouvenir || skin.name.startsWith("Souvenir "))) {
+        continue;
+      }
       const best = bestCandidateForSkin(skin, prices, maxUnit);
       if (best) options.push(best);
     }
@@ -828,8 +837,12 @@ function generateTierTradeUps(
 
     for (const [pcid, primaries] of Object.entries(ci)) {
       const pOS = byCR[`${pcid}|${nextR}`] || [];
-      // Next-tier outcomes must be normal (non-souvenir) skins
-      const pOuts = pOS.filter((s) => !s.isSouvenir);
+      // Standard → normal outcomes; Souvenir → souvenir outcomes (CS2 rule)
+      const pOuts = pOS.filter((s) =>
+        souvenirMode
+          ? Boolean(s.isSouvenir || s.name.startsWith("Souvenir "))
+          : !s.isSouvenir && !s.name.startsWith("Souvenir ")
+      );
       if (!pOuts.length) continue;
 
       // Target hunt: primary collection must be able to roll the skin
@@ -891,8 +904,10 @@ function generateTierTradeUps(
 
         for (const [fid, flist] of Object.entries(ci)) {
           if (fid === pcid) continue;
-          const fOuts = (byCR[`${fid}|${nextR}`] || []).filter(
-            (s) => !s.isSouvenir
+          const fOuts = (byCR[`${fid}|${nextR}`] || []).filter((s) =>
+            souvenirMode
+              ? Boolean(s.isSouvenir || s.name.startsWith("Souvenir "))
+              : !s.isSouvenir && !s.name.startsWith("Souvenir ")
           );
           if (!fOuts.length) continue;
           const hasTarget = targetName
@@ -1061,9 +1076,29 @@ export function sanitizePrices(
     const mid = medianPositive(vals);
     if (mid <= 0) continue;
 
+    // Priced wears for spike + ceiling. Best exterior (FN, or MW when FN
+    // is impossible) is often several× the FT/BS median — that is a normal
+    // premium, not a Blind Spot-style sale spike.
+    const pricedBeforeSpike = keys
+      .map((key) => {
+        const wear = wearFromPriceKey(key);
+        const p = out[key];
+        return wear && p > 0 ? { key, wear, p } : null;
+      })
+      .filter((x): x is { key: string; wear: string; p: number } => Boolean(x));
+    const bestRank = pricedBeforeSpike.reduce(
+      (best, row) => Math.min(best, WEAR_RANK[row.wear] ?? 99),
+      99
+    );
+
     for (const key of keys) {
       const p = out[key];
       if (!(p > 0)) continue;
+      const wear = wearFromPriceKey(key);
+      const rank = wear ? WEAR_RANK[wear] : null;
+      // Skip bare keys (vanillas) and the best available exterior — never
+      // treat FN premium vs cheaper worse wears as a spike.
+      if (rank == null || rank === bestRank) continue;
       // Spike vs peer median — sale outliers / ghost medians
       // 3.5× catches Blind Spot (~8×) while keeping mild wear ladders
       if (p > mid * 3.5 && p > mid + 5) {
