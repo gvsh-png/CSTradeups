@@ -519,11 +519,12 @@ export async function generateTradeUps(
     inputTotal
   );
 
-  // Souvenir mode: keep contracts that use at least one souvenir input
+  // Souvenir mode: CS2 requires every input to be Souvenir (no mixing with normals)
   let filtered =
     params.complexity === "souvenir"
       ? candidates.filter((t) =>
-          t.inputs.some((i) => i.name.startsWith("Souvenir "))
+          t.inputs.length > 0 &&
+          t.inputs.every((i) => i.name.startsWith("Souvenir "))
         )
       : candidates;
 
@@ -783,11 +784,19 @@ function generateTierTradeUps(
       })()
     : null;
 
+  const souvenirMode = params.complexity === "souvenir";
   const cheapIn: Record<string, InputCandidate[]> = {};
 
   for (const [key, list] of Object.entries(byCR)) {
     const options: InputCandidate[] = [];
     for (const skin of list) {
+      // Souvenir contracts cannot mix in normal skins
+      if (souvenirMode && !skin.isSouvenir && !skin.name.startsWith("Souvenir ")) {
+        continue;
+      }
+      if (!souvenirMode && (skin.isSouvenir || skin.name.startsWith("Souvenir "))) {
+        continue;
+      }
       const best = bestCandidateForSkin(skin, prices, maxUnit);
       if (best) options.push(best);
     }
@@ -828,8 +837,12 @@ function generateTierTradeUps(
 
     for (const [pcid, primaries] of Object.entries(ci)) {
       const pOS = byCR[`${pcid}|${nextR}`] || [];
-      // Next-tier outcomes must be normal (non-souvenir) skins
-      const pOuts = pOS.filter((s) => !s.isSouvenir);
+      // Standard → normal outcomes; Souvenir → souvenir outcomes (CS2 rule)
+      const pOuts = pOS.filter((s) =>
+        souvenirMode
+          ? Boolean(s.isSouvenir || s.name.startsWith("Souvenir "))
+          : !s.isSouvenir && !s.name.startsWith("Souvenir ")
+      );
       if (!pOuts.length) continue;
 
       // Target hunt: primary collection must be able to roll the skin
@@ -891,8 +904,10 @@ function generateTierTradeUps(
 
         for (const [fid, flist] of Object.entries(ci)) {
           if (fid === pcid) continue;
-          const fOuts = (byCR[`${fid}|${nextR}`] || []).filter(
-            (s) => !s.isSouvenir
+          const fOuts = (byCR[`${fid}|${nextR}`] || []).filter((s) =>
+            souvenirMode
+              ? Boolean(s.isSouvenir || s.name.startsWith("Souvenir "))
+              : !s.isSouvenir && !s.name.startsWith("Souvenir ")
           );
           if (!fOuts.length) continue;
           const hasTarget = targetName
