@@ -1076,9 +1076,29 @@ export function sanitizePrices(
     const mid = medianPositive(vals);
     if (mid <= 0) continue;
 
+    // Priced wears for spike + ceiling. Best exterior (FN, or MW when FN
+    // is impossible) is often several× the FT/BS median — that is a normal
+    // premium, not a Blind Spot-style sale spike.
+    const pricedBeforeSpike = keys
+      .map((key) => {
+        const wear = wearFromPriceKey(key);
+        const p = out[key];
+        return wear && p > 0 ? { key, wear, p } : null;
+      })
+      .filter((x): x is { key: string; wear: string; p: number } => Boolean(x));
+    const bestRank = pricedBeforeSpike.reduce(
+      (best, row) => Math.min(best, WEAR_RANK[row.wear] ?? 99),
+      99
+    );
+
     for (const key of keys) {
       const p = out[key];
       if (!(p > 0)) continue;
+      const wear = wearFromPriceKey(key);
+      const rank = wear ? WEAR_RANK[wear] : null;
+      // Skip bare keys (vanillas) and the best available exterior — never
+      // treat FN premium vs cheaper worse wears as a spike.
+      if (rank == null || rank === bestRank) continue;
       // Spike vs peer median — sale outliers / ghost medians
       // 3.5× catches Blind Spot (~8×) while keeping mild wear ladders
       if (p > mid * 3.5 && p > mid + 5) {
