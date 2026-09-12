@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { CSFLOAT_FEE, STEAM_FEE } from "@/lib/constants";
 import { getBulkPrices } from "@/lib/prices";
 import {
-  applySteamLiveStrict,
+  applySteamLiveForRefresh,
   collectTradeUpMarketNames,
   fetchSteamStartingAtPrices,
-  tradeUpHasFullSteamLive,
 } from "@/lib/steamLive";
 import { repriceTradeUp, sanitizePrices } from "@/lib/tradeup/generator";
 import { buildSkinDatabase, fetchSchema } from "@/lib/schema";
@@ -46,7 +45,8 @@ export async function POST(request: Request) {
       prices = bulk;
     }
 
-    // Live Steam Starting-at only for this blueprint
+    // Live Steam Starting-at for this blueprint.
+    // Partial live must NOT strict-delete misses — that zeros inputs in reprice.
     let steamLiveFetched = 0;
     let steamLiveStrict = false;
     try {
@@ -57,11 +57,14 @@ export async function POST(request: Request) {
         });
         steamLiveFetched = live.fetched;
         if (live.fetched > 0) {
-          const applied = applySteamLiveStrict(prices, live.prices, liveNames);
+          const applied = applySteamLiveForRefresh(
+            prices,
+            live.prices,
+            liveNames,
+            tradeUp
+          );
           prices = applied.prices;
-          steamLiveStrict =
-            applied.missing.length === 0 &&
-            tradeUpHasFullSteamLive(tradeUp, live.prices);
+          steamLiveStrict = applied.steamLiveStrict;
         }
       }
     } catch {

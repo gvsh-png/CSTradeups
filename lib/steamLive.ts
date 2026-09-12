@@ -260,6 +260,37 @@ export function applySteamLiveStrict(
   return { prices, missing };
 }
 
+/**
+ * Refresh-path live overlay for one blueprint.
+ *
+ * Full coverage → strict live book (bulk cleared for required names).
+ * Partial coverage → overlay live hits only; keep bulk for misses.
+ *
+ * Never call applySteamLiveStrict on a partial live set: deleting miss keys
+ * makes repriceTradeUp treat those skins as $0 (fake low cost / 100% win).
+ */
+export function applySteamLiveForRefresh(
+  bulk: PriceMap,
+  live: PriceMap,
+  requiredNames: string[],
+  tradeUp: TradeUpResult
+): { prices: PriceMap; steamLiveStrict: boolean } {
+  const full =
+    requiredNames.length > 0 &&
+    requiredNames.every((name) => (live[name] || 0) > 0) &&
+    tradeUpHasFullSteamLive(tradeUp, live);
+  if (full) {
+    return {
+      prices: applySteamLiveStrict(bulk, live, requiredNames).prices,
+      steamLiveStrict: true,
+    };
+  }
+  return {
+    prices: mergeLiveSteamPrices(bulk, live),
+    steamLiveStrict: false,
+  };
+}
+
 /** True when every input/outcome has a live Starting-at quote */
 export function tradeUpHasFullSteamLive(
   tradeUp: TradeUpResult,
