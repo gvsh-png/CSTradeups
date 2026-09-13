@@ -287,6 +287,11 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
   if (!(s > 0)) return fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0;
   if (s > LIVE && !(consensus && fresh <= LIVE)) return r2(s);
 
+  // In-band stale-low: pull up even when fresh moved above LIVE*1.25
+  if (consensus && fresh > 0 && s <= LIVE && fresh > s && fresh / s >= 1.35) {
+    return r2(fresh);
+  }
+
   if (consensus && fresh > 0) {
     const maxRef = Math.max(s, fresh);
     if (maxRef <= LIVE * 1.25) {
@@ -315,6 +320,16 @@ assert(
   "Airlock-style: stale-low safe, fresh consensus → pull up",
   resolveCheapSteamPrice(8.09, 16.6, 16.5),
   16.55
+);
+assert(
+  "in-band stale-low when fresh pumped above LIVE*1.25 → still pull up",
+  resolveCheapSteamPrice(30, 52, 55),
+  53.5
+);
+assert(
+  "deep pump above band still Airlock-pulls in-band safe",
+  resolveCheapSteamPrice(15, 70, 65),
+  67.5
 );
 assert(
   "cheap but latest dumped alone → keep safe",

@@ -310,11 +310,13 @@ function isAbortError(err: unknown): boolean {
  * When `latest` and `median` agree, treat that as a liquid live book and
  * prefer it over a far-off `safe` (either direction). Also nudge toward the
  * lower fresh print ≈ Starting at inside the live band.
+ * Upward Airlock pulls apply whenever safe is in-band — even if fresh has
+ * moved above LIVE*1.25 (maxRef used to skip those and leave ghost-cheap).
  * Never uses historical `min`.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
 /** Chunked Steam book — bump when shape / metric / blend rules change */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v23";
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v26";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
 
 /** USD band where latest≈median can override stale `safe` toward live Steam */
@@ -414,6 +416,8 @@ async function fetchSteamApisCompact(
  *
  * - If latest≈median (liquid book), prefer that consensus when `safe` is stale
  *   (Airlock WW: safe ~$8 vs fresh ~$16 Starting at).
+ * - Stale-low safe in the live band always pulls UP on large consensus — even
+ *   when fresh has moved above LIVE*1.25 (otherwise safe~$30 / live~$55 stays $30).
  * - When safe and fresh are close, nudge toward the lower print (Starting at)
  *   for items in the live band.
  * - A lone latest/median print never overrides safe (could be a dump/spike).
@@ -450,7 +454,14 @@ export function resolveCheapSteamPrice(
     return { price: r2(s), biased: false };
   }
 
-  // Stale safe vs liquid consensus — pull either direction
+  // Stale-low safe in-band: always Airlock pull-up when consensus is ≥35% above
+  // safe — do not require maxRef ≤ LIVE*1.25 (that skipped pumps to ~$50+ and
+  // left ghost-cheap mid-tier inputs in the Redis Steam book).
+  if (consensus && fresh > 0 && s <= LIVE_STEAM_USD && fresh > s && fresh / s >= 1.35) {
+    return { price: r2(fresh), biased: true };
+  }
+
+  // Stale safe vs liquid consensus — pull either direction inside the band
   if (consensus && fresh > 0) {
     const maxRef = Math.max(s, fresh);
     if (maxRef <= LIVE_STEAM_USD * 1.25) {
@@ -955,7 +966,7 @@ async function fetchFreshBulkPrices(opts?: {
 /** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v23"],
+  ["tradeup-bulk-prices-v26"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -981,7 +992,7 @@ const getCachedSteamPrices = unstable_cache(
     }
     return steam;
   },
-  ["tradeup-bulk-prices-steam-v23"],
+  ["tradeup-bulk-prices-steam-v26"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
