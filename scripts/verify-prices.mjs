@@ -294,8 +294,12 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
         if (fresh > s) return r2(fresh);
         return r2(Math.min(l, m));
       }
-      const lower = Math.min(s, l, m);
-      if (lower >= s * 0.7) return r2(lower);
+      if (fresh < s) {
+        const lower = Math.min(l, m);
+        if (lower >= s * 0.7) return r2(lower);
+      } else if (fresh > s) {
+        return r2(fresh);
+      }
     }
   }
 
@@ -330,6 +334,16 @@ assert(
   "expensive skin stays on safe",
   resolveCheapSteamPrice(376.4, 350, 360),
   376.4
+);
+assert(
+  "close-band stale-low safe (+30% fresh) → adopt consensus",
+  resolveCheapSteamPrice(25, 32, 33),
+  32.5
+);
+assert(
+  "close-band Airlock-ish (+29% fresh) → adopt consensus",
+  resolveCheapSteamPrice(12, 15, 16),
+  15.5
 );
 
 if (failed) {
