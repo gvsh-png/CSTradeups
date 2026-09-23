@@ -272,6 +272,7 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
   const l = latest > 0 ? latest : 0;
   const m = median > 0 ? median : 0;
   const LIVE = 40;
+  const SHELF = LIVE * 1.25;
 
   let fresh = 0;
   let consensus = false;
@@ -285,11 +286,18 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
   }
 
   if (!(s > 0)) return fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0;
-  if (s > LIVE && !(consensus && fresh <= LIVE)) return r2(s);
+
+  // Shelf stale-low: pull up even when fresh moved above LIVE×1.25
+  if (consensus && fresh > 0 && s <= SHELF && fresh > s && fresh / s >= 1.35) {
+    return r2(fresh);
+  }
+
+  // Early-exit aligns with shelf (not LIVE) so s∈($40,$50] can Airlock
+  if (s > SHELF && !(consensus && fresh <= LIVE)) return r2(s);
 
   if (consensus && fresh > 0) {
     const maxRef = Math.max(s, fresh);
-    if (maxRef <= LIVE * 1.25) {
+    if (maxRef <= SHELF) {
       if (fresh / s >= 1.35 || s / fresh >= 1.35) {
         if (fresh > s) return r2(fresh);
         return r2(Math.min(l, m));
@@ -315,6 +323,31 @@ assert(
   "Airlock-style: stale-low safe, fresh consensus → pull up",
   resolveCheapSteamPrice(8.09, 16.6, 16.5),
   16.55
+);
+assert(
+  "in-band stale-low when fresh pumped above LIVE×1.25 → still pull up",
+  resolveCheapSteamPrice(30, 52, 55),
+  53.5
+);
+assert(
+  "shelf cliff s∈($40,$50]: safe$42 / fresh~$59 → pull up (not early-exit)",
+  resolveCheapSteamPrice(42, 58, 60),
+  59
+);
+assert(
+  "shelf edge s$40.01 / fresh$55 → pull up (LIVE early-exit cliff)",
+  resolveCheapSteamPrice(40.01, 54, 56),
+  55
+);
+assert(
+  "deep shelf pump s$48 / fresh$70 → pull up",
+  resolveCheapSteamPrice(48, 68, 72),
+  70
+);
+assert(
+  "above shelf stays on safe",
+  resolveCheapSteamPrice(55, 70, 72),
+  55
 );
 assert(
   "cheap but latest dumped alone → keep safe",
