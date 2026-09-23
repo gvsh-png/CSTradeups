@@ -310,15 +310,20 @@ function isAbortError(err: unknown): boolean {
  * When `latest` and `median` agree, treat that as a liquid live book and
  * prefer it over a far-off `safe` (either direction). Also nudge toward the
  * lower fresh print ≈ Starting at inside the live band.
+ * Upward Airlock pulls apply through the LIVE×1.25 shelf (≤$50) — even when
+ * fresh has moved above that shelf (otherwise safe∈($40,$50] early-exited and
+ * left ghost-cheap mid-tier inputs).
  * Never uses historical `min`.
  */
 const STEAMAPIS_COMPACT_MS = 45_000;
 /** Chunked Steam book — bump when shape / metric / blend rules change */
-const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v23";
+const REDIS_STEAM_PRICES_KEY = "prices:steam-safe:v28";
 const REDIS_STEAM_META_KEY = `${REDIS_STEAM_PRICES_KEY}:meta`;
 
 /** USD band where latest≈median can override stale `safe` toward live Steam */
 export const LIVE_STEAM_USD = 40;
+/** Soft ceiling for Airlock / close-band (LIVE×1.25) — early-exit aligns here */
+export const LIVE_STEAM_SHELF_USD = LIVE_STEAM_USD * 1.25;
 /** @deprecated alias — use LIVE_STEAM_USD */
 export const CHEAP_STEAM_USD = LIVE_STEAM_USD;
 
@@ -414,8 +419,11 @@ async function fetchSteamApisCompact(
  *
  * - If latest≈median (liquid book), prefer that consensus when `safe` is stale
  *   (Airlock WW: safe ~$8 vs fresh ~$16 Starting at).
+ * - Stale-low safe on the LIVE×1.25 shelf always pulls UP on large consensus —
+ *   even when fresh has moved above the shelf (otherwise safe~$42 / live~$59
+ *   early-exited at LIVE and stayed $42).
  * - When safe and fresh are close, nudge toward the lower print (Starting at)
- *   for items in the live band.
+ *   for items on the shelf.
  * - A lone latest/median print never overrides safe (could be a dump/spike).
  * - Expensive / thin books stay on `safe`.
  * Never uses historical `min`.
@@ -445,15 +453,33 @@ export function resolveCheapSteamPrice(
     return { price: fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0, biased: false };
   }
 
-  // Outside the live band — trust safe (knives, high-tier, thin books)
-  if (s > LIVE_STEAM_USD && !(consensus && fresh <= LIVE_STEAM_USD)) {
+  // Stale-low safe on the shelf: always Airlock pull-up when consensus is ≥35%
+  // above safe — do not require maxRef ≤ LIVE×1.25, and do not early-exit at
+  // LIVE (that cliff kept safe∈($40,$50] while fresh sat ~$55–70).
+  if (
+    consensus &&
+    fresh > 0 &&
+    s <= LIVE_STEAM_SHELF_USD &&
+    fresh > s &&
+    fresh / s >= 1.35
+  ) {
+    return { price: r2(fresh), biased: true };
+  }
+
+  // Outside the live shelf — trust safe (knives, high-tier, thin books).
+  // Shelf is LIVE×1.25 (not LIVE): maxRef already allowed Airlock ≤$50, but
+  // early-exit at LIVE blocked s∈($40,$50] whenever fresh > LIVE.
+  if (
+    s > LIVE_STEAM_SHELF_USD &&
+    !(consensus && fresh <= LIVE_STEAM_USD)
+  ) {
     return { price: r2(s), biased: false };
   }
 
-  // Stale safe vs liquid consensus — pull either direction
+  // Stale safe vs liquid consensus — pull either direction inside the shelf
   if (consensus && fresh > 0) {
     const maxRef = Math.max(s, fresh);
-    if (maxRef <= LIVE_STEAM_USD * 1.25) {
+    if (maxRef <= LIVE_STEAM_SHELF_USD) {
       if (fresh / s >= 1.35 || s / fresh >= 1.35) {
         if (fresh > s) return { price: r2(fresh), biased: true };
         return { price: r2(Math.min(l, m)), biased: true };
@@ -955,7 +981,7 @@ async function fetchFreshBulkPrices(opts?: {
 /** Skinport-first shared cache — scan fallback only */
 const getCachedBulkPrices = unstable_cache(
   async (): Promise<BulkPriceResult> => fetchFreshBulkPrices(),
-  ["tradeup-bulk-prices-v23"],
+  ["tradeup-bulk-prices-v28"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
@@ -981,7 +1007,7 @@ const getCachedSteamPrices = unstable_cache(
     }
     return steam;
   },
-  ["tradeup-bulk-prices-steam-v23"],
+  ["tradeup-bulk-prices-steam-v28"],
   {
     revalidate: PRICE_CACHE_TTL,
     tags: ["prices"],
