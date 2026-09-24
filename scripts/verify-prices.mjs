@@ -272,6 +272,7 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
   const l = latest > 0 ? latest : 0;
   const m = median > 0 ? median : 0;
   const LIVE = 40;
+  const SHELF = LIVE * 1.25;
 
   let fresh = 0;
   let consensus = false;
@@ -285,11 +286,24 @@ function resolveCheapSteamPrice(safe, latest, median = 0) {
   }
 
   if (!(s > 0)) return fresh > 0 ? r2(fresh) : l || m ? r2(l || m) : 0;
+
+  // Mild upward close-band past shelf (safe on shelf, fresh just above)
+  if (
+    consensus &&
+    fresh > 0 &&
+    s <= SHELF &&
+    fresh > s &&
+    fresh / s < 1.35 &&
+    Math.max(s, fresh) > SHELF
+  ) {
+    return r2(fresh);
+  }
+
   if (s > LIVE && !(consensus && fresh <= LIVE)) return r2(s);
 
   if (consensus && fresh > 0) {
     const maxRef = Math.max(s, fresh);
-    if (maxRef <= LIVE * 1.25) {
+    if (maxRef <= SHELF) {
       if (fresh / s >= 1.35 || s / fresh >= 1.35) {
         if (fresh > s) return r2(fresh);
         return r2(Math.min(l, m));
@@ -330,6 +344,31 @@ assert(
   "expensive skin stays on safe",
   resolveCheapSteamPrice(376.4, 350, 360),
   376.4
+);
+assert(
+  "close-band past shelf (safe $40 / fresh ~$52) → adopt consensus",
+  resolveCheapSteamPrice(40, 51, 53),
+  52
+);
+assert(
+  "close-band past shelf (safe $38 / fresh ~$51) → adopt consensus",
+  resolveCheapSteamPrice(38, 50, 52),
+  51
+);
+assert(
+  "close-band past shelf on shelf safe ($42 / ~$53) → adopt consensus",
+  resolveCheapSteamPrice(42, 52, 54),
+  53
+);
+assert(
+  "in-shelf close-band still uses min (unchanged; #72)",
+  resolveCheapSteamPrice(25, 32, 33),
+  25
+);
+assert(
+  "≥35% past shelf still deferred to Airlock PRs (#71/#73)",
+  resolveCheapSteamPrice(30, 52, 55),
+  30
 );
 
 if (failed) {
