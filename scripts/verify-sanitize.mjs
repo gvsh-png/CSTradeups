@@ -94,10 +94,17 @@ function sanitizePrices(prices) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
       if (rank == null || rank === 0) continue;
-      const better = priced
-        .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
-        .map((x) => out[x.key]);
-      if (better.length < 2) continue;
+      const betterRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0
+      );
+      if (!betterRows.length) continue;
+      if (betterRows.length === 1) {
+        const onlyRank = WEAR_RANK[betterRows[0].wear];
+        if (onlyRank == null) continue;
+        const adjacent = onlyRank === rank - 1;
+        if (!adjacent && onlyRank === 0) continue;
+      }
+      const better = betterRows.map((x) => out[x.key]);
       const betterLo = Math.min(...better);
       const betterHi = Math.max(...better);
       if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
@@ -221,6 +228,55 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Sparse MW + dump BS (FT/WW/FN missing) — non-adjacent single better.
+// Requires ≥2 betters on main → ghost BS survived → generator bought BS.
+const mwBsDump = sanitizePrices({
+  "SG 553 | Bulldozer (Minimal Wear)": 335,
+  "SG 553 | Bulldozer (Battle-Scarred)": 7.9,
+});
+assert(
+  "MW-only book drops ghost-cheap BS",
+  mwBsDump["SG 553 | Bulldozer (Battle-Scarred)"] === undefined
+);
+assert(
+  "MW-only book keeps MW",
+  mwBsDump["SG 553 | Bulldozer (Minimal Wear)"] === 335
+);
+
+// FT + dump BS (non-adjacent, sole better is not FN)
+const ftBsDump = sanitizePrices({
+  "AK-47 | Vulcan (Field-Tested)": 95,
+  "AK-47 | Vulcan (Battle-Scarred)": 8,
+});
+assert(
+  "FT-only book drops ghost-cheap BS",
+  ftBsDump["AK-47 | Vulcan (Battle-Scarred)"] === undefined
+);
+
+// Sparse FN+BS with a real-ish spread — do NOT wipe (collector FN premium)
+const sparseFnBs = sanitizePrices({
+  "X | Sparse (Factory New)": 70,
+  "X | Sparse (Battle-Scarred)": 60,
+});
+assert(
+  "sparse FN+BS keeps FN",
+  sparseFnBs["X | Sparse (Factory New)"] === 70
+);
+assert(
+  "sparse FN+BS keeps BS (non-adjacent FN sole better exempt)",
+  sparseFnBs["X | Sparse (Battle-Scarred)"] === 60
+);
+
+// Adjacent single better still arms (WW≪BS dump)
+const wwBsDump = sanitizePrices({
+  "M4A4 | Asiimov (Well-Worn)": 42,
+  "M4A4 | Asiimov (Battle-Scarred)": 4,
+});
+assert(
+  "WW-only book drops adjacent ghost-cheap BS",
+  wwBsDump["M4A4 | Asiimov (Battle-Scarred)"] === undefined
 );
 
 if (failed) {
