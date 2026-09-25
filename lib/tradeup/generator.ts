@@ -1114,14 +1114,27 @@ export function sanitizePrices(
     // Ghost-cheap worse wear vs a coherent expensive better-wear book.
     // SteamApis `safe` can return stale cents for rare BS (Bulldozer $7.90
     // while FN/MW/FT/WW sit ~$275–376; real BS is ~$270+).
+    // A single better wear also arms the guard when:
+    //   - adjacent (MW≪FN, BS≪WW), or
+    //   - non-adjacent but the sole better is not FN (MW+$ghost BS, FT+$ghost BS).
+    // Sparse FN+BS alone still needs two betters / stays exempt so real
+    // collector FN→BS spreads are not wiped by a lone FN peer.
     for (const row of priced) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
       if (rank == null || rank === 0) continue;
-      const better = priced
-        .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
-        .map((x) => out[x.key]);
-      if (better.length < 2) continue;
+      const betterRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0
+      );
+      if (!betterRows.length) continue;
+      if (betterRows.length === 1) {
+        const onlyRank = WEAR_RANK[betterRows[0].wear];
+        if (onlyRank == null) continue;
+        const adjacent = onlyRank === rank - 1;
+        // Non-adjacent with sole better = FN → keep (wide real FN→BS spreads)
+        if (!adjacent && onlyRank === 0) continue;
+      }
+      const better = betterRows.map((x) => out[x.key]);
       const betterLo = Math.min(...better);
       const betterHi = Math.max(...better);
       if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
