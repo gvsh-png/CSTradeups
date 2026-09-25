@@ -132,6 +132,26 @@ export function r4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
+/**
+ * CS2 trade-up average of per-input normalized floats.
+ * Must repeatedly add in float32 — `f32(n) * count` in JS float64 disagrees
+ * near wear boundaries (0.07 / 0.15 / 0.38 / 0.45) and flips outcome wears.
+ */
+export function averageNormalizedFloat(
+  slots: { n: number; count: number }[],
+  inputTotal: number
+): number {
+  if (!(inputTotal > 0)) return 0;
+  let sum = f32(0);
+  for (const sl of slots) {
+    const n = f32(sl.n);
+    for (let i = 0; i < sl.count; i++) {
+      sum = f32(sum + n);
+    }
+  }
+  return f32(sum / inputTotal);
+}
+
 /** Clamp a win-chance percent into [0, 100] at 2 decimal places. */
 export function clampWinPct(n: number): number {
   if (!Number.isFinite(n)) return 0;

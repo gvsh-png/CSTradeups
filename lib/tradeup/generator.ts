@@ -8,8 +8,8 @@ import {
 import { getPrice } from "../prices";
 import { getSkinImage } from "../schema";
 import {
+  averageNormalizedFloat,
   clampFloat,
-  f32,
   floatForWear,
   fractionsToPercents,
   getWearForSkin,
@@ -151,9 +151,7 @@ function buildOutcomes(
   const mixed: OutcomeCalc[] = [];
   if (inputTotal <= 0) return [];
 
-  const avgN = f32(
-    slots.reduce((s, sl) => s + f32(sl.n) * sl.count, 0) / inputTotal
-  );
+  const avgN = averageNormalizedFloat(slots, inputTotal);
 
   for (const slot of slots) {
     const totalWeight = slot.outs.reduce(

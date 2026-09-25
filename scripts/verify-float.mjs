@@ -97,16 +97,68 @@ function assert(name, ok, detail = "") {
   assert("output wear MW", getWear(out) === "Minimal Wear", getWear(out));
 }
 
-// Case 4: mixed collections weighted by count
+// Case 4: mixed collections weighted by count (float32 repeated add, not n*count)
 {
   const nA = norm(0.11, 0, 0.7); // 0.1571
   const nB = norm(0.2, 0, 1); // 0.2
-  const avgN = f32((nA * 5 + nB * 5) / 10);
-  const expected = (0.15714285714 + 0.2) / 2;
+  let sum = f32(0);
+  for (let i = 0; i < 5; i++) sum = f32(sum + nA);
+  for (let i = 0; i < 5; i++) sum = f32(sum + nB);
+  const avgN = f32(sum / 10);
   assert(
-    "mixed avgN weights per-input normalized floats",
-    Math.abs(avgN - expected) < 1e-5,
+    "mixed avgN uses float32 per-input sum",
+    avgN === f32(sum / 10),
     `avgN=${avgN}`
+  );
+  assert(
+    "mixed avgN near midpoint of the two ns",
+    Math.abs(avgN - (nA + nB) / 2) < 1e-5,
+    `avgN=${avgN}`
+  );
+}
+
+// Case 4b: n*count in float64 flips wear vs CS2 repeated f32 add
+{
+  const nFN = norm(0.035, 0, 1);
+  const nBS = norm(0.725, 0, 1);
+  const avgBug = f32((f32(nFN) * 5 + f32(nBS) * 5) / 10);
+  let sum = f32(0);
+  for (let i = 0; i < 5; i++) sum = f32(sum + f32(nFN));
+  for (let i = 0; i < 5; i++) sum = f32(sum + f32(nBS));
+  const avgOk = f32(sum / 10);
+  const outBug = outF(avgBug, 0, 1);
+  const outOk = outF(avgOk, 0, 1);
+  assert(
+    "5×FN+5×BS n*count avgN disagrees with f32 sum",
+    avgBug !== avgOk,
+    `bug=${avgBug} ok=${avgOk}`
+  );
+  assert(
+    "n*count predicts Well-Worn on 0–1 output (wrong)",
+    getWear(outBug) === "Well-Worn",
+    getWear(outBug)
+  );
+  assert(
+    "f32 per-input sum predicts Field-Tested (CS2)",
+    getWear(outOk) === "Field-Tested",
+    getWear(outOk)
+  );
+}
+
+// Case 4c: overstated EV path — bug FT, correct WW on 0–1 output
+{
+  const nMW = norm(0.11, 0, 0.7);
+  const nFT = norm(0.25, 0, 0.35);
+  const avgBug = f32((f32(nMW) * 6 + f32(nFT) * 4) / 10);
+  let sum = f32(0);
+  for (let i = 0; i < 6; i++) sum = f32(sum + f32(nMW));
+  for (let i = 0; i < 4; i++) sum = f32(sum + f32(nFT));
+  const avgOk = f32(sum / 10);
+  assert(
+    "6×MW(0–0.7)+4×FT(0–0.35): bug wear FT, CS2 wear WW",
+    getWear(outF(avgBug, 0, 1)) === "Field-Tested" &&
+      getWear(outF(avgOk, 0, 1)) === "Well-Worn",
+    `bug=${getWear(outF(avgBug, 0, 1))} ok=${getWear(outF(avgOk, 0, 1))}`
   );
 }
 
