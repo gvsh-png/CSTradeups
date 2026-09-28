@@ -46,12 +46,35 @@ function sanitizePrices(prices) {
     const mid = medianPositive(vals);
     if (mid <= 0) continue;
 
-    for (const key of keys) {
-      const p = out[key];
-      if (!(p > 0)) continue;
-      if (p > mid * 3.5 && p > mid + 5) {
-        delete out[key];
+    // Spike vs peer median. If the high outlier is the best-ranked wear and
+    // worse wears are dump-cheap (<15%), drop those dumps — not the anchor.
+    const spikeRows = keys
+      .map((key) => {
+        const wear = wearFromPriceKey(key);
+        const p = out[key];
+        if (!wear || !(p > 0)) return null;
+        const rank = WEAR_RANK[wear];
+        if (rank == null) return null;
+        return { key, wear, p, rank };
+      })
+      .filter(Boolean);
+    const bestRank = spikeRows.length
+      ? Math.min(...spikeRows.map((x) => x.rank))
+      : 99;
+
+    for (const row of spikeRows) {
+      if (!(out[row.key] > 0)) continue;
+      if (!(row.p > mid * 3.5 && row.p > mid + 5)) continue;
+      if (row.rank === bestRank) {
+        for (const other of spikeRows) {
+          if (other.key === row.key || !(out[other.key] > 0)) continue;
+          if (other.rank > row.rank && other.p < row.p * 0.15) {
+            delete out[other.key];
+          }
+        }
+        continue;
       }
+      delete out[row.key];
     }
 
     const priced = keys
@@ -221,6 +244,46 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Dump-majority median: liquid FN $70 with stale MW/FT dumps. Old spike pass
+// treated FN as the outlier (mid≈$8), deleted it, and left dumps for the
+// generator to buy → understated cost / fake +EV.
+const dumpMajority = sanitizePrices({
+  "M4A1-S | Nightmare (Factory New)": 70,
+  "M4A1-S | Nightmare (Minimal Wear)": 8,
+  "M4A1-S | Nightmare (Field-Tested)": 7,
+});
+assert(
+  "dump-majority median keeps liquid FN",
+  dumpMajority["M4A1-S | Nightmare (Factory New)"] === 70
+);
+assert(
+  "dump-majority median drops dump MW",
+  dumpMajority["M4A1-S | Nightmare (Minimal Wear)"] === undefined
+);
+assert(
+  "dump-majority median drops dump FT",
+  dumpMajority["M4A1-S | Nightmare (Field-Tested)"] === undefined
+);
+
+// Same class without FN — Asiimov-style MW anchor vs dump FT/WW
+const mwDumpMajority = sanitizePrices({
+  "P250 | Asiimov (Minimal Wear)": 70,
+  "P250 | Asiimov (Field-Tested)": 8,
+  "P250 | Asiimov (Well-Worn)": 7,
+});
+assert(
+  "dump-majority median keeps liquid MW anchor",
+  mwDumpMajority["P250 | Asiimov (Minimal Wear)"] === 70
+);
+assert(
+  "dump-majority median drops dump FT under MW",
+  mwDumpMajority["P250 | Asiimov (Field-Tested)"] === undefined
+);
+assert(
+  "dump-majority median drops dump WW under MW",
+  mwDumpMajority["P250 | Asiimov (Well-Worn)"] === undefined
 );
 
 if (failed) {

@@ -1012,6 +1012,9 @@ function generateTierTradeUps(
  * Example: CaliCamo WW $529 while other wears are cents → drop WW.
  * Blind Spot FT $124 while peers ~$15 → drop FT (old 12× threshold missed this).
  * Bulldozer BS $7.90 while FN–WW ~$275–376 → drop BS (stale SteamApis safe).
+ * Best-wear "spikes" vs dump-dominated medians (FN $70 with MW/FT dumps at
+ * $7–8) drop the dumps instead of the liquid anchor — otherwise scans buy
+ * ghost-cheap inputs and invent +EV.
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
@@ -1061,14 +1064,41 @@ export function sanitizePrices(
     const mid = medianPositive(vals);
     if (mid <= 0) continue;
 
-    for (const key of keys) {
-      const p = out[key];
-      if (!(p > 0)) continue;
-      // Spike vs peer median — sale outliers / ghost medians
-      // 3.5× catches Blind Spot (~8×) while keeping mild wear ladders
-      if (p > mid * 3.5 && p > mid + 5) {
-        delete out[key];
+    // Spike vs peer median — sale outliers / ghost medians (Blind Spot FT).
+    // When dump-cheap worse wears pull the median down, the liquid *best*
+    // wear trips this heuristic (FN $70 with MW/FT dumps at $7–8). Deleting
+    // that anchor leaves only dumps for bestCandidate → fake cheap inputs.
+    // If the high outlier is the best-ranked wear, drop the dump-cheap
+    // worse wears instead; keep Blind Spot behavior for mid/worse spikes.
+    const spikeRows = keys
+      .map((key) => {
+        const wear = wearFromPriceKey(key);
+        const p = out[key];
+        if (!wear || !(p > 0)) return null;
+        const rank = WEAR_RANK[wear];
+        if (rank == null) return null;
+        return { key, wear, p, rank };
+      })
+      .filter((x): x is { key: string; wear: string; p: number; rank: number } =>
+        Boolean(x)
+      );
+    const bestRank = spikeRows.length
+      ? Math.min(...spikeRows.map((x) => x.rank))
+      : 99;
+
+    for (const row of spikeRows) {
+      if (!(out[row.key] > 0)) continue;
+      if (!(row.p > mid * 3.5 && row.p > mid + 5)) continue;
+      if (row.rank === bestRank) {
+        for (const other of spikeRows) {
+          if (other.key === row.key || !(out[other.key] > 0)) continue;
+          if (other.rank > row.rank && other.p < row.p * 0.15) {
+            delete out[other.key];
+          }
+        }
+        continue;
       }
+      delete out[row.key];
     }
 
     // FN ceiling — FT/WW/BS above Factory New is almost always a bad quote
