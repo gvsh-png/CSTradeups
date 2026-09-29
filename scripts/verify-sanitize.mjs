@@ -98,10 +98,13 @@ function sanitizePrices(prices) {
         .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
         .map((x) => out[x.key]);
       if (better.length < 2) continue;
-      const betterLo = Math.min(...better);
-      const betterHi = Math.max(...better);
-      if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
-      const betterMid = medianPositive(better);
+      const rawMid = medianPositive(better);
+      if (!(rawMid > 0)) continue;
+      const clustered = better.filter(
+        (p) => p >= rawMid / 3.5 && p <= rawMid * 3.5
+      );
+      if (clustered.length < 2) continue;
+      const betterMid = medianPositive(clustered);
       if (betterMid >= 20 && row.p < betterMid * 0.15) {
         delete out[row.key];
       }
@@ -221,6 +224,44 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Premium FN vs MW/FT/WW cluster: raw hi/lo > 3.5 used to skip ghost-cheap
+// and leave dump BS (wouldDrop true, coherence false-negative).
+const premiumFnDumpBs = sanitizePrices({
+  "USP-S | Kill Confirmed (Factory New)": 100,
+  "USP-S | Kill Confirmed (Minimal Wear)": 32,
+  "USP-S | Kill Confirmed (Field-Tested)": 30,
+  "USP-S | Kill Confirmed (Well-Worn)": 28,
+  "USP-S | Kill Confirmed (Battle-Scarred)": 4,
+});
+assert(
+  "premium FN ladder drops dump BS",
+  premiumFnDumpBs["USP-S | Kill Confirmed (Battle-Scarred)"] === undefined
+);
+assert(
+  "premium FN ladder keeps FN",
+  premiumFnDumpBs["USP-S | Kill Confirmed (Factory New)"] === 100
+);
+assert(
+  "premium FN ladder keeps WW cluster",
+  premiumFnDumpBs["USP-S | Kill Confirmed (Well-Worn)"] === 28
+);
+
+// FN-impossible: expensive best wear + dump BS, same coherence trap
+const asiimovDumpBs = sanitizePrices({
+  "P250 | Asiimov (Minimal Wear)": 100,
+  "P250 | Asiimov (Field-Tested)": 32,
+  "P250 | Asiimov (Well-Worn)": 28,
+  "P250 | Asiimov (Battle-Scarred)": 4,
+});
+assert(
+  "Asiimov-style MW book drops dump BS",
+  asiimovDumpBs["P250 | Asiimov (Battle-Scarred)"] === undefined
+);
+assert(
+  "Asiimov-style MW book keeps MW",
+  asiimovDumpBs["P250 | Asiimov (Minimal Wear)"] === 100
 );
 
 if (failed) {
