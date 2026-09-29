@@ -1116,6 +1116,9 @@ export function sanitizePrices(
     // Ghost-cheap worse wear vs a coherent expensive better-wear book.
     // SteamApis `safe` can return stale cents for rare BS (Bulldozer $7.90
     // while FN/MW/FT/WW sit ~$275–376; real BS is ~$270+).
+    // Coherence is judged vs the *median cluster*, not raw hi/lo: a real FN
+    // premium (FN $100 vs MW/FT/WW ~$28–32) used to make betterHi/betterLo
+    // > 3.5 and skip the guard, leaving dump BS in the book.
     for (const row of priced) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
@@ -1124,10 +1127,13 @@ export function sanitizePrices(
         .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
         .map((x) => out[x.key]);
       if (better.length < 2) continue;
-      const betterLo = Math.min(...better);
-      const betterHi = Math.max(...better);
-      if (!(betterLo > 0) || betterHi / betterLo > 3.5) continue;
-      const betterMid = medianPositive(better);
+      const rawMid = medianPositive(better);
+      if (!(rawMid > 0)) continue;
+      const clustered = better.filter(
+        (p) => p >= rawMid / 3.5 && p <= rawMid * 3.5
+      );
+      if (clustered.length < 2) continue;
+      const betterMid = medianPositive(clustered);
       if (betterMid >= 20 && row.p < betterMid * 0.15) {
         delete out[row.key];
       }
