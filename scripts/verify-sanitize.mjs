@@ -94,9 +94,29 @@ function sanitizePrices(prices) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
       if (rank == null || rank === 0) continue;
-      const better = priced
-        .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
-        .map((x) => out[x.key]);
+      const betterRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0
+      );
+      const worseRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) > rank && out[x.key] > 0
+      );
+      const better = betterRows.map((x) => out[x.key]);
+
+      if (
+        better.length < 2 &&
+        betterRows.length >= 1 &&
+        worseRows.length >= 1
+      ) {
+        const neighborMid = medianPositive([
+          ...better,
+          ...worseRows.map((x) => out[x.key]),
+        ]);
+        if (neighborMid >= 20 && row.p < neighborMid * 0.15) {
+          delete out[row.key];
+          continue;
+        }
+      }
+
       if (better.length < 2) continue;
       const betterLo = Math.min(...better);
       const betterHi = Math.max(...better);
@@ -221,6 +241,50 @@ const redline = sanitizePrices({
 assert(
   "Redline BS kept",
   redline["AK-47 | Redline (Battle-Scarred)"] === 14
+);
+
+// Valley dump FT: MW missing so FT has only FN as a better wear
+// (ghost-cheap requires ≥2 betters / sole-FN non-adjacent exempt in #52/#75).
+// WW+BS stay liquid — generator would buy FT @$5 → fake +EV.
+const valleyFt = sanitizePrices({
+  "AK-47 | Elite Build (Factory New)": 80,
+  "AK-47 | Elite Build (Field-Tested)": 5,
+  "AK-47 | Elite Build (Well-Worn)": 55,
+  "AK-47 | Elite Build (Battle-Scarred)": 50,
+});
+assert(
+  "valley dump FT dropped (FN + FT + WW/BS, MW missing)",
+  valleyFt["AK-47 | Elite Build (Field-Tested)"] === undefined
+);
+assert(
+  "valley FN kept",
+  valleyFt["AK-47 | Elite Build (Factory New)"] === 80
+);
+assert(
+  "valley WW kept",
+  valleyFt["AK-47 | Elite Build (Well-Worn)"] === 55
+);
+
+// Sparse FN+BS collector spread — no mid-wear valley; must not wipe BS
+const sparseFnBs = sanitizePrices({
+  "AK-47 | Case Hardened (Factory New)": 100,
+  "AK-47 | Case Hardened (Battle-Scarred)": 12,
+});
+assert(
+  "sparse FN+BS keeps BS",
+  sparseFnBs["AK-47 | Case Hardened (Battle-Scarred)"] === 12
+);
+
+// Real mid ladder with MW missing: FT near WW/BS — keep FT
+const realNoMw = sanitizePrices({
+  "AK-47 | Elite Build (Factory New)": 80,
+  "AK-47 | Elite Build (Field-Tested)": 52,
+  "AK-47 | Elite Build (Well-Worn)": 48,
+  "AK-47 | Elite Build (Battle-Scarred)": 45,
+});
+assert(
+  "real FN+FT+WW+BS (no MW) keeps FT",
+  realNoMw["AK-47 | Elite Build (Field-Tested)"] === 52
 );
 
 if (failed) {

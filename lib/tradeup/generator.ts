@@ -1012,6 +1012,9 @@ function generateTierTradeUps(
  * Example: CaliCamo WW $529 while other wears are cents → drop WW.
  * Blind Spot FT $124 while peers ~$15 → drop FT (old 12× threshold missed this).
  * Bulldozer BS $7.90 while FN–WW ~$275–376 → drop BS (stale SteamApis safe).
+ * Valley dump FT when MW is missing (FN $80 + FT $5 + WW/BS ~$50–55) —
+ * better.length<2 used to skip ghost-cheap; sole-FN exemptions in #52/#75
+ * still miss this. Drop FT via worse-wear neighbor evidence.
  * Does NOT crush inverted ladders (First Class BS > FT) when the ratio
  * stays within a normal band.
  */
@@ -1116,13 +1119,39 @@ export function sanitizePrices(
     // Ghost-cheap worse wear vs a coherent expensive better-wear book.
     // SteamApis `safe` can return stale cents for rare BS (Bulldozer $7.90
     // while FN/MW/FT/WW sit ~$275–376; real BS is ~$270+).
+    // Valley dumps: MW missing so FT has only FN as a better wear
+    // (better.length < 2 skips the guard), while WW/BS stay liquid —
+    // e.g. FN $80 + FT $5 + WW $55 + BS $50. Sole-FN exemptions in
+    // open #52/#75 still leave this hole; use worse-wear evidence.
     for (const row of priced) {
       if (!(out[row.key] > 0)) continue;
       const rank = WEAR_RANK[row.wear];
       if (rank == null || rank === 0) continue;
-      const better = priced
-        .filter((x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0)
-        .map((x) => out[x.key]);
+      const betterRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) < rank && out[x.key] > 0
+      );
+      const worseRows = priced.filter(
+        (x) => (WEAR_RANK[x.wear] ?? 99) > rank && out[x.key] > 0
+      );
+      const better = betterRows.map((x) => out[x.key]);
+
+      // Mid-wear valley vs liquid worse peers when the better book is
+      // too thin to arm the normal ≥2-better guard (partial Steam books).
+      if (
+        better.length < 2 &&
+        betterRows.length >= 1 &&
+        worseRows.length >= 1
+      ) {
+        const neighborMid = medianPositive([
+          ...better,
+          ...worseRows.map((x) => out[x.key]),
+        ]);
+        if (neighborMid >= 20 && row.p < neighborMid * 0.15) {
+          delete out[row.key];
+          continue;
+        }
+      }
+
       if (better.length < 2) continue;
       const betterLo = Math.min(...better);
       const betterHi = Math.max(...better);
